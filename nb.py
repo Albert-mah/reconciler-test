@@ -201,6 +201,34 @@ class NocoBase:
             raise RuntimeError(f"flowModels:save → {r.status_code}: {r.text[:200]}")
         return r.json().get("data")
 
+    def update_model(self, uid: str, step_params_patch: dict):
+        """Safe partial update — GET current → merge stepParams → PUT back.
+
+        Unlike save_model, this preserves parentId/subKey/subType/sortIndex.
+        """
+        r = self.s.get(f"{self.base}/api/flowModels:get",
+                       params={"filterByTk": uid}, timeout=self._timeout)
+        if not r.ok:
+            raise RuntimeError(f"flowModels:get {uid} → {r.status_code}")
+        current = r.json().get("data", {})
+
+        # Deep merge stepParams
+        sp = dict(current.get("stepParams") or {})
+        for k, v in step_params_patch.items():
+            if isinstance(v, dict) and isinstance(sp.get(k), dict):
+                sp[k] = {**sp[k], **v}
+            else:
+                sp[k] = v
+
+        opts = {k: v for k, v in current.items() if k not in ("uid", "name")}
+        opts["stepParams"] = sp
+
+        r2 = self.s.post(f"{self.base}/api/flowModels:update?filterByTk={uid}",
+                         json={"options": opts}, timeout=self._timeout)
+        if not r2.ok:
+            raise RuntimeError(f"flowModels:update {uid} → {r2.status_code}: {r2.text[:200]}")
+        return r2.json().get("data")
+
     def add_divider(self, grid_uid: str, label: str,
                     color: str = "#1677ff",
                     border_color: str = "rgba(5, 5, 5, 0.06)") -> str:

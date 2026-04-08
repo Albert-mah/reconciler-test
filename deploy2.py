@@ -286,27 +286,22 @@ def deploy_l2(nb: NocoBase, spec: dict, state: dict, mod: Path):
                 # Get collection from expanded popup spec or structure
                 coll = popup_spec.get("_view_coll", "")
 
-                # Use legacy API to set clickToOpen + popupSettings
+                # Safe partial update — preserves parentId/subKey/sortIndex
                 # TODO: switch to flowSurfaces:configure when supported
-                nb.save_model({
-                    "uid": field_uid,
-                    "use": field_tree.get("use", "DisplayTextFieldModel"),
-                    "stepParams": {
-                        "popupSettings": {
-                            "openView": {
-                                "collectionName": coll,
-                                "dataSourceKey": "main",
-                                "mode": "drawer",
-                                "size": "large",
-                                "pageModelClass": "ChildPageModel",
-                                "uid": popup_page_uid,
-                            }
-                        },
-                        "displayFieldSettings": {
-                            "clickToOpen": {"clickToOpen": True}
+                nb.update_model(field_uid, {
+                    "popupSettings": {
+                        "openView": {
+                            "collectionName": coll,
+                            "dataSourceKey": "main",
+                            "mode": "drawer",
+                            "size": "large",
+                            "pageModelClass": "ChildPageModel",
+                            "uid": popup_page_uid,
                         }
                     },
-                    "flowRegistry": {},
+                    "displayFieldSettings": {
+                        "clickToOpen": {"clickToOpen": True}
+                    },
                 })
                 print(f"    → click [{view_field}] opens detail")
             except Exception as e:
