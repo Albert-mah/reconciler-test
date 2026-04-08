@@ -52,7 +52,7 @@ pages:
         type: jsBlock
 
     layout:
+      - [js_stats1, js_stats2, js_stats3, js_stats4]
       - [chart_pipeline, chart_funnel]
       - [chart_orders, chart_customers]
       - [chart_industry]
-      - [js_stats1, js_stats2, js_stats3, js_stats4]

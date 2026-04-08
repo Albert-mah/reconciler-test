@@ -376,19 +376,35 @@ def deploy_l2(nb: NocoBase, spec: dict, state: dict, mod: Path):
 
         try:
             target_uid = resolver.resolve_uid(target_ref)
-            nb.configure(target_uid, {"changes": config})
-            print(f"  + chart [{target_ref}]: configured from {config_file}")
+
+            # 1. Configure chart settings
+            try:
+                nb.configure(target_uid, {"changes": config})
+            except RuntimeError:
+                nb.update_model(target_uid, {"chartSettings": {"configure": config}})
+
+            # 2. flowSql:save + run to bind SQL
+            sql = config.get("query", {}).get("sql", "")
+            if sql:
+                nb.s.post(f"{nb.base}/api/flowSql:save", json={
+                    "type": "selectRows", "uid": target_uid,
+                    "dataSourceKey": "main", "sql": sql, "bind": {},
+                }, timeout=30)
+
+                # Strip Jinja templates for initial run
+                import re
+                clean = re.sub(r"\{%\s*if\s+[^%]*%\}.*?\{%\s*endif\s*%\}", "", sql, flags=re.DOTALL)
+                clean = "\n".join(l for l in clean.split("\n") if "{{" not in l and "{%" not in l)
+                nb.s.post(f"{nb.base}/api/flowSql:run", json={
+                    "type": "selectRows", "uid": target_uid,
+                    "dataSourceKey": "main", "sql": clean, "bind": {},
+                }, timeout=30)
+
+            print(f"  + chart [{target_ref}]: configured + SQL bound")
         except KeyError as e:
             print(f"  ! chart: {e}")
-        except RuntimeError:
-            # Fallback to legacy
-            try:
-                nb.update_model(target_uid, {
-                    "chartSettings": {"configure": config}
-                })
-                print(f"  + chart [{target_ref}]: configured (legacy)")
-            except Exception as e2:
-                print(f"  ! chart [{target_ref}]: {e2}")
+        except Exception as e:
+            print(f"  ! chart [{target_ref}]: {e}")
 
     for event_spec in spec.get("events", []):
         target_ref = event_spec.get("target", "")
