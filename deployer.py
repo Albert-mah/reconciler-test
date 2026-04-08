@@ -707,8 +707,65 @@ def _fill_block(nb: NocoBase, block_uid: str, grid_uid: str,
         if layout_uid_map:
             apply_layout(nb, grid_uid, field_layout, layout_uid_map)
 
-    # ── Filter field connections (filterPaths) ──
-    if btype == "filterForm":
+    # ── FilterForm: default horizontal layout + label settings ──
+    if btype == "filterForm" and grid_uid:
+        # Set horizontal label layout on block
+        try:
+            nb.update_model(block_uid, {
+                "formFilterBlockModelSettings": {
+                    "layout": {
+                        "layout": "horizontal",
+                        "labelAlign": "left",
+                        "labelWidth": 120,
+                        "labelWrap": False,
+                        "colon": True,
+                    }
+                }
+            })
+        except Exception:
+            pass
+
+        # Auto field_layout if not specified: JS items on top, fields in one row
+        if not field_layout:
+            all_items = []
+            # JS items first
+            for desc, js_uid in js_item_uids.items():
+                all_items.append(("js", desc, js_uid))
+            # Then fields
+            for fp, finfo in field_states.items():
+                all_items.append(("field", fp, finfo["wrapper"]))
+
+            if all_items:
+                from layout import apply_layout as _al
+                rows = {}
+                sizes = {}
+                row_idx = 0
+                # JS items: each on own row (full width)
+                for itype, name, iuid in all_items:
+                    if itype == "js":
+                        rk = f"r{row_idx}"
+                        rows[rk] = [[iuid]]
+                        sizes[rk] = [24]
+                        row_idx += 1
+
+                # Fields: all in one row (equal split, max 4 per row)
+                field_items = [(n, u) for t, n, u in all_items if t == "field"]
+                max_per_row = 4
+                for i in range(0, len(field_items), max_per_row):
+                    chunk = field_items[i:i + max_per_row]
+                    rk = f"r{row_idx}"
+                    rows[rk] = [[u] for _, u in chunk]
+                    sizes[rk] = [24 // len(chunk)] * len(chunk)
+                    row_idx += 1
+
+                if rows:
+                    try:
+                        nb.set_layout(grid_uid, rows, sizes)
+                    except Exception:
+                        pass
+
+        _configure_filter(nb, bs, block_uid, field_states, default_coll, all_blocks_state)
+    elif btype == "filterForm":
         _configure_filter(nb, bs, block_uid, field_states, default_coll, all_blocks_state)
 
     # ── Block title ──
