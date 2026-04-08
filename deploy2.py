@@ -114,16 +114,42 @@ def deploy_l1(nb: NocoBase, spec: dict, state: dict, mod: Path) -> dict:
         # Compose blocks
         blocks_spec = _build_compose_blocks(ps)
         if blocks_spec:
-            result = nb.compose(page_state["tab_uid"], blocks_spec, mode="replace")
-            page_state["blocks"] = _extract_block_state(result)
-            block_count = len(result.get("blocks", []))
-            print(f"    composed {block_count} blocks")
+            # Check if page already has content
+            existing_blocks = page_state.get("blocks", {})
+            if existing_blocks:
+                # Already deployed — only update layouts, don't recompose
+                # This preserves L2 content (JS blocks, popups, etc.)
+                print(f"    {len(existing_blocks)} blocks exist (layout only)")
+                # Re-read current state for layout
+                try:
+                    page_data = nb.get(tabSchemaUid=page_state["tab_uid"])
+                    tree = page_data.get("tree", {})
+                    grid = tree.get("subModels", {}).get("grid", {})
+                    grid_uid = grid.get("uid", "")
+                    items = grid.get("subModels", {}).get("items", [])
+                    if isinstance(items, list) and items:
+                        # Build fake compose result for layout
+                        fake_result = {
+                            "blocks": [{"key": b.get("key", ""), "uid": b.get("uid", ""),
+                                        "type": b.get("type", ""), "gridUid": "",
+                                        "fields": []} for k, b in existing_blocks.items()],
+                            "layout": {"uid": grid_uid},
+                        }
+                        _apply_all_layouts(nb, fake_result, ps)
+                except Exception as e:
+                    print(f"    ! layout update: {e}")
+            else:
+                # First time — compose creates everything
+                result = nb.compose(page_state["tab_uid"], blocks_spec, mode="replace")
+                page_state["blocks"] = _extract_block_state(result)
+                block_count = len(result.get("blocks", []))
+                print(f"    composed {block_count} blocks")
 
-            # Apply layouts
-            _apply_all_layouts(nb, result, ps)
+                # Apply layouts
+                _apply_all_layouts(nb, result, ps)
 
-            # Configure filter field connections (filterPaths, label)
-            _configure_filter_fields(nb, result, ps)
+                # Configure filter field connections (filterPaths, label)
+                _configure_filter_fields(nb, result, ps)
 
         state["pages"][page_key] = page_state
 
@@ -331,20 +357,33 @@ def deploy_l2(nb: NocoBase, spec: dict, state: dict, mod: Path):
             target_uid = None
             try:
                 target_uid = resolver.resolve_uid(target_ref)
+                # Found existing — just update code, no creation needed
             except KeyError:
-                # Auto-create JSColumn if target looks like a table field ref
-                # e.g., $leads复刻.table.fields.js_xxx → addField(table_uid, jsColumn)
+                # Check if a JSColumn with same title already exists (avoid duplicates)
                 parts = target_ref.lstrip("$").split(".")
-                # Find the table block UID
                 try:
-                    table_ref = ".".join(parts[:2])  # e.g., leads复刻.table
+                    table_ref = ".".join(parts[:2])
                     table_uid = resolver.resolve_uid(f"${table_ref}")
-                    result = nb.add_field(table_uid, "jsColumn", type="jsColumn")
-                    target_uid = result.get("uid")
-                    # Save to state for future refs
-                    field_key = parts[-1] if len(parts) > 3 else f"js_{title or 'col'}"
-                    # Update resolver
-                    print(f"  + jsColumn [{target_ref}]: created {target_uid}")
+
+                    # Scan existing columns for matching title
+                    existing = nb.get(uid=table_uid)
+                    tree = existing.get("tree", {})
+                    cols = tree.get("subModels", {}).get("columns", [])
+                    if isinstance(cols, list):
+                        for col in cols:
+                            if col.get("use") == "JSColumnModel":
+                                col_title = col.get("stepParams", {}).get(
+                                    "tableColumnSettings", {}).get("title", {}).get("title", "")
+                                if col_title == title and title:
+                                    target_uid = col.get("uid")
+                                    print(f"  = jsColumn [{target_ref}]: found existing {target_uid}")
+                                    break
+
+                    # Create only if not found
+                    if not target_uid:
+                        result = nb.add_field(table_uid, "jsColumn", type="jsColumn")
+                        target_uid = result.get("uid")
+                        print(f"  + jsColumn [{target_ref}]: created {target_uid}")
                 except Exception as e:
                     print(f"  ! js create [{target_ref}]: {e}")
 
