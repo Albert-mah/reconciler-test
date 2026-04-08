@@ -184,10 +184,14 @@ def _build_compose_blocks(page_spec: dict) -> list[dict]:
 
         # Resource binding
         resource = bs.get("resource")
+        res_binding = bs.get("resource_binding", {})
         block_coll = bs.get("coll", coll)
+
         if resource:
-            # Explicit resource (e.g., {binding: currentCollection} for popups)
             block["resource"] = resource
+        elif res_binding.get("filterByTk"):
+            # Exported format: resource_binding.filterByTk → compose binding: currentRecord
+            block["resource"] = {"binding": "currentRecord"}
         elif block_coll and btype != "filterForm":
             block["resource"] = {
                 "collectionName": block_coll,
@@ -199,13 +203,17 @@ def _build_compose_blocks(page_spec: dict) -> list[dict]:
         if fields:
             block["fields"] = [_parse_compose_field(f) for f in fields]
 
-        # Actions
-        actions = bs.get("actions", [])
+        # Actions — auto-fix: edit/delete on details → recordActions
+        actions = list(bs.get("actions", []))
+        record_actions = list(bs.get("recordActions", []))
+        if btype in ("details",):
+            # details blocks: edit/delete belong in recordActions
+            for a in list(actions):
+                if a in ("edit", "delete", "duplicate", "view"):
+                    record_actions.append(a)
+                    actions.remove(a)
         if actions:
             block["actions"] = [_parse_compose_action(a) for a in actions]
-
-        # Record actions
-        record_actions = bs.get("recordActions", [])
         if record_actions:
             block["recordActions"] = [_parse_compose_action(a) for a in record_actions]
 
@@ -781,9 +789,25 @@ def _deploy_tabbed_popup(nb: NocoBase, target_uid: str, target_ref: str,
             except Exception as e:
                 print(f"    ! tab '{first_tab.get('title', 'Tab0')}': {e}")
 
+        # Read the compose-created popup to get grid uid for legacy blocks
+        compose_grid_uid = ""
+        try:
+            fresh_data = nb.get(uid=target_uid)
+            fresh_popup = fresh_data.get("tree", {}).get("subModels", {}).get("page", {})
+            fresh_tabs = fresh_popup.get("subModels", {}).get("tabs", [])
+            if isinstance(fresh_tabs, list) and fresh_tabs:
+                compose_grid = fresh_tabs[0].get("subModels", {}).get("grid", {})
+                compose_grid_uid = compose_grid.get("uid", "") if isinstance(compose_grid, dict) else ""
+        except Exception:
+            pass
+
         # Add unsupported blocks via legacy API (comments, recordHistory, associations)
-        # TODO: switch to flowSurfaces when these types are supported
-        _deploy_legacy_blocks(nb, target_uid, first_tab, coll)
+        # Pass the grid uid directly (avoid re-navigation in _deploy_legacy_blocks)
+        if compose_grid_uid:
+            _deploy_legacy_blocks_in_grid(nb, compose_grid_uid, first_tab, coll)
+
+        # Inject JS items into compose-created blocks
+        _inject_popup_js_items(nb, target_uid, first_tab, mod)
 
         # Re-apply tab layout AFTER legacy blocks are created
         # Need fresh read to get all block UIDs including legacy ones
@@ -861,11 +885,167 @@ def _deploy_tabbed_popup(nb: NocoBase, target_uid: str, target_ref: str,
             except Exception as e:
                 print(f"    ! tab '{tab_title}': {e}")
 
-        # Legacy blocks for this tab
-        _deploy_legacy_blocks(nb, tab_uid, tab_spec, coll)
+        # Legacy blocks for this tab — get grid uid from tab
+        try:
+            tab_data = nb.get(uid=tab_uid)
+            tab_grid = tab_data.get("tree", {}).get("subModels", {}).get("grid", {})
+            tab_grid_uid = tab_grid.get("uid", "") if isinstance(tab_grid, dict) else ""
+            if tab_grid_uid:
+                _deploy_legacy_blocks_in_grid(nb, tab_grid_uid, tab_spec, coll)
+        except Exception as e:
+            print(f"    ! legacy blocks: {e}")
 
         if not blocks and not any(b.get("type") in COMPOSE_UNSUPPORTED for b in tab_spec.get("blocks", [])):
             print(f"    tab '{tab_title}': (empty)")
+
+
+def _inject_popup_js_items(nb: NocoBase, target_uid: str, tab_spec: dict,
+                           mod: Path):
+    """Inject JS items into compose-created popup blocks.
+
+    After compose creates detail/form blocks, this reads the created tree,
+    matches blocks by key/index, and injects js_items via legacy API.
+    TODO: switch to flowSurfaces when JSItemModel is supported in compose
+    """
+    import random, string
+    def uid(): return ''.join(random.choices(string.ascii_lowercase + string.digits, k=11))
+
+    block_specs = tab_spec.get("blocks", [])
+    # Only process blocks that have js_items
+    js_blocks = [(i, bs) for i, bs in enumerate(block_specs)
+                 if bs.get("js_items") and bs.get("type") not in COMPOSE_UNSUPPORTED]
+    if not js_blocks:
+        return
+
+    # Read current popup tree to find compose-created blocks
+    try:
+        data = nb.get(uid=target_uid)
+        tree = data.get("tree", {})
+        popup = tree.get("subModels", {}).get("page", {})
+        tabs = popup.get("subModels", {}).get("tabs", [])
+        if not isinstance(tabs, list) or not tabs:
+            return
+        grid = tabs[0].get("subModels", {}).get("grid", {})
+        items = grid.get("subModels", {}).get("items", [])
+        if not isinstance(items, list):
+            return
+    except Exception:
+        return
+
+    # Match compose-created blocks to specs (by type + index among compose-supported types)
+    compose_items = [item for item in items
+                     if item.get("use", "").replace("Model", "") not in
+                     ("CommentsBlock", "RecordHistoryBlock", "ListBlock")]
+
+    for spec_idx, bs in js_blocks:
+        # Find the matching compose item
+        compose_idx = 0
+        for si, s in enumerate(block_specs[:spec_idx + 1]):
+            if s.get("type") not in COMPOSE_UNSUPPORTED:
+                res = s.get("resource", {})
+                rb = s.get("resource_binding", {})
+                if not (res.get("binding") == "associatedRecords" or rb.get("associationName")):
+                    if si < spec_idx:
+                        compose_idx += 1
+
+        if compose_idx >= len(compose_items):
+            continue
+
+        target_block = compose_items[compose_idx]
+        detail_grid = target_block.get("subModels", {}).get("grid", {})
+        detail_grid_uid = detail_grid.get("uid", "") if isinstance(detail_grid, dict) else ""
+
+        if not detail_grid_uid:
+            continue
+
+        for js_spec in bs["js_items"]:
+            code = ""
+            js_file = js_spec.get("file", "")
+            if js_file:
+                p = mod / js_file
+                if p.exists():
+                    code = p.read_text()
+            if not code:
+                continue
+
+            js_uid = uid()
+            nb.save_model({
+                "uid": js_uid, "use": "JSItemModel",
+                "parentId": detail_grid_uid,
+                "subKey": "items", "subType": "array",
+                "sortIndex": 0, "flowRegistry": {},
+                "stepParams": {"jsSettings": {"runJs": {"code": code, "version": "v1"}}},
+            })
+            desc = js_spec.get("desc", js_file.split("/")[-1])
+            print(f"      + JS item: {desc[:40]} → {target_block.get('use','')[:15]}")
+
+
+def _deploy_legacy_blocks_in_grid(nb: NocoBase, grid_uid: str, tab_spec: dict,
+                                  default_coll: str):
+    """Deploy legacy blocks directly into a known grid UID."""
+    import random, string
+    def uid(): return ''.join(random.choices(string.ascii_lowercase + string.digits, k=11))
+
+    for bs in tab_spec.get("blocks", []):
+        btype = bs.get("type", "")
+        res = bs.get("resource", {})
+        res_binding = bs.get("resource_binding", {})
+        is_association = res.get("binding") == "associatedRecords" or res_binding.get("associationName")
+        if btype not in COMPOSE_UNSUPPORTED and not is_association:
+            continue
+
+        coll = bs.get("coll", default_coll)
+        binding = bs.get("resource_binding", {})
+        block_uid = uid()
+        block_title = bs.get("title", "")
+
+        if btype == "comments":
+            res_init: dict = {"dataSourceKey": "main", "collectionName": coll}
+            if binding.get("associationName"):
+                res_init["associationName"] = binding["associationName"]
+                res_init["sourceId"] = binding.get("sourceId", "{{ctx.view.inputArgs.filterByTk}}")
+            nb.save_model({
+                "uid": block_uid, "use": "CommentsBlockModel",
+                "parentId": grid_uid, "subKey": "items", "subType": "array",
+                "sortIndex": 99, "flowRegistry": {},
+                "stepParams": {"resourceSettings": {"init": res_init}},
+            })
+            nb.save_model({
+                "uid": uid(), "use": "CommentItemModel",
+                "parentId": block_uid, "subKey": "items", "subType": "array",
+                "sortIndex": 0, "stepParams": {}, "flowRegistry": {},
+            })
+            print(f"    + comments [{block_uid[:8]}] (legacy)")
+
+        elif btype == "recordHistory":
+            res_init = {"dataSourceKey": "main", "collectionName": coll,
+                        "filterByTk": "{{ctx.view.inputArgs.filterByTk}}"}
+            nb.save_model({
+                "uid": block_uid, "use": "RecordHistoryBlockModel",
+                "parentId": grid_uid, "subKey": "items", "subType": "array",
+                "sortIndex": 99, "flowRegistry": {},
+                "stepParams": {"resourceSettings": {"init": res_init}},
+            })
+            print(f"    + recordHistory [{block_uid[:8]}] (legacy)")
+
+        elif is_association:
+            use_map = {"list": "ListBlockModel", "table": "TableBlockModel",
+                       "details": "DetailsBlockModel", "gridCard": "GridCardBlockModel"}
+            model_use = use_map.get(btype, "ListBlockModel")
+            res_init = {"dataSourceKey": "main", "collectionName": coll}
+            if binding.get("associationName"):
+                res_init["associationName"] = binding["associationName"]
+                res_init["sourceId"] = binding.get("sourceId", "{{ctx.view.inputArgs.filterByTk}}")
+            sp: dict = {"resourceSettings": {"init": res_init}}
+            if block_title:
+                sp["cardSettings"] = {"titleDescription": {"title": block_title}}
+            nb.save_model({
+                "uid": block_uid, "use": model_use,
+                "parentId": grid_uid, "subKey": "items", "subType": "array",
+                "sortIndex": 99, "flowRegistry": {},
+                "stepParams": sp,
+            })
+            print(f"    + {btype}:\"{block_title}\" [{block_uid[:8]}] (legacy, association)")
 
 
 def _deploy_legacy_blocks(nb: NocoBase, target_uid: str, tab_spec: dict,
@@ -894,20 +1074,26 @@ def _deploy_legacy_blocks(nb: NocoBase, target_uid: str, tab_spec: dict,
         binding = bs.get("resource_binding", {})
 
         # Find the grid UID for this target
+        # target_uid can be: field uid (popup), tab uid, or page tab uid
+        grid_uid = ""
         try:
             data = nb.get(uid=target_uid)
             tree = data.get("tree", {})
-            # Navigate to grid
+            # Direct grid (tab or grid node)
             grid = tree.get("subModels", {}).get("grid", {})
-            if not grid:
+            if isinstance(grid, dict) and grid.get("uid"):
+                grid_uid = grid["uid"]
+            else:
+                # Navigate popup → first tab → grid
                 popup = tree.get("subModels", {}).get("page", {})
                 if popup:
                     tabs = popup.get("subModels", {}).get("tabs", [])
                     if isinstance(tabs, list) and tabs:
                         grid = tabs[0].get("subModels", {}).get("grid", {})
-            grid_uid = grid.get("uid", "") if isinstance(grid, dict) else ""
+                        if isinstance(grid, dict):
+                            grid_uid = grid.get("uid", "")
         except Exception:
-            grid_uid = ""
+            pass
 
         if not grid_uid:
             print(f"    ! legacy {btype}: can't find grid for {target_uid}")

@@ -18,6 +18,7 @@ pages:
         type: table
         fields: [name, type, region, level, status, owner]
         actions: [filter, refresh, addNew]
+        recordActions: [edit, delete]
 
     layout:
       - [filter]
