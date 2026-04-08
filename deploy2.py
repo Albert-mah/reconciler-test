@@ -156,13 +156,23 @@ def deploy_l1(nb: NocoBase, spec: dict, state: dict, mod: Path) -> dict:
     return state
 
 
+# Block types NOT supported by flowSurfaces:compose
+# These need legacy flowModels:save fallback
+COMPOSE_UNSUPPORTED = {"comments", "recordHistory", "mail"}
+
+
 def _build_compose_blocks(page_spec: dict) -> list[dict]:
-    """Convert page spec blocks to flowSurfaces:compose format."""
+    """Convert page spec blocks to flowSurfaces:compose format.
+
+    Skips unsupported types (comments, recordHistory) — handled by legacy fallback.
+    """
     coll = page_spec.get("coll", "")
     blocks = []
 
     for bs in page_spec.get("blocks", []):
         btype = bs.get("type", "")
+        if btype in COMPOSE_UNSUPPORTED:
+            continue  # handled by _deploy_legacy_blocks
         key = bs.get("key", f"{btype}_{len(blocks)}")
 
         block: dict[str, Any] = {"key": key, "type": btype}
@@ -773,6 +783,10 @@ def _deploy_tabbed_popup(nb: NocoBase, target_uid: str, target_ref: str,
             except Exception as e:
                 print(f"    ! tab '{first_tab.get('title', 'Tab0')}': {e}")
 
+        # Add unsupported blocks via legacy API (comments, recordHistory)
+        # TODO: switch to flowSurfaces when these types are supported
+        _deploy_legacy_blocks(nb, target_uid, first_tab, coll)
+
     # 3. Read popup structure for remaining tabs
     data = nb.get(uid=target_uid)
     tree = data.get("tree", {})
@@ -808,8 +822,112 @@ def _deploy_tabbed_popup(nb: NocoBase, target_uid: str, target_ref: str,
                 _apply_popup_layouts(nb, result, tab_spec)
             except Exception as e:
                 print(f"    ! tab '{tab_title}': {e}")
-        elif not blocks:
-            print(f"    tab '{tab_title}': (no compose blocks)")
+
+        # Legacy blocks for this tab
+        _deploy_legacy_blocks(nb, tab_uid, tab_spec, coll)
+
+        if not blocks and not any(b.get("type") in COMPOSE_UNSUPPORTED for b in tab_spec.get("blocks", [])):
+            print(f"    tab '{tab_title}': (empty)")
+
+
+def _deploy_legacy_blocks(nb: NocoBase, target_uid: str, tab_spec: dict,
+                          default_coll: str):
+    """Deploy blocks that flowSurfaces:compose doesn't support.
+
+    Uses legacy flowModels:save. Currently handles:
+      - comments (CommentsBlockModel + CommentItemModel)
+      - recordHistory (RecordHistoryBlockModel)
+
+    TODO: switch to flowSurfaces when these types are supported.
+    """
+    import random, string
+    def uid(): return ''.join(random.choices(string.ascii_lowercase + string.digits, k=11))
+
+    for bs in tab_spec.get("blocks", []):
+        btype = bs.get("type", "")
+        if btype not in COMPOSE_UNSUPPORTED:
+            continue
+
+        coll = bs.get("coll", default_coll)
+        res = bs.get("resource", {})
+        binding = bs.get("resource_binding", {})
+
+        # Find the grid UID for this target
+        try:
+            data = nb.get(uid=target_uid)
+            tree = data.get("tree", {})
+            # Navigate to grid
+            grid = tree.get("subModels", {}).get("grid", {})
+            if not grid:
+                popup = tree.get("subModels", {}).get("page", {})
+                if popup:
+                    tabs = popup.get("subModels", {}).get("tabs", [])
+                    if isinstance(tabs, list) and tabs:
+                        grid = tabs[0].get("subModels", {}).get("grid", {})
+            grid_uid = grid.get("uid", "") if isinstance(grid, dict) else ""
+        except Exception:
+            grid_uid = ""
+
+        if not grid_uid:
+            print(f"    ! legacy {btype}: can't find grid for {target_uid}")
+            continue
+
+        block_uid = uid()
+
+        if btype == "comments":
+            # Build resource settings with association binding
+            res_init = {"dataSourceKey": "main", "collectionName": coll}
+            if binding.get("associationName"):
+                res_init["associationName"] = binding["associationName"]
+                res_init["sourceId"] = binding.get("sourceId", "{{ctx.view.inputArgs.filterByTk}}")
+            elif res.get("binding") == "currentRecord":
+                # Auto-detect association name
+                res_init["sourceId"] = "{{ctx.view.inputArgs.filterByTk}}"
+
+            nb.save_model({
+                "uid": block_uid, "use": "CommentsBlockModel",
+                "parentId": grid_uid, "subKey": "items", "subType": "array",
+                "sortIndex": 99, "flowRegistry": {},
+                "stepParams": {"resourceSettings": {"init": res_init}},
+            })
+            # Add CommentItemModel child
+            nb.save_model({
+                "uid": uid(), "use": "CommentItemModel",
+                "parentId": block_uid, "subKey": "items", "subType": "array",
+                "sortIndex": 0, "stepParams": {}, "flowRegistry": {},
+            })
+            print(f"    + comments [{block_uid[:8]}] (legacy)")
+
+        elif btype == "recordHistory":
+            res_init = {"dataSourceKey": "main", "collectionName": coll}
+            if res.get("binding") == "currentRecord":
+                res_init["filterByTk"] = "{{ctx.view.inputArgs.filterByTk}}"
+
+            nb.save_model({
+                "uid": block_uid, "use": "RecordHistoryBlockModel",
+                "parentId": grid_uid, "subKey": "items", "subType": "array",
+                "sortIndex": 99, "flowRegistry": {},
+                "stepParams": {"resourceSettings": {"init": res_init}},
+            })
+            print(f"    + recordHistory [{block_uid[:8]}] (legacy)")
+
+        # Update grid layout to include new block
+        try:
+            existing_data = nb.get(uid=grid_uid)
+            grid_tree = existing_data.get("tree", {})
+            gs = grid_tree.get("stepParams", {}).get("gridSettings", {}).get("grid", {})
+            rows = dict(gs.get("rows", {}))
+            sizes_d = dict(gs.get("sizes", {}))
+            row_order = list(gs.get("rowOrder", rows.keys()))
+
+            new_row = f"legacy_{uid()[:6]}"
+            rows[new_row] = [[block_uid]]
+            sizes_d[new_row] = [24]
+            row_order.append(new_row)
+
+            nb.set_layout(grid_uid, rows, sizes_d)
+        except Exception:
+            pass  # Layout update best-effort
 
 
 def _find_popup_items(tree: dict) -> list[dict]:
