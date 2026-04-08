@@ -7,49 +7,49 @@ pages:
     grid_uid: xjv94pmjr8h
     blocks:
       filter:
-        uid: x9lx3qc5g09
+        uid: t1ok53h0jzh
         type: filterForm
-        grid_uid: rvsujo14uov
+        grid_uid: bmwq7baxrcl
         fields:
           name:
-            wrapper: 5nlts0i2o6n
-            field: f3iuslk5095
+            wrapper: 6v37rzz0k5y
+            field: nok00cdjhuu
       table:
-        uid: eaekvw9jzic
+        uid: edre7aom2od
         type: table
-        actions_column_uid: uo6gwvhva8z
+        actions_column_uid: ibcucnht4qd
         fields:
           name:
-            wrapper: ghrsnff12o6
-            field: 2qusdopwzac
+            wrapper: a4o24kxhqdx
+            field: mcbybj0jv4b
           source:
-            wrapper: kxe7wdbnp95
-            field: i7h1t6wgqpi
+            wrapper: ylr27rxh4nt
+            field: th08x87lolq
           status:
-            wrapper: e9t1zk22hgk
-            field: b6sb6vs1ty8
+            wrapper: l21x3l3s4zr
+            field: kjfsst6zhgk
           industry:
-            wrapper: ddkw20sq73f
-            field: eoamylp680x
+            wrapper: rhp662aql63
+            field: aa50tu6wdcd
           owner:
-            wrapper: nfcf4nozjoe
-            field: ssaob0k5vsi
+            wrapper: xty4ims4spn
+            field: 6g18sjum0u8
         actions:
           filter:
-            uid: ijmx8akmh2f
+            uid: x8nkajmtizg
           refresh:
-            uid: yvm2duuy8jy
+            uid: curbf5qa41i
           export:
-            uid: sf25bpovpht
+            uid: u47abpmvlkn
           addNew:
-            uid: xgmoxjdsgzk
+            uid: p2ukq31mv9v
         record_actions:
           edit:
-            uid: dwvajrpryjk
+            uid: 2e0pdakqinh
           view:
-            uid: is3ng610nzd
+            uid: i9brlizpqka
           delete:
-            uid: pf4vbzobs1o
+            uid: i2i8xyyf8r2
   仪表盘:
     route_id: 357790438195200
     page_uid: nly4jisqxar
@@ -57,29 +57,29 @@ pages:
     grid_uid: 4kgzj0oprdj
     blocks:
       chart_pipeline:
-        uid: fznybvbcv3z
+        uid: k9vmvms44bm
         type: chart
       chart_funnel:
-        uid: s3e9wrgvmsp
+        uid: j59x03v0zxv
         type: chart
       chart_orders:
-        uid: wxo19w1dsnc
+        uid: rb3ozdeacks
         type: chart
       chart_customers:
-        uid: sj1dyhbm5wr
+        uid: 2sqy1x32nj0
         type: chart
       chart_industry:
-        uid: 7cg3miw4mwp
+        uid: ov7d5zcf9ba
         type: chart
       js_stats1:
-        uid: yv915ps36mx
+        uid: oglvgxye3mw
         type: jsBlock
       js_stats2:
-        uid: jrv8l43uyai
+        uid: 38r5gjzw5pa
         type: jsBlock
       js_stats3:
-        uid: 1lq0s0nlbpd
+        uid: znlmzniu65g
         type: jsBlock
       js_stats4:
-        uid: 59plsgs6ra0
+        uid: id0i12l10h6
         type: jsBlock
