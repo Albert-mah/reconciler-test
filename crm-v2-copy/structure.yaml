@@ -93,6 +93,7 @@ pages:
       file: ./js/leads_filterForm_1_leads_stats_filter_block.js
     actions: []
     recordActions: []
+    coll: nb_crm_leads
   layout:
   - - col:
       - filterForm_1
@@ -135,6 +136,7 @@ pages:
       file: ./js/customers_filterForm_1_customer_stats_filter_block.js
     actions: []
     recordActions: []
+    coll: nb_crm_customers
   layout:
   - - filterForm_1
   - - table_0

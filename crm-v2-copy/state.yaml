@@ -106,7 +106,10 @@ pages:
         uid: az57frrsds1
         type: filterForm
         grid_uid: k57a41g3417
-        fields: {}
+        fields:
+          name:
+            wrapper: zxxw1ayem7z
+            field: cli2lwtfbhy
   customers:
     route_id: 357857159086082
     page_uid: bl135i9uvg8
@@ -154,7 +157,10 @@ pages:
         uid: wvs7hlm3hft
         type: filterForm
         grid_uid: hyg6vv9sm4n
-        fields: {}
+        fields:
+          name:
+            wrapper: goyzfk9t74d
+            field: dxky8b4jzfk
   opportunities:
     route_id: 357857161183232
     page_uid: y8yp550pyme

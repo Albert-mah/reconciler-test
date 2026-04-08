@@ -137,15 +137,38 @@ def deploy_surface(nb: NocoBase, tab_uid: str, spec: dict,
 
     if all_exist:
         if force:
-            # Force: re-apply content fixes (display models, JS code, layout)
-            # but do NOT recreate blocks
+            # Force: check for missing fields, fix display models, JS, layout
             print(f"    ~ {len(existing)} blocks exist (update in-place)")
             for bs in blocks_spec:
                 key = bs.get("key", "")
-                if key in blocks_state and blocks_state[key].get("uid"):
-                    block_uid = blocks_state[key]["uid"]
-                    block_grid = blocks_state[key].get("grid_uid", "")
-                    _fill_block(nb, block_uid, block_grid, bs, coll, mod, blocks_state[key], blocks_state)
+                if key not in blocks_state or not blocks_state[key].get("uid"):
+                    continue
+                block_uid = blocks_state[key]["uid"]
+                block_grid = blocks_state[key].get("grid_uid", "")
+                btype = bs.get("type", "")
+
+                # Check for missing fields and add them
+                if btype in ("table", "filterForm", "createForm", "editForm", "details"):
+                    spec_fields = []
+                    for f in bs.get("fields", []):
+                        fp = f if isinstance(f, str) else f.get("field", f.get("fieldPath", ""))
+                        if fp and not fp.startswith("["):
+                            spec_fields.append(fp)
+
+                    existing_fields = set(blocks_state[key].get("fields", {}).keys())
+                    for fp in spec_fields:
+                        if fp not in existing_fields:
+                            try:
+                                result = nb.add_field(block_uid, fp)
+                                blocks_state[key].setdefault("fields", {})[fp] = {
+                                    "wrapper": result.get("wrapperUid", result.get("uid", "")),
+                                    "field": result.get("fieldUid", ""),
+                                }
+                                print(f"      + field: {fp}")
+                            except Exception as e:
+                                print(f"      ! field {fp}: {e}")
+
+                _fill_block(nb, block_uid, block_grid, bs, coll, mod, blocks_state[key], blocks_state)
         else:
             print(f"    = {len(existing)} blocks exist (skip)")
 
