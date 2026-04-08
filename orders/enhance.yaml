@@ -1,12 +1,9 @@
 # ═══════════════════════════════════
-#  Layer 2: 订单管理 — 弹窗 + 增强
+#  Layer 2: 订单管理 — 弹窗内容
 # ═══════════════════════════════════
-#
-# 弹窗 = 小页面，可以包含任意区块、多 tab
-# 所有 target 用 $变量引用，从 state.yaml 解析 UID
 
 popups:
-  # ── 新建订单弹窗 ──
+  # ── 订单：新建 ──
   - target: $订单列表.table.actions.addNew
     blocks:
       - key: form
@@ -14,13 +11,12 @@ popups:
         resource: { binding: currentCollection }
         fields: [order_no, customer_name, total_amount, status, order_date, delivery_date, remark]
         field_layout:
-          - [order_no, customer_name]
-          - [total_amount, status]
-          - [order_date, delivery_date]
-          - [remark]
+          - [{order_no: 8}, {customer_name: 8}, {status: 8}]       # 基本信息一行
+          - [{total_amount: 8}, {order_date: 8}, {delivery_date: 8}] # 金额+日期一行
+          - [remark]                                                  # 备注独占
         actions: [submit]
 
-  # ── 编辑订单弹窗 ──
+  # ── 订单：编辑 ──
   - target: $订单列表.table.record_actions.edit
     blocks:
       - key: form
@@ -28,62 +24,61 @@ popups:
         resource: { binding: currentRecord }
         fields: [order_no, customer_name, total_amount, status, order_date, delivery_date, remark]
         field_layout:
-          - [order_no, customer_name]
-          - [total_amount, status]
-          - [order_date, delivery_date]
+          - [{order_no: 8}, {customer_name: 8}, {status: 8}]
+          - [{total_amount: 8}, {order_date: 8}, {delivery_date: 8}]
           - [remark]
         actions: [submit]
 
-  # ── 查看订单弹窗（多 tab）──
+  # ── 订单：查看 ──
   - target: $订单列表.table.record_actions.view
     blocks:
       - key: detail
         type: details
         resource: { binding: currentRecord }
-        fields: [order_no, customer_name, total_amount, status, order_date, delivery_date, remark]
+        fields: [order_no, customer_name, status, total_amount, order_date, delivery_date, remark]
         field_layout:
-          - [order_no, customer_name]
-          - [total_amount, status]
-          - [order_date, delivery_date]
+          - [{order_no: 8}, {customer_name: 8}, {status: 8}]
+          - [{total_amount: 8}, {order_date: 8}, {delivery_date: 8}]
           - [remark]
         recordActions: [edit]
 
-  # ── 新建客户弹窗 ──
+  # ── 客户：新建 ──
   - target: $客户.table.actions.addNew
     blocks:
       - key: form
         type: createForm
         resource: { binding: currentCollection }
-        fields: [name, contact, phone, level]
+        fields: [name, level, contact, phone]
         field_layout:
-          - [name, level]
-          - [contact, phone]
+          - [{name: 16}, {level: 8}]        # 名称宽一些
+          - [{contact: 12}, {phone: 12}]
         actions: [submit]
 
-  # ── 编辑客户弹窗 ──
+  # ── 客户：编辑 ──
   - target: $客户.table.record_actions.edit
     blocks:
       - key: form
         type: editForm
         resource: { binding: currentRecord }
-        fields: [name, contact, phone, level]
+        fields: [name, level, contact, phone]
         field_layout:
-          - [name, level]
-          - [contact, phone]
+          - [{name: 16}, {level: 8}]
+          - [{contact: 12}, {phone: 12}]
         actions: [submit]
 
-  # ── 查看客户弹窗 ──
+  # ── 客户：查看 ──
   - target: $客户.table.record_actions.view
     blocks:
       - key: detail
         type: details
         resource: { binding: currentRecord }
-        fields: [name, contact, phone, level]
+        fields: [name, level, contact, phone]
         field_layout:
-          - [name, level]
-          - [contact, phone]
+          - [{name: 16}, {level: 8}]
+          - [{contact: 12}, {phone: 12}]
+        recordActions: [edit]
 
-  # ── 新建产品弹窗 ──
+  # ── 产品：新建 ──
   - target: $产品.table.actions.addNew
     blocks:
       - key: form
@@ -91,11 +86,11 @@ popups:
         resource: { binding: currentCollection }
         fields: [sku, name, price, unit, stock]
         field_layout:
-          - [sku, name]
-          - [price, unit, stock]
+          - [{sku: 8}, {name: 16}]            # SKU 短，名称长
+          - [{price: 8}, {unit: 8}, {stock: 8}]
         actions: [submit]
 
-  # ── 编辑产品弹窗 ──
+  # ── 产品：编辑 ──
   - target: $产品.table.record_actions.edit
     blocks:
       - key: form
@@ -103,6 +98,6 @@ popups:
         resource: { binding: currentRecord }
         fields: [sku, name, price, unit, stock]
         field_layout:
-          - [sku, name]
-          - [price, unit, stock]
+          - [{sku: 8}, {name: 16}]
+          - [{price: 8}, {unit: 8}, {stock: 8}]
         actions: [submit]
