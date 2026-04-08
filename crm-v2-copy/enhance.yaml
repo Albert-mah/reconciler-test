@@ -1,39 +1,150 @@
 popups:
-- target: $customers.table.actions.addNew
+- target: $overview.table.actions.addNew
   auto:
   - edit
-  coll: nb_crm_customers
+  coll: nb_crm_activities
   blocks:
   - key: form
     type: createForm
     resource:
       binding: currentCollection
     fields:
-    - name
-    - type
-    - region
-    - level
-    - status
-    - owner
-    - phone
-    - website
-    field_layout:
-    - '--- 基本信息 ---'
-    - - name
-      - type
-      - level
-    - - region
-      - status
-    - '--- 负责人 ---'
-    - - owner
-    - '--- 联系方式 ---'
-    - - phone
-      - website
+    - subject
+    - activity_date
     actions:
     - submit
-- target: $customers.table.fields.name
+- page: Leads
+  field: name
   mode: embed
-  coll: nb_crm_customers
+  tabs:
+  - blocks:
+    - key: details_0
+      type: details
+      coll: nb_crm_leads
+      resource_binding:
+        filterByTk: '{{ctx.view.inputArgs.filterByTk}}'
+      fields:
+      - company
+      - title
+      - owner
+      - createdAt
+      js_items:
+      - desc: Lead Key Stats Block
+        file: ./js/leads_popup_name_tab0_details_0_lead_key_stats_block.js
+      - desc: Lead Badges Row Component
+        file: ./js/leads_popup_name_tab0_details_0_lead_badges_row_component.js
+      field_layout:
+      - - '---'
+      - - company
+        - title
+        - owner
+        - createdAt
+      - - '[JS:Lead Badges Row Component]'
+      - - '[JS:Lead Key Stats Block]'
+      actions:
+      - edit
+      - popup
+      - popup
+    - key: lead_insights
+      type: details
+      title: Lead Insights
+      coll: nb_crm_leads
+      resource_binding:
+        filterByTk: '{{ctx.view.inputArgs.filterByTk}}'
+      js_items:
+      - desc: Lead AI Insights Block
+        file: ./js/leads_popup_name_tab0_lead_insights_lead_ai_insights_block.js
+      field_layout:
+      - - '[JS:Lead AI Insights Block]'
+    - key: lead_owner
+      type: details
+      title: Lead Owner
+      coll: nb_crm_leads
+      resource_binding:
+        filterByTk: '{{ctx.view.inputArgs.filterByTk}}'
+      js_items:
+      - desc: Lead Profile Header Block
+        file: ./js/leads_popup_name_tab0_lead_owner_lead_profile_header_block.js
+      field_layout:
+      - - '---'
+      - - '[JS:Lead Profile Header Block]'
+      actions:
+      - popup
+      - popup
+      - popup
+    - key: company_information
+      type: details
+      title: Company Information
+      coll: nb_crm_leads
+      resource_binding:
+        filterByTk: '{{ctx.view.inputArgs.filterByTk}}'
+      fields:
+      - industry
+      - annual_revenue
+      - number_of_employees
+      - company
+      field_layout:
+      - - company
+        - industry
+        - annual_revenue
+      - - number_of_employees
+    - key: contact_information
+      type: details
+      title: Contact Information
+      coll: nb_crm_leads
+      resource_binding:
+        filterByTk: '{{ctx.view.inputArgs.filterByTk}}'
+      fields:
+      - email
+      - phone
+      - mobile_phone
+      - website
+      - address
+      field_layout:
+      - - email
+        - phone
+        - mobile_phone
+      - - website: 8
+        - address: 16
+    - key: details_5
+      type: details
+      coll: nb_crm_leads
+      resource_binding:
+        filterByTk: '{{ctx.view.inputArgs.filterByTk}}'
+      js_items:
+      - desc: Lead Stage Flow Block
+        file: ./js/leads_popup_name_tab0_details_5_lead_stage_flow_block.js
+    - key: comments_6
+      type: comments
+      coll: nb_crm_comments
+      resource_binding:
+        associationName: nb_crm_leads.comments
+        sourceId: '{{ctx.view.inputArgs.filterByTk}}'
+    layout:
+    - - col:
+        - details_0
+        - details_5
+        - contact_information
+        - company_information
+        size: 16
+      - col:
+        - lead_owner
+        - lead_insights
+        - comments_6
+        size: 8
+    title: Tab0
+  - blocks:
+    - key: recordHistory_0
+      type: recordHistory
+      coll: nb_crm_leads
+    title: Tab1
+  - blocks: []
+    layout:
+    - - 3jvn4ysa
+    title: Tab2
+- page: Customers
+  field: name
+  mode: embed
   tabs:
   - blocks:
     - key: details_0
@@ -44,6 +155,7 @@ popups:
       fields:
       - level
       - type
+      - scale
       - region
       js_items:
       - desc: Customer Statistics Block
@@ -53,6 +165,7 @@ popups:
       field_layout:
       - - '[JS:item_profile - Customer Profile Header]'
       - - level
+        - scale
         - region
         - type
       - - '[JS:Customer Statistics Block]'
@@ -121,3 +234,14 @@ popups:
       type: recordHistory
       coll: nb_crm_customers
     title: Tab1
+- page: Products
+  field: name
+  blocks:
+  - key: editForm_0
+    type: editForm
+    coll: nb_crm_products
+    resource_binding:
+      filterByTk: '{{ctx.view.inputArgs.filterByTk}}'
+    actions:
+    - submit
+  mode: drawer
