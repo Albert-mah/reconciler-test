@@ -39,14 +39,24 @@ def gen_row_id() -> str:
 def build_grid(layout_spec: list, uid_map: dict[str, str]) -> dict:
     """Convert layout DSL + name→UID map to gridSettings.
 
-    Args:
-        layout_spec: list of rows. Each row can be:
-            - list of items: [name1, name2] or [{name: size}]
-            - string "--- label ---": divider (must already be in uid_map)
-        uid_map: mapping from item name to its UID
+    Layout DSL formats:
 
-    Returns:
-        gridSettings dict ready for setLayout or stepParams
+      # Simple: one block per col
+      - [a, b, c]                      # 3 cols, equal width
+
+      # Explicit sizes
+      - [{a: 16}, {b: 8}]             # a=16, b=8
+
+      # Nested: stack blocks vertically in a col
+      - [[top1, top2], right]          # left col stacks top1+top2, right col = right
+      - [{col: [a, b], size: 12}, c]   # explicit size for stacked col
+
+      # Divider
+      - "--- 分组标题 ---"
+
+    NocoBase gridSettings mapping:
+      rows[rowId] = [[col1_uid1, col1_uid2], [col2_uid]]  ← col1 stacks 2 items
+      sizes[rowId] = [12, 12]
     """
     rows = {}
     sizes = {}
@@ -55,7 +65,7 @@ def build_grid(layout_spec: list, uid_map: dict[str, str]) -> dict:
     for row_items in layout_spec:
         row_id = gen_row_id()
 
-        # Divider row: "--- 基本信息 ---" (string, not list)
+        # Divider row
         if isinstance(row_items, str) and row_items.strip().startswith("---"):
             label = row_items.strip().strip("-").strip()
             uid = uid_map.get(label, uid_map.get(f"divider.{label}", ""))
@@ -72,18 +82,32 @@ def build_grid(layout_spec: list, uid_map: dict[str, str]) -> dict:
         row_sizes = []
 
         for item in row_items:
-            if isinstance(item, dict):
-                name = list(item.keys())[0]
-                size = item[name]
-            elif isinstance(item, str):
-                name = item
-                size = 24 // len(row_items)
-            else:
-                continue
+            if isinstance(item, list):
+                # Nested list: stack multiple blocks in one col
+                col_uids = [uid_map.get(n, n) for n in item if isinstance(n, str)]
+                row_cols.append(col_uids)
+                row_sizes.append(24 // len(row_items))
 
-            uid = uid_map.get(name, name)
-            row_cols.append([uid])
-            row_sizes.append(size)
+            elif isinstance(item, dict):
+                keys = list(item.keys())
+                if "col" in item and "size" in item:
+                    # Explicit stacked col with size: {col: [a, b], size: 12}
+                    names = item["col"] if isinstance(item["col"], list) else [item["col"]]
+                    col_uids = [uid_map.get(n, n) for n in names]
+                    row_cols.append(col_uids)
+                    row_sizes.append(item["size"])
+                else:
+                    # Simple dict: {name: size}
+                    name = keys[0]
+                    size = item[name]
+                    uid = uid_map.get(name, name)
+                    row_cols.append([uid])
+                    row_sizes.append(size)
+
+            elif isinstance(item, str):
+                uid = uid_map.get(item, item)
+                row_cols.append([uid])
+                row_sizes.append(24 // len(row_items))
 
         if row_cols:
             rows[row_id] = row_cols
@@ -179,7 +203,6 @@ def describe_layout(layout_spec: list) -> str:
     parts = []
     for row in layout_spec:
         if isinstance(row, str):
-            # Divider row
             label = row.strip().strip("-").strip()
             parts.append(f"── {label} ──")
             continue
@@ -187,9 +210,17 @@ def describe_layout(layout_spec: list) -> str:
             continue
         items = []
         for item in row:
-            if isinstance(item, dict):
-                name, size = list(item.items())[0]
-                items.append(f"{name}:{size}")
+            if isinstance(item, list):
+                # Stacked col
+                items.append(f"[{'↕'.join(str(i) for i in item)}]")
+            elif isinstance(item, dict):
+                keys = list(item.keys())
+                if "col" in item:
+                    names = item["col"] if isinstance(item["col"], list) else [item["col"]]
+                    items.append(f"[{'↕'.join(names)}]:{item.get('size','?')}")
+                else:
+                    name, size = keys[0], item[keys[0]]
+                    items.append(f"{name}:{size}")
             else:
                 items.append(str(item))
         parts.append(f"[{', '.join(items)}]")

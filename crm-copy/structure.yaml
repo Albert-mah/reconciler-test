@@ -53,6 +53,5 @@ pages:
 
     layout:
       - [js_stats1, js_stats2, js_stats3, js_stats4]
-      - [chart_pipeline, chart_funnel]
-      - [chart_orders, chart_customers]
+      - [{col: [chart_pipeline, chart_orders], size: 12}, {col: [chart_funnel, chart_customers], size: 12}]
       - [chart_industry]
