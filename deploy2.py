@@ -118,6 +118,9 @@ def deploy_l1(nb: NocoBase, spec: dict, state: dict, mod: Path) -> dict:
             block_count = len(result.get("blocks", []))
             print(f"    composed {block_count} blocks")
 
+            # Auto-layout filter form fields horizontally
+            _auto_layout_filters(nb, result, ps)
+
         state["pages"][page_key] = page_state
 
     return state
@@ -280,6 +283,66 @@ def _resolve_popup_uid(page_state: dict, ref: str) -> str | None:
 # ══════════════════════════════════════════════════════════════════
 #  Helpers
 # ══════════════════════════════════════════════════════════════════
+
+def _auto_layout_filters(nb: NocoBase, compose_result: dict, page_spec: dict):
+    """Set horizontal layout for filterForm grid fields.
+
+    Rules:
+    - Max 3 fields per row (each gets 24/N width)
+    - If more than 3, wrap to next row
+    - Sets formFilterBlockModelSettings.layout = horizontal
+    """
+    MAX_PER_ROW = 3
+
+    for b in compose_result.get("blocks", []):
+        if b.get("type") != "filterForm":
+            continue
+
+        grid_uid = b.get("gridUid")
+        field_uids = [f.get("wrapperUid", f.get("uid")) for f in b.get("fields", [])]
+
+        if not grid_uid or not field_uids:
+            continue
+
+        # Build rows: chunk fields into groups of MAX_PER_ROW
+        rows = {}
+        sizes = {}
+        row_order = []
+
+        for i in range(0, len(field_uids), MAX_PER_ROW):
+            chunk = field_uids[i:i + MAX_PER_ROW]
+            row_id = f"row{i // MAX_PER_ROW + 1}"
+            col_size = 24 // len(chunk)
+            rows[row_id] = [[uid] for uid in chunk]
+            sizes[row_id] = [col_size] * len(chunk)
+            row_order.append(row_id)
+
+        try:
+            nb.set_layout(grid_uid, rows, sizes)
+            print(f"      filter layout: {len(field_uids)} fields, "
+                  f"{len(row_order)} rows × max {MAX_PER_ROW}/row")
+        except Exception as e:
+            print(f"      ! filter layout failed: {e}")
+
+        # Also set block-level horizontal layout
+        try:
+            nb.update_settings(b["uid"], {
+                "settings": {
+                    "formFilterBlockModelSettings": {
+                        "layout": {
+                            "layout": "horizontal",
+                            "labelAlign": "left",
+                            "labelWidth": 120,
+                            "labelWrap": False,
+                            "colon": True,
+                        }
+                    }
+                }
+            })
+        except Exception as e:
+            # Not critical — layout still works without this
+            pass
+
 
 def _extract_block_state(compose_result: dict) -> dict:
     """Extract deep UID registry from compose response.
