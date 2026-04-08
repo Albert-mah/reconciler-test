@@ -19,6 +19,7 @@ from typing import Any
 import yaml
 
 from nb import NocoBase, dump_yaml
+from layout import parse_layout_spec, apply_layout, describe_layout
 
 
 def deploy(module_dir: str, layers: list[str] = None, dry_run: bool = False):
@@ -118,8 +119,8 @@ def deploy_l1(nb: NocoBase, spec: dict, state: dict, mod: Path) -> dict:
             block_count = len(result.get("blocks", []))
             print(f"    composed {block_count} blocks")
 
-            # Auto-layout filter form fields horizontally
-            _auto_layout_filters(nb, result, ps)
+            # Apply layouts
+            _apply_all_layouts(nb, result, ps)
 
         state["pages"][page_key] = page_state
 
@@ -284,64 +285,99 @@ def _resolve_popup_uid(page_state: dict, ref: str) -> str | None:
 #  Helpers
 # ══════════════════════════════════════════════════════════════════
 
-def _auto_layout_filters(nb: NocoBase, compose_result: dict, page_spec: dict):
-    """Set horizontal layout for filterForm grid fields.
+def _apply_all_layouts(nb: NocoBase, compose_result: dict, page_spec: dict):
+    """Apply layouts at all levels:
+    1. Page-level: block arrangement (from page_spec.layout)
+    2. Block-level: field arrangement in filter/form/detail (from block.field_layout)
 
-    Rules:
-    - Max 3 fields per row (each gets 24/N width)
-    - If more than 3, wrap to next row
-    - Sets formFilterBlockModelSettings.layout = horizontal
+    Layout DSL in structure.yaml:
+
+      layout:                              # page-level
+        - [filter]                         # row 1: full width
+        - [{sidebar: 6}, {table: 18}]     # row 2: side by side
+
+      blocks:
+        - key: filter
+          type: filterForm
+          fields: [name, category, status, industry, owner]
+          field_layout:                    # field-level
+            - [name, category, status]     # 3 per row (auto 8,8,8)
+            - [industry, owner]            # 2 per row (auto 12,12)
+
+    If no layout specified, auto-generates:
+    - Page: one block per row, full width
+    - FilterForm fields: max 3 per row
+    - Form/Detail fields: max 2 per row
     """
-    MAX_PER_ROW = 3
+    blocks = compose_result.get("blocks", [])
+    block_specs = {bs.get("key", ""): bs for bs in page_spec.get("blocks", [])}
 
-    for b in compose_result.get("blocks", []):
-        if b.get("type") != "filterForm":
-            continue
+    # ── 1. Page-level block layout ──
+    page_layout = page_spec.get("layout")
+    if page_layout:
+        # Build uid_map from block keys
+        page_grid_uid = compose_result.get("layout", {}).get("uid")
+        if page_grid_uid:
+            uid_map = {b["key"]: b["uid"] for b in blocks}
+            layout = parse_layout_spec(page_layout, list(uid_map.keys()))
+            if apply_layout(nb, page_grid_uid, layout, uid_map):
+                print(f"      page layout: {describe_layout(layout)}")
 
+    # ── 2. Block-level field layouts ──
+    for b in blocks:
+        btype = b.get("type", "")
+        bkey = b.get("key", "")
         grid_uid = b.get("gridUid")
-        field_uids = [f.get("wrapperUid", f.get("uid")) for f in b.get("fields", [])]
+        field_results = b.get("fields", [])
+        bs = block_specs.get(bkey, {})
 
-        if not grid_uid or not field_uids:
+        if not grid_uid or not field_results:
             continue
 
-        # Build rows: chunk fields into groups of MAX_PER_ROW
-        rows = {}
-        sizes = {}
-        row_order = []
+        # Build field name → wrapper UID map
+        field_uid_map = {}
+        field_names = []
+        for f in field_results:
+            name = f.get("fieldPath", f.get("key", ""))
+            uid = f.get("wrapperUid", f.get("uid"))
+            field_uid_map[name] = uid
+            field_names.append(name)
 
-        for i in range(0, len(field_uids), MAX_PER_ROW):
-            chunk = field_uids[i:i + MAX_PER_ROW]
-            row_id = f"row{i // MAX_PER_ROW + 1}"
-            col_size = 24 // len(chunk)
-            rows[row_id] = [[uid] for uid in chunk]
-            sizes[row_id] = [col_size] * len(chunk)
-            row_order.append(row_id)
+        # Determine layout
+        if btype == "filterForm":
+            max_per_row = 3
+        elif btype in ("form", "editForm"):
+            max_per_row = 2
+        elif btype == "detail":
+            max_per_row = 2
+        else:
+            continue  # table doesn't need field layout
 
-        try:
-            nb.set_layout(grid_uid, rows, sizes)
-            print(f"      filter layout: {len(field_uids)} fields, "
-                  f"{len(row_order)} rows × max {MAX_PER_ROW}/row")
-        except Exception as e:
-            print(f"      ! filter layout failed: {e}")
+        # Use explicit field_layout if provided, otherwise auto
+        explicit = bs.get("field_layout")
+        layout = parse_layout_spec(explicit, field_names, max_per_row)
 
-        # Also set block-level horizontal layout
-        try:
-            nb.update_settings(b["uid"], {
-                "settings": {
-                    "formFilterBlockModelSettings": {
-                        "layout": {
-                            "layout": "horizontal",
-                            "labelAlign": "left",
-                            "labelWidth": 120,
-                            "labelWrap": False,
-                            "colon": True,
+        if apply_layout(nb, grid_uid, layout, field_uid_map):
+            print(f"      {bkey} field layout: {describe_layout(layout)}")
+
+        # Set block horizontal label mode for filter forms
+        if btype == "filterForm":
+            try:
+                nb.update_settings(b["uid"], {
+                    "settings": {
+                        "formFilterBlockModelSettings": {
+                            "layout": {
+                                "layout": "horizontal",
+                                "labelAlign": "left",
+                                "labelWidth": 120,
+                                "labelWrap": False,
+                                "colon": True,
+                            }
                         }
                     }
-                }
-            })
-        except Exception as e:
-            # Not critical — layout still works without this
-            pass
+                })
+            except Exception:
+                pass
 
 
 def _extract_block_state(compose_result: dict) -> dict:

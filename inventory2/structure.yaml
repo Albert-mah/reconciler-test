@@ -34,12 +34,18 @@ pages:
       - key: filter
         type: filterForm
         fields: [product_name, category, status]
+        field_layout:
+          - [product_name, category, status]     # 3 个一行
 
       - key: table
         type: table
         fields: [sku, product_name, category, unit, price, stock_qty, min_qty, status]
         actions: [filter, refresh, addNew, export]
         recordActions: [edit, view, delete]
+
+    layout:                                       # 页面级布局
+      - [filter]                                  # 筛选独占一行
+      - [table]                                   # 表格独占一行
 
   - page: 出入库
     icon: swapoutlined
