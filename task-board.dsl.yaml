@@ -7,17 +7,37 @@ grid:
   items:
   - uid: dnipjz5rnw2
     use: FilterFormBlock
-    coll: test_tasks
     grid:
       uid: 6suxzxaqu4e
-      use: FormGrid
-      fields:
+      use: FilterFormGrid
+      items:
       - uid: yuoi7wfse9p
-        use: InputField
-        field: title
+        use: FilterFormItem
+        field:
+          uid: cvm6ovd0mya
+          use: InputField
+        stepParams:
+          fieldSettings:
+            init:
+              collectionName: test_tasks
+              fieldPath: title
+              dataSourceKey: main
       - uid: 5eksnj0bfq7
-        use: SelectField
-        field: status
+        use: FilterFormItem
+        field:
+          uid: 10l4hbnjf3e
+          use: SelectField
+        stepParams:
+          fieldSettings:
+            init:
+              collectionName: test_tasks
+              fieldPath: status
+              dataSourceKey: main
+    actions:
+    - uid: n0yr3lyhrc4
+      use: FilterAction
+    - uid: u4jd69wjtdb
+      use: ResetAction
   - uid: 9qfpe570jqj
     use: TableBlock
     coll: test_tasks
