@@ -69,9 +69,13 @@ pages:
     blocks:
       - key: filter
         type: filterForm
-        fields: [order_no, customer_name, status]
+        fields:
+          - field: order_no
+            label: 搜索
+            filterPaths: [order_no, customer_name]
+          - status
         field_layout:
-          - [order_no, customer_name, status]
+          - [order_no, status]
 
       - key: table
         type: table

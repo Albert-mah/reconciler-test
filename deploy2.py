@@ -122,6 +122,9 @@ def deploy_l1(nb: NocoBase, spec: dict, state: dict, mod: Path) -> dict:
             # Apply layouts
             _apply_all_layouts(nb, result, ps)
 
+            # Configure filter field connections (filterPaths, label)
+            _configure_filter_fields(nb, result, ps)
+
         state["pages"][page_key] = page_state
 
     return state
@@ -194,7 +197,16 @@ def _parse_compose_field(f) -> dict:
         return result
 
     if isinstance(f, dict):
-        return f
+        result: dict[str, Any] = {}
+        # "field" key → fieldPath for compose API
+        fp = f.get("field", f.get("fieldPath", f.get("name", "")))
+        if fp:
+            result["fieldPath"] = fp
+        # Pass through other compose-supported keys
+        for k in ("target", "popup", "renderer", "type", "associationPathName"):
+            if k in f:
+                result[k] = f[k]
+        return result
 
     return {"fieldPath": str(f)}
 
@@ -392,6 +404,77 @@ def _apply_all_layouts(nb: NocoBase, compose_result: dict, page_spec: dict):
                 })
             except Exception:
                 pass
+
+
+def _configure_filter_fields(nb: NocoBase, compose_result: dict, page_spec: dict):
+    """Configure filterForm field connections (filterPaths, label).
+
+    When a filter field has filterPaths: [field1, field2], one input
+    searches multiple columns. Uses flowSurfaces:configure to set
+    filterFormItemSettings.connectFields on the wrapper UID.
+    """
+    blocks = compose_result.get("blocks", [])
+    block_specs = page_spec.get("blocks", [])
+
+    for b in blocks:
+        if b.get("type") != "filterForm":
+            continue
+
+        # Find the matching spec
+        bkey = b.get("key", "")
+        bs = next((s for s in block_specs if s.get("key") == bkey), None)
+        if not bs:
+            continue
+
+        # Find the target table block UID (for defaultTargetUid)
+        table_uid = None
+        for ob in blocks:
+            if ob.get("type") == "table":
+                table_uid = ob.get("uid")
+                break
+
+        fields_spec = bs.get("fields", [])
+        field_results = b.get("fields", [])
+
+        for fs in fields_spec:
+            if not isinstance(fs, dict):
+                continue
+            filter_paths = fs.get("filterPaths")
+            label = fs.get("label")
+            if not filter_paths and not label:
+                continue
+
+            # Find the wrapper UID for this field
+            field_name = fs.get("field", fs.get("name", ""))
+            fr = next((f for f in field_results if f.get("fieldPath") == field_name), None)
+            if not fr:
+                continue
+
+            wrapper_uid = fr.get("wrapperUid", fr.get("uid"))
+
+            # Build settings update
+            settings: dict = {}
+            if filter_paths and table_uid:
+                settings["connectFields"] = {
+                    "value": {
+                        "targets": [{
+                            "targetId": table_uid,
+                            "filterPaths": filter_paths,
+                        }]
+                    }
+                }
+            if label:
+                settings["label"] = {"label": label}
+
+            if settings:
+                try:
+                    nb.update_settings(wrapper_uid, {
+                        "settings": {"filterFormItemSettings": settings}
+                    })
+                    paths_str = f" → {filter_paths}" if filter_paths else ""
+                    print(f"      filter {field_name}: {label or field_name}{paths_str}")
+                except Exception as e:
+                    print(f"      ! filter {field_name}: {e}")
 
 
 def _find_popup_items(tree: dict) -> list[dict]:
