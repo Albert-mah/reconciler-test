@@ -202,18 +202,26 @@ class NocoBase:
         return r.json().get("data")
 
     def update_model(self, uid: str, step_params_patch: dict):
-        """Safe partial stepParams update — only touches stepParams, nothing else.
+        """Safe partial stepParams update via flowSurfaces:configure.
 
-        Uses flowModels:update with options containing ONLY stepParams.
-        This avoids clearing parentId/subKey/sortIndex (which are NOT in options).
+        Falls back to flowModels:save with parentId looked up from tree.
+        NEVER uses flowModels:update — it clears parentId.
         """
+        # Try flowSurfaces:configure first (safest)
+        try:
+            return self.configure(uid, {"changes": step_params_patch})
+        except Exception:
+            pass
+
+        # Fallback: flowModels:save with full structural fields
+        # Must find parentId from the tree (flowModels:get doesn't return it)
         r = self.s.get(f"{self.base}/api/flowModels:get",
                        params={"filterByTk": uid}, timeout=self._timeout)
         if not r.ok:
             raise RuntimeError(f"flowModels:get {uid} → {r.status_code}")
         current = r.json().get("data", {})
 
-        # Deep merge stepParams only
+        # Deep merge stepParams
         sp = dict(current.get("stepParams") or {})
         for k, v in step_params_patch.items():
             if isinstance(v, dict) and isinstance(sp.get(k), dict):
@@ -221,15 +229,47 @@ class NocoBase:
             else:
                 sp[k] = v
 
-        # flowModels:update with ONLY stepParams in options
-        # Do NOT include parentId/subKey/subType — they are structural,
-        # not part of options, and including them as null clears them.
-        r2 = self.s.post(f"{self.base}/api/flowModels:update?filterByTk={uid}",
-                         json={"options": {"stepParams": sp}},
-                         timeout=self._timeout)
+        # Find parentId by searching all models (expensive but correct)
+        parent_id = current.get("parentId")
+        if not parent_id:
+            parent_id = self._find_parent(uid)
+
+        save_data: dict = {
+            "uid": uid,
+            "use": current.get("use", ""),
+            "subKey": current.get("subKey"),
+            "subType": current.get("subType"),
+            "sortIndex": current.get("sortIndex", 0),
+            "stepParams": sp,
+            "flowRegistry": current.get("flowRegistry", {}),
+        }
+        if parent_id:
+            save_data["parentId"] = parent_id
+
+        r2 = self.s.post(f"{self.base}/api/flowModels:save",
+                         json=save_data, timeout=self._timeout)
         if not r2.ok:
-            raise RuntimeError(f"flowModels:update {uid} → {r2.status_code}: {r2.text[:200]}")
+            raise RuntimeError(f"flowModels:save {uid} → {r2.status_code}: {r2.text[:200]}")
         return r2.json().get("data")
+
+    def _find_parent(self, uid: str) -> str | None:
+        """Find parentId by scanning all models. Cached per session."""
+        if not hasattr(self, "_parent_cache"):
+            models = self.s.get(f"{self.base}/api/flowModels:list",
+                                params={"paginate": "false"},
+                                timeout=self._timeout).json().get("data", [])
+            self._parent_cache = {}
+            for m in models:
+                subs = m.get("subModels", {})
+                if isinstance(subs, dict):
+                    for _, v in subs.items():
+                        if isinstance(v, list):
+                            for child in v:
+                                if isinstance(child, dict) and child.get("uid"):
+                                    self._parent_cache[child["uid"]] = m["uid"]
+                        elif isinstance(v, dict) and v.get("uid"):
+                            self._parent_cache[v["uid"]] = m["uid"]
+        return self._parent_cache.get(uid)
 
     def add_divider(self, grid_uid: str, label: str,
                     color: str = "#1677ff",
