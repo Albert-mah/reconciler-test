@@ -1,0 +1,266 @@
+page: Opportunities
+tab: p3jlz8cdmym
+route: 344558736834560
+page_uid: vga8g2pgnnu
+grid:
+  uid: 40317d5f8a6
+  use: BlockGrid
+  items:
+  - uid: a19ac22b220
+    use: JSBlock
+    stepParams:
+      jsSettings:
+        runJs:
+          code: "/**\n * Pipeline Header Block\n * Filters: All | My Deals | Big Deals\
+            \ | Closing Soon\n * Uses addFilterGroup to filter the kanban resource.\n\
+            \ */\n\nconst { useState, useEffect } = ctx.React;\nconst { Row, Col,\
+            \ Spin, Statistic, Typography, Space, Badge, Tag, Button } = ctx.antd;\n\
+            const { Text } = Typography;\n\n// Theme\nconst algorithm = ctx.antdConfig?.theme?.algorithm;\n\
+            const darkAlgo = ctx.antd.theme.darkAlgorithm;\nconst isDark = Array.isArray(algorithm)\n\
+            \  ? algorithm.some(fn => fn === darkAlgo)\n  : algorithm === darkAlgo;\n\
+            const T = ctx.themeToken || {};\n\nconst t = (key, opts) => ctx.t(key,\
+            \ { ns: 'nb_crm.pipeline', ...opts });\n\n// ==================== Config\
+            \ ====================\n\nconst TARGET_BLOCK_UID = '79de06ad20d';\nconst\
+            \ TABLE_NAME = 'nb_crm_opportunities';\n\nconst FILTERS = [\n  { key:\
+            \ 'all', label: 'All Pipeline', color: T.colorPrimary || '#1890ff', icon:\
+            \ '\U0001F4CA' },\n  { key: 'mine', label: 'My Deals', color: '#6366f1',\
+            \ icon: '\U0001F464' },\n  { key: 'big', label: 'Big Deals', color: '#22c55e',\
+            \ icon: '\U0001F4B0' },\n  { key: 'closing', label: 'Closing Soon', color:\
+            \ '#f59e0b', icon: '⏰' },\n];\n\n// ==================== Styles ====================\n\
+            \nconst styles = {\n  filterItem: (isActive, color) => ({\n    padding:\
+            \ '8px 16px',\n    background: isActive\n      ? (isDark ? `${color}20`\
+            \ : `${color}10`)\n      : (T.colorBgContainer || '#fff'),\n    border:\
+            \ `1px solid ${isActive ? color : (T.colorBorderSecondary || '#d9d9d9')}`,\n\
+            \    borderRadius: 6, cursor: 'pointer', transition: 'all 0.2s',\n   \
+            \ display: 'flex', alignItems: 'center', gap: 8,\n  }),\n  statCard: {\n\
+            \    background: T.colorBgContainer || '#fff',\n    border: `1px solid\
+            \ ${T.colorBorderSecondary || '#d9d9d9'}`,\n    borderRadius: 8, padding:\
+            \ '12px 16px',\n  },\n};\n\nconst formatCurrency = (value) => {\n  if\
+            \ (!value) return '$0';\n  if (value >= 1e6) return `$${(value / 1e6).toFixed(1)}M`;\n\
+            \  if (value >= 1e3) return `$${(value / 1e3).toFixed(0)}K`;\n  return\
+            \ `$${value}`;\n};\n\n// ==================== Data Hook ====================\n\
+            \nfunction usePipelineStats() {\n  const [stats, setStats] = useState({\
+            \ total: { count: 0, amount: 0 }, filters: {} });\n  const [loading, setLoading]\
+            \ = useState(true);\n\n  useEffect(() => {\n    const fetchStats = async\
+            \ () => {\n      try {\n        const res = await ctx.api.request({\n\
+            \          url: `${TABLE_NAME}:list`,\n          params: { pageSize: 2000,\
+            \ fields: ['id', 'stage', 'amount', 'owner_id', 'expected_close_date']\
+            \ },\n        });\n        const opps = res?.data?.data || [];\n     \
+            \   const currentUserId = await ctx.getVar('ctx.user.id');\n        const\
+            \ now = new Date();\n        const in30days = new Date(now.getTime() +\
+            \ 30 * 24 * 3600 * 1000);\n\n        const active = opps.filter(o => o.stage\
+            \ !== 'won' && o.stage !== 'lost');\n        const mine = active.filter(o\
+            \ => o.owner_id === currentUserId);\n        const big = active.filter(o\
+            \ => parseFloat(o.amount) >= 50000);\n        const closing = active.filter(o\
+            \ => {\n          if (!o.expected_close_date) return false;\n        \
+            \  const d = new Date(o.expected_close_date);\n          return d >= now\
+            \ && d <= in30days;\n        });\n\n        const sum = (arr) => arr.reduce((s,\
+            \ o) => s + (parseFloat(o.amount) || 0), 0);\n\n        setStats({\n \
+            \         total: { count: active.length, amount: sum(active) },\n    \
+            \      filters: {\n            all: { count: active.length, amount: sum(active)\
+            \ },\n            mine: { count: mine.length, amount: sum(mine) },\n \
+            \           big: { count: big.length, amount: sum(big) },\n          \
+            \  closing: { count: closing.length, amount: sum(closing) },\n       \
+            \   },\n        });\n      } catch (err) {\n        console.error('Failed\
+            \ to fetch stats:', err);\n      } finally {\n        setLoading(false);\n\
+            \      }\n    };\n    fetchStats();\n  }, []);\n\n  return { stats, loading\
+            \ };\n}\n\n// ==================== Main Component ====================\n\
+            \nconst PipelineHeader = () => {\n  const { stats, loading } = usePipelineStats();\n\
+            \  const [activeKey, setActiveKey] = useState('all');\n  const [searchText,\
+            \ setSearchText] = useState('');\n  const searchTimerRef = ctx.React.useRef(null);\n\
+            \n  const applySearch = (text) => {\n    const targetModel = ctx.engine?.getModel(TARGET_BLOCK_UID);\n\
+            \    if (!targetModel?.resource) return;\n    if (text.trim()) {\n   \
+            \   targetModel.resource.addFilterGroup('search', {\n        $or: [\n\
+            \          { name: { $includes: text.trim() } },\n          { 'customer.name':\
+            \ { $includes: text.trim() } },\n          { 'owner.nickname': { $includes:\
+            \ text.trim() } },\n        ]\n      });\n    } else {\n      targetModel.resource.removeFilterGroup('search');\n\
+            \    }\n    targetModel.resource.refresh();\n  };\n\n  const handleSearch\
+            \ = (e) => {\n    const val = e.target.value;\n    setSearchText(val);\n\
+            \    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);\n\
+            \    searchTimerRef.current = setTimeout(() => applySearch(val), 400);\n\
+            \  };\n\n  const handleFilter = async (key) => {\n    setActiveKey(key);\n\
+            \    try {\n      const targetModel = ctx.engine?.getModel(TARGET_BLOCK_UID);\n\
+            \      if (!targetModel?.resource) return;\n\n      const currentUserId\
+            \ = await ctx.getVar('ctx.user.id');\n      const now = new Date().toISOString().split('T')[0];\n\
+            \      const in30days = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().split('T')[0];\n\
+            \n      let filter;\n      switch (key) {\n        case 'all':\n     \
+            \     filter = { stage: { $notIn: ['won', 'lost'] } };\n          break;\n\
+            \        case 'mine':\n          filter = {\n            $and: [\n   \
+            \           { stage: { $notIn: ['won', 'lost'] } },\n              { owner_id:\
+            \ { $eq: currentUserId } },\n            ]\n          };\n          break;\n\
+            \        case 'big':\n          filter = {\n            $and: [\n    \
+            \          { stage: { $notIn: ['won', 'lost'] } },\n              { amount:\
+            \ { $gte: 50000 } },\n            ]\n          };\n          break;\n\
+            \        case 'closing':\n          filter = {\n            $and: [\n\
+            \              { stage: { $notIn: ['won', 'lost'] } },\n             \
+            \ { expected_close_date: { $gte: now, $lte: in30days } },\n          \
+            \  ]\n          };\n          break;\n      }\n\n      targetModel.resource.addFilterGroup(ctx.model?.uid,\
+            \ filter);\n      await targetModel.resource.refresh();\n    } catch (err)\
+            \ {\n      console.error('Filter failed:', err);\n    }\n  };\n\n  if\
+            \ (loading) {\n    return <div style={{ display: 'flex', justifyContent:\
+            \ 'center', padding: 40 }}><Spin /></div>;\n  }\n\n  return (\n    <>\n\
+            \    <Row gutter={16} align=\"middle\">\n      <Col flex=\"auto\">\n \
+            \       <Space wrap size={[8, 8]}>\n          {FILTERS.map(f => {\n  \
+            \          const data = stats.filters[f.key] || { count: 0, amount: 0\
+            \ };\n            const isActive = activeKey === f.key;\n            return\
+            \ (\n              <Button key={f.key} type={isActive ? 'primary' : 'default'}\n\
+            \                onClick={() => handleFilter(f.key)}>\n              \
+            \  {f.icon} {f.label}{' '}\n                <Badge count={data.count}\
+            \ showZero overflowCount={9999}\n                  style={{ marginLeft:\
+            \ 4,\n                    backgroundColor: isActive ? '#fff' : '#f0f0f0',\n\
+            \                    color: isActive ? '#1677ff' : 'rgba(0,0,0,0.65)',\n\
+            \                    boxShadow: 'none' }} />\n              </Button>\n\
+            \            );\n          })}\n        </Space>\n      </Col>\n     \
+            \ <Col>\n        <Space size={12}>\n<div style={styles.statCard}>\n  \
+            \          <Statistic\n              title={<Text type=\"secondary\" style={{\
+            \ fontSize: 11 }}>Open Deals</Text>}\n              value={stats.total.count}\n\
+            \              valueStyle={{ fontSize: 18, fontWeight: 600 }}\n      \
+            \      />\n          </div>\n          <div style={styles.statCard}>\n\
+            \            <Statistic\n              title={<Text type=\"secondary\"\
+            \ style={{ fontSize: 11 }}>Pipeline Value</Text>}\n              value={formatCurrency(stats.total.amount)}\n\
+            \              valueStyle={{ fontSize: 18, fontWeight: 600 }}\n      \
+            \      />\n          </div>\n        </Space>\n      </Col>\n    </Row>\n\
+            \      <div style={{ marginTop: 8 }}>\n        <Space size={8} align=\"\
+            center\">\n          <ctx.antd.Input.Search\n            placeholder=\"\
+            Search name, customer, owner...\"\n            value={searchText}\n  \
+            \          onChange={handleSearch}\n            allowClear\n         \
+            \   onClear={() => { setSearchText(''); applySearch(''); }}\n        \
+            \    style={{ width: 480 }}\n            size=\"middle\"\n          />\n\
+            \          <Text type=\"secondary\" style={{ fontSize: 11, whiteSpace:\
+            \ 'nowrap' }}>\n            Cross-block filtering powered by ctx.initResource\
+            \ + addFilterGroup\n          </Text>\n        </Space>\n      </div>\n\
+            \    </>\n  );\n};\n\nctx.render(<PipelineHeader />);\n"
+          version: v1
+  - uid: 79de06ad20d
+    use: JSBlock
+    stepParams:
+      jsSettings:
+        runJs:
+          code: "/**\n * Kanban Board Block (Resource-based)\n * Uses ctx.initResource('MultiRecordResource')\
+            \ so that\n * other blocks can filter this via addFilterGroup + refresh.\n\
+            \ */\n\nconst { useState, useEffect, useMemo, useCallback } = ctx.React;\n\
+            const { Card, Spin, Typography, Tag, Space, Avatar, Badge } = ctx.antd;\n\
+            const { Text } = Typography;\n\n// Theme detection\nconst algorithm =\
+            \ ctx.antdConfig?.theme?.algorithm;\nconst darkAlgo = ctx.antd.theme.darkAlgorithm;\n\
+            const isDark = Array.isArray(algorithm)\n  ? algorithm.some(fn => fn ===\
+            \ darkAlgo)\n  : algorithm === darkAlgo;\nconst T = ctx.themeToken ||\
+            \ {};\n\n// i18n\nconst t = (key, opts) => ctx.t(key, { ns: 'nb_crm.pipeline',\
+            \ ...opts });\n\n// ==================== Config ====================\n\
+            \nconst VIEW_CONFIG = {\n  detailPopup: 'xzuvlcsgar6',\n  addPopup: 'x7xircn7ok1',\n\
+            };\nconst TABLE_NAME = 'nb_crm_opportunities';\n\nconst STAGES = [\n \
+            \ { key: 'prospecting', label: t('Prospecting'), color: '#6366f1' },\n\
+            \  { key: 'analysis', label: t('Analysis'), color: '#8b5cf6' },\n  { key:\
+            \ 'proposal', label: t('Proposal'), color: '#ec4899' },\n  { key: 'negotiation',\
+            \ label: t('Negotiation'), color: '#f59e0b' },\n  { key: 'won', label:\
+            \ t('Won'), color: '#22c55e' },\n  { key: 'lost', label: t('Lost'), color:\
+            \ '#ef4444' },\n];\n\n// ==================== Init Resource ====================\n\
+            \nctx.initResource('MultiRecordResource');\nctx.resource.setResourceName(TABLE_NAME);\n\
+            ctx.resource.setPageSize(500);\nctx.resource.setSort(['-updatedAt']);\n\
+            ctx.resource.setAppends(['customer', 'owner']);\n\n// ====================\
+            \ Styles ====================\n\nconst styles = {\n  board: { display:\
+            \ 'flex', gap: 12, overflowX: 'auto', paddingBottom: 8 },\n  column: {\n\
+            \    width: 260, flexShrink: 0,\n    background: T.colorBgLayout || '#f5f5f5',\n\
+            \    border: `1px solid ${T.colorBorderSecondary || '#d9d9d9'}`,\n   \
+            \ borderRadius: 8, display: 'flex', flexDirection: 'column',\n    maxHeight:\
+            \ 'calc(100vh - 280px)',\n  },\n  columnHeader: {\n    padding: '12px',\n\
+            \    borderBottom: `1px solid ${T.colorBorderSecondary || '#d9d9d9'}`,\n\
+            \    display: 'flex', justifyContent: 'space-between', alignItems: 'center',\n\
+            \  },\n  cardsArea: { flex: 1, padding: 8, overflowY: 'auto', display:\
+            \ 'flex', flexDirection: 'column', gap: 8 },\n  card: { borderRadius:\
+            \ 6, cursor: 'pointer' },\n  cardBody: { padding: 10 },\n};\n\n// ====================\
+            \ Helper ====================\n\nconst formatCurrency = (v) => {\n  if\
+            \ (!v) return '$0';\n  if (v >= 1e6) return `$${(v / 1e6).toFixed(1)}M`;\n\
+            \  if (v >= 1e3) return `$${(v / 1e3).toFixed(0)}K`;\n  return `$${v}`;\n\
+            };\n\nconst getInitials = (name) => {\n  if (!name) return '?';\n  if\
+            \ (/[\\u4e00-\\u9fa5]/.test(name)) return name.slice(-1);\n  return name.charAt(0).toUpperCase();\n\
+            };\n\n// ==================== Components ====================\n\nconst\
+            \ OppCard = ({ opp, onClick }) => {\n  const owner = opp.owner?.nickname\
+            \ || opp.owner?.name;\n  const customer = opp.customer?.name;\n  const\
+            \ prob = opp.win_probability || 0;\n\n  const handleDragStart = (e) =>\
+            \ {\n    e.dataTransfer.setData('oppId', opp.id);\n    e.dataTransfer.effectAllowed\
+            \ = 'move';\n    e.target.style.opacity = '0.5';\n  };\n  const handleDragEnd\
+            \ = (e) => { e.target.style.opacity = '1'; };\n\n  return (\n    <Card\
+            \ hoverable draggable onDragStart={handleDragStart} onDragEnd={handleDragEnd}\n\
+            \      onClick={() => onClick(opp)} style={{ ...styles.card, cursor: 'grab'\
+            \ }} styles={{ body: styles.cardBody }}>\n      <div style={{ marginBottom:\
+            \ 6 }}>\n        <Text strong style={{ fontSize: 13 }}>{opp.name || 'Untitled'}</Text>\n\
+            \        {customer && <Text type=\"secondary\" style={{ fontSize: 11,\
+            \ display: 'block' }}>{customer}</Text>}\n      </div>\n      <div style={{\
+            \ display: 'flex', justifyContent: 'space-between', alignItems: 'center'\
+            \ }}>\n        <Text strong style={{ fontSize: 15 }}>{formatCurrency(opp.amount)}</Text>\n\
+            \        {prob > 0 && (\n          <Tag color={prob >= 60 ? 'success'\
+            \ : prob >= 30 ? 'warning' : 'default'} style={{ fontSize: 11 }}>\n  \
+            \          {prob}%\n          </Tag>\n        )}\n      </div>\n     \
+            \ {owner && (\n        <div style={{ marginTop: 8, display: 'flex', alignItems:\
+            \ 'center', gap: 6 }}>\n          <Avatar size={20} style={{ background:\
+            \ T.colorPrimary || '#1890ff', fontSize: 10 }}>{getInitials(owner)}</Avatar>\n\
+            \          <Text type=\"secondary\" style={{ fontSize: 11 }}>{owner}</Text>\n\
+            \        </div>\n      )}\n    </Card>\n  );\n};\n\nconst StageColumn\
+            \ = ({ stage, opps, onCardClick, onDrop, onAdd }) => {\n  const [isDragOver,\
+            \ setIsDragOver] = useState(false);\n  const total = opps.reduce((s, o)\
+            \ => s + (parseFloat(o.amount) || 0), 0);\n\n  const handleDragOver =\
+            \ (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setIsDragOver(true);\
+            \ };\n  const handleDragLeave = () => { setIsDragOver(false); };\n  const\
+            \ handleDrop = (e) => {\n    e.preventDefault(); setIsDragOver(false);\n\
+            \    const oppId = e.dataTransfer.getData('oppId');\n    if (oppId) onDrop(parseInt(oppId),\
+            \ stage.key);\n  };\n\n  return (\n    <div style={{\n      ...styles.column,\n\
+            \      background: isDragOver ? (T.colorPrimaryBg || '#e6f7ff') : (T.colorBgLayout\
+            \ || '#f5f5f5'),\n      borderColor: isDragOver ? (T.colorPrimary || '#1890ff')\
+            \ : (T.colorBorderSecondary || '#d9d9d9'),\n    }} onDragOver={handleDragOver}\
+            \ onDragLeave={handleDragLeave} onDrop={handleDrop}>\n      <div style={styles.columnHeader}>\n\
+            \        <Space size={6}>\n          <Badge color={stage.color} />\n \
+            \         <Text strong style={{ fontSize: 13 }}>{stage.label}</Text>\n\
+            \          <Text type=\"secondary\">({opps.length})</Text>\n        </Space>\n\
+            \        <Space size={8}>\n          <Text type=\"secondary\" style={{\
+            \ fontSize: 12 }}>{formatCurrency(total)}</Text>\n          <span onClick={onAdd}\
+            \ style={{ cursor: 'pointer', color: T.colorPrimary || '#1890ff', fontSize:\
+            \ 16, lineHeight: 1 }}\n            title={t('Add Opportunity')}>+</span>\n\
+            \        </Space>\n      </div>\n      <div style={styles.cardsArea}>\n\
+            \        {opps.length === 0\n          ? <Text type=\"secondary\" style={{\
+            \ textAlign: 'center', padding: 20, fontSize: 12 }}>{isDragOver ? 'Drop\
+            \ here' : 'Empty'}</Text>\n          : opps.map(o => <OppCard key={o.id}\
+            \ opp={o} onClick={onCardClick} />)\n        }\n      </div>\n    </div>\n\
+            \  );\n};\n\n// ==================== Main Component ====================\n\
+            \nconst KanbanBoard = () => {\n  const [opportunities, setOpportunities]\
+            \ = useState([]);\n  const [loading, setLoading] = useState(true);\n\n\
+            \  const loadData = useCallback(() => {\n    const data = ctx.resource.getData()\
+            \ || [];\n    setOpportunities(data);\n    setLoading(false);\n  }, []);\n\
+            \n  useEffect(() => {\n    // Initial load\n    ctx.resource.refresh().then(loadData);\n\
+            \    // Listen for refresh (triggered by addFilterGroup from Header)\n\
+            \    ctx.resource.on('refresh', loadData);\n    return () => ctx.resource.off('refresh',\
+            \ loadData);\n  }, []);\n\n  const grouped = useMemo(() => {\n    const\
+            \ g = {};\n    STAGES.forEach(s => { g[s.key] = []; });\n    opportunities.forEach(o\
+            \ => {\n      const s = o.stage || 'prospecting';\n      if (g[s]) g[s].push(o);\n\
+            \    });\n    return g;\n  }, [opportunities]);\n\n  const handleCardClick\
+            \ = async (opp) => {\n    if (!ctx.openView) return;\n    try {\n    \
+            \  await ctx.openView(VIEW_CONFIG.detailPopup, { mode: 'drawer', size:\
+            \ 'large', filterByTk: opp.id });\n      ctx.resource.refresh();\n   \
+            \ } catch (err) { console.error('Open failed:', err); }\n  };\n\n  const\
+            \ handleDrop = async (oppId, newStage) => {\n    const opp = opportunities.find(o\
+            \ => o.id === oppId);\n    if (opp && opp.stage !== newStage) {\n    \
+            \  try {\n        await ctx.resource.update(oppId, { stage: newStage });\n\
+            \        ctx.message?.success('Stage updated');\n      } catch (err) {\n\
+            \        console.error('Failed to update stage:', err);\n        ctx.message?.error('Failed\
+            \ to update');\n      }\n    }\n  };\n\n  const handleAdd = async () =>\
+            \ {\n    if (!ctx.openView) return;\n    try {\n      await ctx.openView(VIEW_CONFIG.addPopup,\
+            \ { mode: 'drawer', size: 'medium' });\n      ctx.resource.refresh();\n\
+            \    } catch (err) { console.error('Open add form failed:', err); }\n\
+            \  };\n\n  if (loading) {\n    return <div style={{ display: 'flex', justifyContent:\
+            \ 'center', padding: 60 }}><Spin /></div>;\n  }\n\n  return (\n    <div\
+            \ style={styles.board}>\n      {STAGES.map(stage => (\n        <StageColumn\
+            \ key={stage.key} stage={stage} opps={grouped[stage.key] || []}\n    \
+            \      onCardClick={handleCardClick} onDrop={handleDrop} onAdd={handleAdd}\
+            \ />\n      ))}\n    </div>\n  );\n};\n\nctx.render(<KanbanBoard />);\n"
+          version: v1
+  stepParams:
+    gridSettings:
+      grid:
+        rows:
+          nw1xfwrj4xh:
+          - - a19ac22b220
+          5yh3athsmtv:
+          - - 79de06ad20d
+        sizes: {}
+        rowOrder:
+        - nw1xfwrj4xh
+        - 5yh3athsmtv

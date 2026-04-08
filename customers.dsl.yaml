@@ -1,0 +1,425 @@
+page: Customers
+tab: e3mxvhgiex5
+route: 344558705377280
+page_uid: c137kk6hghm
+grid:
+  uid: c682835df58
+  use: BlockGrid
+  items:
+  - uid: d8498eb45ca
+    use: TableBlock
+    coll: nb_crm_customers
+    actions:
+    - uid: 131afeebc9e
+      use: FilterAction
+      stepParams:
+        filterSettings:
+          defaultFilter:
+            defaultFilter:
+              logic: $and
+              items:
+              - path: status
+                operator: $eq
+                noValue: false
+              - path: name
+                operator: $includes
+                noValue: false
+    - uid: 8223c5c2297
+      use: RefreshAction
+    - uid: fb41c1a1010
+      use: AddNewAction
+    - uid: b16c0ebf0e7
+      use: CollectionTriggerWorkflowAction
+      stepParams:
+        customCollectionTriggerWorkflowsActionSettings:
+          setContextType:
+            type: 2
+          triggerWorkflows:
+            group:
+            - __DO_NOT_USE_THIS_PROPERTY_index__: 0
+              workflowKey: ykqda4g2xie
+        buttonSettings:
+          general:
+            title: Customer Merge
+            icon: branchesoutlined
+    - uid: 460109ddc84
+      use: AIEmployeeButton
+      stepParams:
+        shortcutSettings:
+          editTasks:
+            tasks:
+            - message:
+                workContext:
+                - type: flow-model
+                  uid: d8498eb45ca
+                  title: "\n    Table:\n    Customers"
+                skillSettings: {}
+                user: Give me an overview of my customer base.
+                system: "Please begin an immediate and comprehensive visual analysis\
+                  \ of our **Customers data**.\n\n**Guiding Principles & Tool Selection:**\n\
+                  \n* **Primary Tool:** For this task, your first choice should be\
+                  \ the **`Overall Analytics`** tool, as it is optimized for Customers\
+                  \ data.\n* **Fallback Tool:** If you require data beyond the scope\
+                  \ of `Overall Analytics`, use the **`SQL` tool** to query the database\
+                  \ directly.\n\n**Analysis Workflow & Instructions:**\n\n1.  **Prerequisite:\
+                  \ Verify Table Name**\n    * The database table for \"Customers\"\
+                  \ is `nb_crm_customers`. Use this exact name when calling tools.\n\
+                  \n2.  **Initial Analysis & Visualization**\n    * Perform a broad\
+                  \ analysis of the customers data focusing on:\n      - Customer\
+                  \ distribution by industry, type, and tier level\n      - Health\
+                  \ score distribution across the customer base\n      - Churn risk\
+                  \ analysis (at-risk customers)\n      - Revenue concentration (top\
+                  \ customers vs long tail)\n      - Customer growth trends over time\n\
+                  \    * Create a separate, clear ECharts visual (`<echarts>{...JSON...}</echarts>`)\
+                  \ for each significant finding.\n\n3.  **Deep-Dive & User Guidance**\n\
+                  \    * After presenting your initial findings, guide me toward deeper\
+                  \ insights.\n    * **Formulate and ask me specific business questions**\
+                  \ such as:\n        * *\"Your top 5 customers represent 40% of revenue.\
+                  \ Would you like me to analyze the engagement levels and health\
+                  \ scores of these key accounts?\"*\n        * *\"I see 12 customers\
+                  \ flagged as 'at-risk'. Would you like a detailed breakdown of why\
+                  \ they're at risk and recommended actions?\"*\n        * *\"The\
+                  \ Healthcare industry shows the fastest customer growth. Would you\
+                  \ like to compare profitability across industries?\"*\n\nPlease\
+                  \ start the analysis now."
+              title: Customers Analysis
+              autoSend: true
+            - message:
+                workContext: []
+                skillSettings: {}
+                user: Analyze my contact coverage and quality.
+                system: "Please begin an immediate and comprehensive visual analysis\
+                  \ of our **Contacts data**.\n\n**Guiding Principles & Tool Selection:**\n\
+                  \n* **Primary Tool:** For this task, your first choice should be\
+                  \ the **`Overall Analytics`** tool, as it is optimized for Contacts\
+                  \ data.\n* **Fallback Tool:** If you require data beyond the scope\
+                  \ of `Overall Analytics`, use the **`SQL` tool** to query the database\
+                  \ directly.\n\n**Analysis Workflow & Instructions:**\n\n1.  **Prerequisite:\
+                  \ Verify Table Name**\n    * The database table for \"Contacts\"\
+                  \ is `nb_crm_contacts`. Use this exact name when calling tools.\n\
+                  \n2.  **Initial Analysis & Visualization**\n    * Perform a broad\
+                  \ analysis of the contacts data focusing on:\n      - Contact coverage\
+                  \ per customer (how many contacts per account?)\n      - Role/title\
+                  \ distribution (decision makers, influencers, users)\n      - Primary\
+                  \ contact designation coverage\n      - Contact data quality (email/phone\
+                  \ availability rates)\n      - Department distribution across contacts\n\
+                  \    * Create a separate, clear ECharts visual (`<echarts>{...JSON...}</echarts>`)\
+                  \ for each significant finding.\n\n3.  **Deep-Dive & User Guidance**\n\
+                  \    * After presenting your initial findings, guide me toward deeper\
+                  \ insights.\n    * **Formulate and ask me specific business questions**\
+                  \ such as:\n        * *\"I notice 15 key accounts have only 1 contact\
+                  \ each - this is a risk. Would you like to see which accounts need\
+                  \ multi-threading?\"*\n        * *\"Only 60% of contacts have both\
+                  \ email and phone. Would you like to identify which contacts need\
+                  \ data enrichment?\"*\n        * *\"We have few C-level contacts\
+                  \ in manufacturing accounts. Would you like to analyze contact coverage\
+                  \ by industry and seniority?\"*\n\nPlease start the analysis now."
+              title: Contacts Analysis
+              autoSend: true
+    columns:
+    - uid: fbd6a1555ff
+      use: TableColumn
+      field:
+        uid: 95effc54287
+        use: DisplayTextField
+        popup:
+        - wsb6b480gtj
+        - embed
+        stepParams:
+          displayFieldSettings:
+            clickToOpen:
+              clickToOpen: true
+      stepParams:
+        tableColumnSettings:
+          model:
+            use: DisplayTextFieldModel
+          width:
+            width: 200
+    - uid: a74cc915634
+      use: TableColumn
+      field:
+        uid: ac914b2deff
+        use: DisplayEnumField
+      stepParams:
+        tableColumnSettings:
+          model:
+            use: DisplayEnumFieldModel
+    - uid: e82dd98ad5b
+      use: TableColumn
+      field:
+        uid: 4907cc14d11
+        use: DisplayNumberField
+        field: name
+        stepParams:
+          fieldBinding:
+            use: DisplayTextFieldModel
+          displayFieldSettings:
+            displayStyle:
+              displayStyle: tag
+            clickToOpen:
+              clickToOpen: false
+      stepParams:
+        tableColumnSettings:
+          model:
+            use: DisplayNumberFieldModel
+          fieldNames:
+            label: name
+    - uid: 1a5a304747b
+      use: TableColumn
+      field:
+        uid: 0e8709544d6
+        use: DisplayEnumField
+      stepParams:
+        tableColumnSettings:
+          model:
+            use: DisplayEnumFieldModel
+          width:
+            width: 100
+    - uid: ce102da689e
+      use: TableColumn
+      field:
+        uid: 87c8a73e8a1
+        use: DisplayEnumField
+      stepParams:
+        tableColumnSettings:
+          model:
+            use: DisplayEnumFieldModel
+          width:
+            width: 100
+    - uid: 5ebbc5a7f21
+      use: JSColumn
+      stepParams:
+        tableColumnSettings:
+          title:
+            title: Health Score
+          width:
+            width: 150
+        jsSettings:
+          runJs:
+            version: v1
+            code: "/**\n * Health Score Column\n *\n * Displays AI health score with\
+              \ Antd Progress circle.\n * Score ranges:\n * - >= 80: Green (Healthy)\n\
+              \ * - >= 50: Yellow (Warning)\n * - < 50: Red (Critical)\n *\n * Table:\
+              \ nb_crm_customers\n * Field: ai_health_score (integer 0-100)\n */\n\
+              \nconst { Progress, Space, Tag, Tooltip } = ctx.antd;\n\n// Theme detection\n\
+              const algorithm = ctx.antdConfig?.theme?.algorithm;\nconst darkAlgo\
+              \ = ctx.antd.theme.darkAlgorithm;\nconst isDark = Array.isArray(algorithm)\n\
+              \  ? algorithm.some(fn => fn === darkAlgo)\n  : algorithm === darkAlgo;\n\
+              const T = ctx.themeToken || {};\n\n// i18n\nconst t = (key, opts) =>\
+              \ ctx.t(key, { ns: 'nb_crm', ...opts });\n\n// ====================\
+              \ Config ====================\nfunction getScoreConfig(score) {\n  if\
+              \ (score >= 80) return { status: 'success', label: t('Healthy') };\n\
+              \  if (score >= 50) return { status: 'normal', label: t('Warning'),\
+              \ strokeColor: T.colorWarning || '#faad14' };\n  return { status: 'exception',\
+              \ label: t('Critical') };\n}\n\n// ==================== Component ====================\n\
+              function HealthScoreColumn() {\n  const record = ctx.record || {};\n\
+              \  const score = typeof record.ai_health_score === 'number' ? record.ai_health_score\
+              \ : 0;\n  const config = getScoreConfig(score);\n\n  const tooltipContent\
+              \ = `${config.label} - AI Health Score: ${score}`;\n\n  return (\n \
+              \   <Tooltip title={tooltipContent}>\n      <Space size={8}>\n     \
+              \   <Progress\n          type=\"circle\"\n          percent={score}\n\
+              \          width={40}\n          status={config.status}\n          strokeColor={config.strokeColor}\n\
+              \          format={(percent) => `${percent}`}\n        />\n        <Tag\n\
+              \          color=\"cyan\"\n          style={{\n            fontSize:\
+              \ 10,\n            padding: '0 4px',\n            lineHeight: '16px',\n\
+              \            background: 'linear-gradient(135deg, rgba(16, 185, 129,\
+              \ 0.15), rgba(6, 182, 212, 0.15))',\n            border: 'none',\n \
+              \         }}\n        >{t('AI')}</Tag>\n      </Space>\n    </Tooltip>\n\
+              \  );\n}\n\nctx.render(<HealthScoreColumn />);\n"
+    - uid: 03f82448cd3
+      use: TableColumn
+      field:
+        uid: 5f4852c40ad
+        use: DisplayTextField
+      stepParams:
+        tableColumnSettings:
+          model:
+            use: DisplayTextFieldModel
+    - uid: 084e3b50100
+      use: JSColumn
+      stepParams:
+        tableColumnSettings:
+          title:
+            title: Last Activity
+        jsSettings:
+          runJs:
+            version: v1
+            code: "/**\n * Last Activity Column - Leads Module\n * Shows relative\
+              \ time since last activity with color indicator\n *\n * Table: nb_crm_leads\n\
+              \ * Field: last_activity_at or updatedAt\n */\n\nconst record = ctx.record;\n\
+              const activityDate = record?.last_activity_at || record?.updatedAt;\n\
+              \n// Theme detection\nconst algorithm = ctx.antdConfig?.theme?.algorithm;\n\
+              const darkAlgo = ctx.antd.theme.darkAlgorithm;\nconst isDark = Array.isArray(algorithm)\n\
+              \  ? algorithm.some(fn => fn === darkAlgo)\n  : algorithm === darkAlgo;\n\
+              const T = ctx.themeToken || {};\n\n// i18n\nconst t = (key, opts) =>\
+              \ ctx.t(key, { ns: 'nb_crm.leads', ...opts });\n\n// Format relative\
+              \ date helper\nconst formatRelativeDate = (dateStr) => {\n  if (!dateStr)\
+              \ return { text: '-', color: T.colorTextTertiary || '#bfbfbf' };\n\n\
+              \  const date = new Date(dateStr);\n  const now = new Date();\n  const\
+              \ diffMs = now - date;\n  const diffMins = Math.floor(diffMs / 60000);\n\
+              \  const diffHours = Math.floor(diffMs / 3600000);\n  const diffDays\
+              \ = Math.floor(diffMs / 86400000);\n\n  let text, color;\n\n  if (diffMins\
+              \ < 60) {\n    text = diffMins <= 1 ? 'Just now' : t('{{count}}m ago',\
+              \ { count: diffMins });\n    color = T.colorSuccess || '#52c41a'; //\
+              \ Green - very recent\n  } else if (diffHours < 24) {\n    text = t('{{count}}h\
+              \ ago', { count: diffHours });\n    color = T.colorSuccess || '#52c41a';\
+              \ // Green - today\n  } else if (diffDays === 1) {\n    text = 'Yesterday';\n\
+              \    color = T.colorPrimary || '#1890ff'; // Blue - yesterday\n  } else\
+              \ if (diffDays < 7) {\n    text = t('{{count}}d ago', { count: diffDays\
+              \ });\n    color = T.colorPrimary || '#1890ff'; // Blue - this week\n\
+              \  } else if (diffDays < 30) {\n    const weeks = Math.floor(diffDays\
+              \ / 7);\n    text = t('{{count}}w ago', { count: weeks });\n    color\
+              \ = T.colorWarning || '#faad14'; // Orange - weeks ago\n  } else if\
+              \ (diffDays < 365) {\n    const months = Math.floor(diffDays / 30);\n\
+              \    text = t('{{count}}mo ago', { count: months });\n    color = T.colorError\
+              \ || '#ff4d4f'; // Red - months ago\n  } else {\n    const years = Math.floor(diffDays\
+              \ / 365);\n    text = t('{{years}}y ago', { years: years });\n    color\
+              \ = T.colorError || '#ff4d4f'; // Red - years ago\n  }\n\n  return {\
+              \ text, color };\n};\n\nconst { text, color } = formatRelativeDate(activityDate);\n\
+              \nctx.render(\n  <span style={{ fontSize: '13px', whiteSpace: 'nowrap'\
+              \ }}>\n    <span style={{ color: color, marginRight: '4px' }}>●</span>\n\
+              \    <span style={{ color: T.colorTextSecondary || '#595959' }}>{text}</span>\n\
+              \  </span>\n);\n"
+    stepParams:
+      tableSettings:
+        quickEdit:
+          editable: true
+        dataScope:
+          filter:
+            logic: $or
+            items:
+            - logic: $and
+              items:
+              - path: createdAt
+                operator: $dateBetween
+                value: '{{ ctx.urlSearchParams.month }}'
+                noValue: false
+  - uid: e31595cfe5e
+    use: FilterFormBlock
+    grid:
+      uid: e35bc668f2e
+      use: FilterFormGrid
+      items:
+      - uid: 012bee0acfb
+        use: JSItem
+        stepParams:
+          jsSettings:
+            runJs:
+              code: "/**\n * Customer Stats Filter Block\n * Supports URL params:\
+                \ ?industry=xxx\n */\n\nconst TARGET_BLOCK_UID = 'd8498eb45ca';\n\n\
+                const { useState, useEffect } = ctx.React;\nconst { Button, Badge,\
+                \ Space, Spin, Divider } = ctx.antd;\n\nconst t = function(key, opts)\
+                \ { return ctx.t(key, Object.assign({ ns: 'nb_crm' }, opts)); };\n\
+                \n// ==================== URL Params ====================\nvar _search\
+                \ = ctx.router?.state?.location?.search || '';\nvar _getParam = function(key)\
+                \ {\n  var m = _search.match(new RegExp('[?&]' + key + '=([^&]*)'));\n\
+                \  return m ? decodeURIComponent(m[1]) : null;\n};\nvar _urlIndustry\
+                \ = _getParam('industry');\nvar _urlType = _getParam('type');\n\n\n\
+                // ==================== Filter Config ====================\nvar now\
+                \ = new Date();\nvar monthStart = new Date(now.getFullYear(), now.getMonth(),\
+                \ 1).toISOString();\n\nvar STATS = [\n  // Status filters\n  { key:\
+                \ 'all', label: 'All', filter: null, group: 'status' },\n  { key:\
+                \ 'active', label: 'Active', filter: { status: { $eq: 'active' } },\
+                \ group: 'status' },\n  { key: 'potential', label: 'Potential', filter:\
+                \ { status: { $eq: 'potential' } }, group: 'status' },\n  { key: 'dormant',\
+                \ label: 'Dormant', filter: { status: { $eq: 'dormant' } }, group:\
+                \ 'status' },\n  { key: 'key_account', label: 'Key Accounts', filter:\
+                \ { level: { $in: ['vip', 'important'] } }, group: 'status' },\n \
+                \ // Smart filters\n  { key: 'new_month', label: 'New This Month',\
+                \ filter: { createdAt: { $gte: monthStart } }, group: 'smart' },\n\
+                ];\n\n// Add industry filters from URL\nif (_urlIndustry) {\n  STATS.push({\
+                \ key: 'industry_' + _urlIndustry, label: _urlIndustry,\n    filter:\
+                \ { industry: { $eq: _urlIndustry } }, group: 'industry' });\n}\n\n\
+                \n\n// Determine initial key from URL\nvar INIT_KEY = 'all';\nif (_urlIndustry)\
+                \ INIT_KEY = 'industry_' + _urlIndustry;\n\n// ====================\
+                \ Data Hook ====================\nfunction useStats() {\n  var _useState\
+                \ = useState({}), counts = _useState[0], setCounts = _useState[1];\n\
+                \  var _useState2 = useState(true), loading = _useState2[0], setLoading\
+                \ = _useState2[1];\n\n  useEffect(function() {\n    var fetchCounts\
+                \ = function() {\n      var statusStats = STATS.filter(function(s)\
+                \ { return s.group === 'status'; });\n      Promise.all(\n       \
+                \ statusStats.map(function(s) {\n          return ctx.api.request({\n\
+                \            url: 'nb_crm_customers:list',\n            params: {\
+                \ pageSize: 1, ...(s.filter && { filter: JSON.stringify(s.filter)\
+                \ }) },\n          });\n        })\n      ).then(function(results)\
+                \ {\n        var c = {};\n        statusStats.forEach(function(s,\
+                \ i) { c[s.key] = results[i]?.data?.meta?.count || 0; });\n      \
+                \  setCounts(c);\n        setLoading(false);\n      }).catch(function(e)\
+                \ { console.error('Stats fetch failed:', e); setLoading(false); });\n\
+                \    };\n    fetchCounts();\n  }, []);\n\n  return { counts: counts,\
+                \ loading: loading };\n}\n\n// ==================== Main Component\
+                \ ====================\nvar StatsFilter = function() {\n  var stats\
+                \ = useStats();\n  var counts = stats.counts, loading = stats.loading;\n\
+                \  var _active = useState(INIT_KEY);\n  var active = _active[0], setActive\
+                \ = _active[1];\n  var appliedRef = ctx.React.useRef(false);\n\n \
+                \ var applyFilter = function(stat) {\n    var target = ctx.engine?.getModel(TARGET_BLOCK_UID);\n\
+                \    if (!target) return;\n    target.resource.addFilterGroup(ctx.model.uid,\
+                \ stat.filter || { $and: [] });\n    target.resource.refresh();\n\
+                \  };\n\n  // Auto-apply from URL param\n  useEffect(function() {\n\
+                \    if (!appliedRef.current && INIT_KEY !== 'all') {\n      appliedRef.current\
+                \ = true;\n      var stat = STATS.find(function(s) { return s.key\
+                \ === INIT_KEY; });\n      if (stat) setTimeout(function() { applyFilter(stat);\
+                \ }, 500);\n    }\n  }, []);\n\n  var handleClick = function(stat)\
+                \ {\n    setActive(stat.key);\n    applyFilter(stat);\n  };\n\n  if\
+                \ (loading) return <Spin />;\n\n  var statusGroup = STATS.filter(function(s)\
+                \ { return s.group === 'status'; });\n  var smartGroup = STATS.filter(function(s)\
+                \ { return s.group !== 'status'; });\n\n  return (\n    <Space wrap\
+                \ size={[8, 8]} split={smartGroup.length > 0 ? <Divider type=\"vertical\"\
+                \ style={{ margin: 0 }} /> : null}>\n      <Space wrap size={[8, 8]}>\n\
+                \        {statusGroup.map(function(s) {\n          return (\n    \
+                \        <Button key={s.key} type={active === s.key ? 'primary' :\
+                \ 'default'}\n              onClick={function() { handleClick(s);\
+                \ }}>\n              {s.label}{counts[s.key] != null ? ' ' : ''}\n\
+                \              {counts[s.key] != null && (\n                <Badge\
+                \ count={counts[s.key]} showZero overflowCount={9999}\n          \
+                \        style={{ marginLeft: 4,\n                    backgroundColor:\
+                \ active === s.key ? '#fff' : '#f0f0f0',\n                    color:\
+                \ active === s.key ? '#1677ff' : 'rgba(0,0,0,0.65)',\n           \
+                \         boxShadow: 'none' }} />\n              )}\n            </Button>\n\
+                \          );\n        })}\n      </Space>\n      {smartGroup.length\
+                \ > 0 && (\n        <Space wrap size={[8, 8]}>\n          {smartGroup.map(function(s)\
+                \ {\n            return (\n              <Button key={s.key} type={active\
+                \ === s.key ? 'primary' : 'default'}\n                style={active\
+                \ !== s.key ? { borderStyle: 'dashed' } : {}}\n                onClick={function()\
+                \ { handleClick(s); }}>\n                {s.label}\n             \
+                \ </Button>\n            );\n          })}\n        </Space>\n   \
+                \   )}\n    </Space>\n  );\n};\n\nctx.render(<StatsFilter />);\n"
+              version: v1
+      - uid: 6944d82dd59
+        use: FilterFormItem
+        field:
+          uid: 95fdcd2d19e
+          use: InputField
+        stepParams:
+          filterFormItemSettings:
+            init:
+              filterField:
+                name: name
+                title: Name
+                interface: input
+                type: string
+              defaultTargetUid: d8498eb45ca
+            label:
+              label: Search
+    stepParams:
+      formFilterBlockModelSettings:
+        layout:
+          layout: horizontal
+          labelAlign: left
+          labelWidth: 120
+          labelWrap: false
+          colon: true
+  stepParams:
+    gridSettings:
+      grid:
+        rows:
+          p5l5jflsp6e:
+          - - e31595cfe5e
+          po4xsh9diuv:
+          - - d8498eb45ca
+        sizes:
+          p5l5jflsp6e:
+          - 24
+        rowOrder:
+        - p5l5jflsp6e
+        - po4xsh9diuv

@@ -1,0 +1,165 @@
+page: Orders
+tab: v2cip6snhwt
+route: 344558755708928
+page_uid: x9u01x7l8wj
+grid:
+  uid: a576535033e
+  use: BlockGrid
+  items:
+  - uid: 89a416dc6a5
+    use: FilterFormBlock
+    grid:
+      uid: 32910f00ea1
+      use: FilterFormGrid
+      items:
+      - uid: 9e2a0b06a0f
+        use: FilterFormItem
+        field:
+          uid: 2e95493c717
+          use: InputField
+        stepParams:
+          filterFormItemSettings:
+            init:
+              filterField:
+                name: order_no
+                title: Order No
+                interface: sequence
+                type: string
+              defaultTargetUid: 4326c50faf8
+            label:
+              label: Search
+      - uid: 30d65b9f8f5
+        use: JSItem
+        stepParams:
+          jsSettings:
+            runJs:
+              code: "/**\n * Order Stats Filter Block\n * Supports URL params: ?month=YYYY-MM&payment_status=xxx\n\
+                \ */\n\nvar TARGET_BLOCK_UID = '76b91d81037';\n\nvar _React = ctx.React;\n\
+                var useState = _React.useState;\nvar useEffect = _React.useEffect;\n\
+                var _antd = ctx.antd;\nvar Button = _antd.Button, Badge = _antd.Badge,\
+                \ Space = _antd.Space, Spin = _antd.Spin, Divider = _antd.Divider;\n\
+                \nvar t = function(key, opts) { return ctx.t(key, Object.assign({\
+                \ ns: 'nb_crm' }, opts)); };\n\n// ==================== URL Params\
+                \ ====================\nvar _search = ctx.router?.state?.location?.search\
+                \ || '';\nvar _getParam = function(key) {\n  var m = _search.match(new\
+                \ RegExp('[?&]' + key + '=([^&]*)'));\n  return m ? decodeURIComponent(m[1])\
+                \ : null;\n};\nvar _urlMonth = _getParam('month');\nvar _urlPayment\
+                \ = _getParam('payment_status');\n\n// ==================== Filter\
+                \ Config ====================\nvar STATS = [\n  { key: 'all', label:\
+                \ 'All', filter: null, group: 'status' },\n  { key: 'processing',\
+                \ label: 'Processing', filter: { status: { $in: ['pending', 'confirmed']\
+                \ } }, group: 'status' },\n  { key: 'pending_payment', label: 'Pending\
+                \ Payment', filter: { payment_status: { $in: ['unpaid', 'partial']\
+                \ } }, group: 'status' },\n  { key: 'shipped', label: 'Shipped', filter:\
+                \ { status: { $eq: 'shipped' } }, group: 'status' },\n  { key: 'completed',\
+                \ label: 'Completed', filter: { status: { $eq: 'completed' } }, group:\
+                \ 'status' },\n];\n\n// Add month filter from URL\nif (_urlMonth)\
+                \ {\n  var parts = _urlMonth.split('-');\n  var y = Number(parts[0]);\n\
+                \  var m = Number(parts[1]);\n  var lastDay = new Date(y, m, 0).getDate();\n\
+                \  var mStart = _urlMonth + '-01';\n  var mEnd = _urlMonth + '-' +\
+                \ String(lastDay).padStart(2, '0');\n  STATS.push({ key: 'month_'\
+                \ + _urlMonth, label: _urlMonth,\n    filter: { order_date: { $dateBetween:\
+                \ [mStart, mEnd] } }, group: 'url' });\n}\n\n// Add payment_status\
+                \ filter from URL\nif (_urlPayment) {\n  var payLabel = _urlPayment.charAt(0).toUpperCase()\
+                \ + _urlPayment.slice(1);\n  STATS.push({ key: 'pay_' + _urlPayment,\
+                \ label: payLabel,\n    filter: { payment_status: { $eq: _urlPayment\
+                \ } }, group: 'url' });\n}\n\n// Determine initial key\nvar INIT_KEY\
+                \ = 'all';\nif (_urlMonth) INIT_KEY = 'month_' + _urlMonth;\nelse\
+                \ if (_urlPayment) INIT_KEY = 'pay_' + _urlPayment;\n\n// ====================\
+                \ Data Hook ====================\nfunction useStats() {\n  var _s\
+                \ = useState({}), counts = _s[0], setCounts = _s[1];\n  var _l = useState(true),\
+                \ loading = _l[0], setLoading = _l[1];\n\n  useEffect(function() {\n\
+                \    var statusStats = STATS.filter(function(s) { return s.group ===\
+                \ 'status'; });\n    Promise.all(\n      statusStats.map(function(s)\
+                \ {\n        return ctx.api.request({\n          url: 'nb_crm_orders:list',\n\
+                \          params: { pageSize: 1, ...(s.filter && { filter: JSON.stringify(s.filter)\
+                \ }) },\n        });\n      })\n    ).then(function(results) {\n \
+                \     var c = {};\n      statusStats.forEach(function(s, i) { c[s.key]\
+                \ = results[i]?.data?.meta?.count || 0; });\n      setCounts(c);\n\
+                \      setLoading(false);\n    }).catch(function(e) { console.error('Stats\
+                \ fetch failed:', e); setLoading(false); });\n  }, []);\n\n  return\
+                \ { counts: counts, loading: loading };\n}\n\n// ====================\
+                \ Main Component ====================\nvar StatsFilter = function()\
+                \ {\n  var stats = useStats();\n  var counts = stats.counts, loading\
+                \ = stats.loading;\n  var _a = useState(INIT_KEY), active = _a[0],\
+                \ setActive = _a[1];\n  var appliedRef = _React.useRef(false);\n\n\
+                \  var applyFilter = function(stat) {\n    var target = ctx.engine?.getModel(TARGET_BLOCK_UID);\n\
+                \    if (!target) return;\n    target.resource.addFilterGroup(ctx.model.uid,\
+                \ stat.filter || { $and: [] });\n    target.resource.refresh();\n\
+                \  };\n\n  useEffect(function() {\n    if (!appliedRef.current &&\
+                \ INIT_KEY !== 'all') {\n      appliedRef.current = true;\n      var\
+                \ stat = STATS.find(function(s) { return s.key === INIT_KEY; });\n\
+                \      if (stat) setTimeout(function() { applyFilter(stat); }, 500);\n\
+                \    }\n  }, []);\n\n  var handleClick = function(stat) {\n    setActive(stat.key);\n\
+                \    applyFilter(stat);\n  };\n\n  if (loading) return <Spin />;\n\
+                \n  var statusGroup = STATS.filter(function(s) { return s.group ===\
+                \ 'status'; });\n  var urlGroup = STATS.filter(function(s) { return\
+                \ s.group === 'url'; });\n\n  return (\n    <Space wrap size={[8,\
+                \ 8]} split={urlGroup.length > 0 ? <Divider type=\"vertical\" style={{\
+                \ margin: 0 }} /> : null}>\n      <Space wrap size={[8, 8]}>\n   \
+                \     {statusGroup.map(function(s) {\n          return (\n       \
+                \     <Button key={s.key} type={active === s.key ? 'primary' : 'default'}\n\
+                \              onClick={function() { handleClick(s); }}>\n       \
+                \       {s.label}{counts[s.key] != null ? ' ' : ''}\n            \
+                \  {counts[s.key] != null && (\n                <Badge count={counts[s.key]}\
+                \ showZero overflowCount={9999}\n                  style={{ marginLeft:\
+                \ 4,\n                    backgroundColor: active === s.key ? '#fff'\
+                \ : '#f0f0f0',\n                    color: active === s.key ? '#1677ff'\
+                \ : 'rgba(0,0,0,0.65)',\n                    boxShadow: 'none' }}\
+                \ />\n              )}\n            </Button>\n          );\n    \
+                \    })}\n      </Space>\n      {urlGroup.length > 0 && (\n      \
+                \  <Space wrap size={[8, 8]}>\n          {urlGroup.map(function(s)\
+                \ {\n            return (\n              <Button key={s.key} type={active\
+                \ === s.key ? 'primary' : 'default'}\n                style={active\
+                \ !== s.key ? { borderStyle: 'dashed' } : {}}\n                onClick={function()\
+                \ { handleClick(s); }}>\n                {s.label}\n             \
+                \ </Button>\n            );\n          })}\n        </Space>\n   \
+                \   )}\n    </Space>\n  );\n};\n\nctx.render(<StatsFilter />);\n"
+              version: v1
+      stepParams:
+        gridSettings:
+          grid:
+            rows:
+              h7q4jf3cwre:
+              - - 30d65b9f8f5
+                - 9e2a0b06a0f
+            sizes:
+              h7q4jf3cwre:
+              - 24
+            rowOrder:
+            - h7q4jf3cwre
+    stepParams:
+      formFilterBlockModelSettings:
+        layout:
+          layout: horizontal
+          labelAlign: left
+          labelWidth: 120
+          labelWrap: true
+          colon: true
+  - uid: 76b91d81037
+    use: ReferenceBlock
+    stepParams:
+      referenceSettings:
+        target:
+          targetUid: 4326c50faf8
+          mode: reference
+        useTemplate:
+          templateUid: yjwjoi4erle
+          templateName: 'Table: Orders'
+          templateDescription: ''
+          targetUid: 4326c50faf8
+          mode: reference
+  stepParams:
+    gridSettings:
+      grid:
+        rows:
+          7wi2o3u41ek:
+          - - 89a416dc6a5
+          ulx5rk4ran9:
+          - - 76b91d81037
+        sizes:
+          7wi2o3u41ek:
+          - 24
+        rowOrder:
+        - 7wi2o3u41ek
+        - ulx5rk4ran9
