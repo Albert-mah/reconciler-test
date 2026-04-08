@@ -10,6 +10,7 @@ popups:
   - target: $订单列表.table.actions.addNew
     auto: [edit, view]
     view_field: order_no
+    coll: demo_orders
     blocks:
       - key: form
         type: createForm
@@ -28,6 +29,7 @@ popups:
   - target: $客户.table.actions.addNew
     auto: [edit, view]
     view_field: name
+    coll: demo_customers
     blocks:
       - key: form
         type: createForm
@@ -44,6 +46,7 @@ popups:
   - target: $产品.table.actions.addNew
     auto: [edit, view]
     view_field: name
+    coll: demo_products
     blocks:
       - key: form
         type: createForm

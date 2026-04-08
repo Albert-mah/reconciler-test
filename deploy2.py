@@ -283,15 +283,8 @@ def deploy_l2(nb: NocoBase, spec: dict, state: dict, mod: Path):
                 field_tree = field_data.get("tree", {})
                 popup_page_uid = (field_tree.get("subModels", {})
                                   .get("page", {}).get("uid", ""))
-                # Get collection from the page's table block
-                coll = ""
-                for bkey, binfo in state.get("pages", {}).items():
-                    blocks = binfo.get("blocks", {})
-                    for _, bval in blocks.items():
-                        fields = bval.get("fields", {})
-                        if view_field in fields:
-                            # Found — get coll from structure
-                            pass
+                # Get collection from expanded popup spec or structure
+                coll = popup_spec.get("_view_coll", "")
 
                 # Use legacy API to set clickToOpen + popupSettings
                 # TODO: switch to flowSurfaces:configure when supported
@@ -301,6 +294,8 @@ def deploy_l2(nb: NocoBase, spec: dict, state: dict, mod: Path):
                     "stepParams": {
                         "popupSettings": {
                             "openView": {
+                                "collectionName": coll,
+                                "dataSourceKey": "main",
                                 "mode": "drawer",
                                 "size": "large",
                                 "pageModelClass": "ChildPageModel",
@@ -583,6 +578,9 @@ def _expand_auto_popups(popups: list[dict]) -> list[dict]:
             view_block.pop("actions", None)
             view_block["recordActions"] = ["edit"]
 
+            # Get collection from popup spec or source block
+            src_coll = ps.get("coll", src_block.get("coll", ""))
+
             if view_field:
                 # View binds to field click, not record_actions.view
                 view_popup = {
@@ -590,6 +588,7 @@ def _expand_auto_popups(popups: list[dict]) -> list[dict]:
                     "blocks": [view_block],
                     "_view_field": view_field,
                     "_view_target_ref": f"{base_ref}.fields.{view_field}",
+                    "_view_coll": src_coll,
                 }
             else:
                 view_popup = {
