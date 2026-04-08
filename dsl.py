@@ -287,7 +287,10 @@ def dsl_to_flat(dsl_node: dict, parent_uid: str, sub_key: str,
         }
 
     field = dsl_node.get("field", "")
-    if field:
+    if field and isinstance(field, str):
+        # Only set fieldSettings from shorthand when field is a string (fieldPath).
+        # When field is a dict, it's a child node (DisplayTextField etc.)
+        # and fieldSettings should already be in stepParams from the DSL.
         sp.setdefault("fieldSettings", {})["init"] = {
             "dataSourceKey": "main", "collectionName": coll or "",
             "fieldPath": field
@@ -333,6 +336,25 @@ def dsl_to_flat(dsl_node: dict, parent_uid: str, sub_key: str,
                     records.extend(dsl_to_flat(child, uid, ck, "array", i))
         elif isinstance(val, dict) and "use" in val:
             records.extend(dsl_to_flat(val, uid, ck, "object", 0))
+
+    # Auto-generate gridSettings.rows for BlockGridModel if not already set
+    if use == "BlockGridModel" and "gridSettings" not in sp:
+        items = dsl_node.get("items", [])
+        if items:
+            child_uids = [item.get("uid") or "" for item in items
+                          if isinstance(item, dict) and "use" in item]
+            rows = {}
+            sizes = {}
+            row_order = []
+            for cuid in child_uids:
+                row_id = gen_uid()
+                rows[row_id] = [[cuid]]
+                sizes[row_id] = [24]
+                row_order.append(row_id)
+            sp["gridSettings"] = {
+                "grid": {"rows": rows, "sizes": sizes, "rowOrder": row_order}
+            }
+            record["stepParams"] = sp
 
     return records
 

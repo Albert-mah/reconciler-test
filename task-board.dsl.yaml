@@ -1,98 +1,90 @@
 page: 任务看板
-tab: mu2512rg8hg
-route: 357750912974848
+tab: 66u433froen
+route: 357751454040064
 grid:
-  uid: smc9yue3wys
+  uid: koxkvx21t42
   use: BlockGrid
   items:
-  - uid: uzd0iaz6v2w
+  - uid: dnipjz5rnw2
     use: FilterFormBlock
     coll: test_tasks
     grid:
-      uid: daw7dcn5kfz
+      uid: 6suxzxaqu4e
       use: FormGrid
       fields:
-      - uid: i10gisco5qj
+      - uid: yuoi7wfse9p
         use: InputField
         field: title
-      - uid: ou1m2b869cm
+      - uid: 5eksnj0bfq7
         use: SelectField
         field: status
-  - uid: 3gcc59xeodm
+  - uid: 9qfpe570jqj
     use: TableBlock
     coll: test_tasks
     columns:
-    - uid: 1rukw1c61v4
+    - uid: 3r2y2jgr7hj
       use: TableColumn
       field:
-        uid: m79lbvw7lva
+        uid: nbc7lwa4qk4
         use: DisplayTextField
       stepParams:
         fieldSettings:
           init:
+            collectionName: test_tasks
+            fieldPath: title
             dataSourceKey: main
-            collectionName: ''
-            fieldPath:
-              uid: m79lbvw7lva
-              use: DisplayTextField
         tableColumnSettings:
           model:
             use: DisplayTextFieldModel
-    - uid: slh7ue11ve7
+    - uid: 3e9k3dxh0wj
       use: TableColumn
       field:
-        uid: ttt3vejapey
+        uid: fefom7sgzwk
         use: DisplayEnumField
       stepParams:
         fieldSettings:
           init:
+            collectionName: test_tasks
+            fieldPath: status
             dataSourceKey: main
-            collectionName: ''
-            fieldPath:
-              uid: ttt3vejapey
-              use: DisplayEnumField
         tableColumnSettings:
           model:
             use: DisplayEnumFieldModel
-    - uid: 5a4hapmraz5
+    - uid: 8goh83k1tfa
       use: TableColumn
       field:
-        uid: 0uset7f2etd
+        uid: vzkd584jkwl
         use: DisplayTextField
       stepParams:
         fieldSettings:
           init:
+            collectionName: test_tasks
+            fieldPath: assignee
             dataSourceKey: main
-            collectionName: ''
-            fieldPath:
-              uid: 0uset7f2etd
-              use: DisplayTextField
         tableColumnSettings:
           model:
             use: DisplayTextFieldModel
-    - uid: 5n4wwow49qx
+    - uid: jjwyh5v58gy
       use: TableColumn
       field:
-        uid: ucbixmtt6up
+        uid: 8pgz4w9h8fq
         use: DisplayDateField
       stepParams:
         fieldSettings:
           init:
+            collectionName: test_tasks
+            fieldPath: due_date
             dataSourceKey: main
-            collectionName: ''
-            fieldPath:
-              uid: ucbixmtt6up
-              use: DisplayDateField
         tableColumnSettings:
           model:
             use: DisplayDateFieldModel
     actions:
-    - uid: nlol86r0kbx
+    - uid: pxnb1p1a11y
       use: FilterAction
-    - uid: rhnskq67gf1
+    - uid: 2iq8ch71gz3
       use: RefreshAction
-    - uid: iztg2b5se58
+    - uid: ogmsbc3uey5
       use: AddNewAction
-    - uid: do10ixgiztq
+    - uid: yf032i45sz7
       use: BulkDeleteAction
-page_uid: tj6vlzs6129
+page_uid: yj225jtfm3h
