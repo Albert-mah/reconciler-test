@@ -136,6 +136,10 @@ def _block_summary(key: str, block: dict | None) -> str:
     actions = block.get("actions", [])
     rec_actions = block.get("recordActions", [])
 
+    item_fields = block.get("item_fields", [])
+    item_js = block.get("item_js", [])
+    item_actions = block.get("item_actions", [])
+
     parts = [f"{btype}"]
     if title:
         parts[0] = f'{btype}:"{title}"'
@@ -150,11 +154,18 @@ def _block_summary(key: str, block: dict | None) -> str:
     if js_cols:
         info.append(f"{len(js_cols)}js_col")
     if js_items:
-        info.append(f"{len(js_items)}js_item")
+        info.append(f"{len(js_items)}js")
+    if item_fields or item_js:
+        item_parts = []
+        if item_fields: item_parts.append(f"{len(item_fields)}f")
+        if item_js: item_parts.append(f"{len(item_js)}js")
+        info.append(f"item:[{'+'.join(item_parts)}]")
     if actions:
         info.append(f"act:{','.join(actions[:3])}")
     if rec_actions:
         info.append(f"rec:{','.join(rec_actions[:3])}")
+    if item_actions:
+        info.append(f"item_act:{','.join(item_actions[:2])}")
 
     if info:
         return f"{parts[0]}({', '.join(info)})"

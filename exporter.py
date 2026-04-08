@@ -233,9 +233,38 @@ def _export_block(nb: NocoBase, item: dict, js_dir: Path = None,
         if rec_actions:
             spec["recordActions"] = rec_actions
 
+    elif btype == "list":
+        # List block — extract ListItem children (fields, JS items, actions)
+        list_item = subs.get("item", {})
+        if isinstance(list_item, dict) and list_item.get("use"):
+            li_grid = list_item.get("subModels", {}).get("grid", {})
+            if isinstance(li_grid, dict):
+                li_fields, li_js, li_layout, li_popups = _export_form_contents(
+                    li_grid, js_dir, prefix, key)
+                if li_fields:
+                    spec["item_fields"] = li_fields
+                if li_js:
+                    spec["item_js"] = li_js
+                if li_layout:
+                    spec["item_layout"] = li_layout
+                popup_refs.extend(li_popups)
+
+            # ListItem actions (e.g., EditAction with popup)
+            li_actions = _export_actions(list_item.get("subModels", {}).get("actions", []))
+            if li_actions:
+                spec["item_actions"] = li_actions
+
+        # Block-level actions
+        actions = _export_actions(subs.get("actions", []))
+        if actions:
+            spec["actions"] = actions
+
     elif btype == "comments":
         # Comments block — preserve association binding
-        pass  # resource_binding already captured
+        # Actions
+        actions = _export_actions(subs.get("actions", []))
+        if actions:
+            spec["actions"] = actions
 
     if popup_refs:
         spec["_popups"] = popup_refs

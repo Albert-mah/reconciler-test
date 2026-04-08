@@ -193,6 +193,23 @@ popups:
       resource_binding:
         associationName: nb_crm_customers.contacts
         sourceId: '{{ctx.view.inputArgs.filterByTk}}'
+      item_fields:
+      - email
+      - phone
+      item_js:
+      - uid: 7fde2930ad2
+        desc: Contact Row Column - Customer 360
+        file: ./js/customers_popup_name_tab0_contacts_js_contact_row_column_customer_360.js
+      item_layout:
+      - - '[JS:Contact Row Column -]'
+      - - email
+        - phone
+      item_actions:
+      - edit
+      actions:
+      - filter
+      - refresh
+      - addNew
     - key: opportunities
       type: list
       uid: f2faba3ca81
@@ -201,6 +218,10 @@ popups:
       resource_binding:
         associationName: nb_crm_customers.opportunities
         sourceId: '{{ctx.view.inputArgs.filterByTk}}'
+      item_js:
+      - uid: 43c06388f8c
+        desc: Opportunity Row Column - Customer 360
+        file: ./js/customers_popup_name_tab0_opportunities_js_opportunity_row_column_customer_360.js
     - key: comments_0e874d
       type: comments
       uid: 0e874d195d4
