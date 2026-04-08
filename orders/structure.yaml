@@ -1,0 +1,80 @@
+# ═══════════════════════════════════
+#  订单管理
+# ═══════════════════════════════════
+
+module: 订单管理
+icon: shoppingcartoutlined
+
+collections:
+  demo_customers:
+    title: 客户
+    fields:
+      - { name: name, interface: input, title: 客户名称 }
+      - { name: contact, interface: input, title: 联系人 }
+      - { name: phone, interface: input, title: 电话 }
+      - { name: level, interface: select, title: 等级, options: [普通, VIP, 大客户] }
+
+  demo_products:
+    title: 产品
+    fields:
+      - { name: name, interface: input, title: 产品名称 }
+      - { name: sku, interface: input, title: SKU }
+      - { name: price, interface: number, title: 单价 }
+      - { name: unit, interface: input, title: 单位 }
+      - { name: stock, interface: integer, title: 库存 }
+
+  demo_orders:
+    title: 订单
+    fields:
+      - { name: order_no, interface: input, title: 订单编号 }
+      - { name: customer_name, interface: input, title: 客户名称 }
+      - { name: total_amount, interface: number, title: 总金额 }
+      - { name: status, interface: select, title: 状态, options: [待确认, 已确认, 生产中, 已发货, 已完成, 已取消] }
+      - { name: order_date, interface: datetime, title: 下单日期 }
+      - { name: delivery_date, interface: datetime, title: 交货日期 }
+      - { name: remark, interface: textarea, title: 备注 }
+
+pages:
+  - page: 客户
+    icon: teamoutlined
+    coll: demo_customers
+    blocks:
+      - key: filter
+        type: filterForm
+        fields: [name, level]
+
+      - key: table
+        type: table
+        fields: [name, contact, phone, level]
+        actions: [filter, refresh, addNew]
+        recordActions: [edit, view, delete]
+
+  - page: 产品
+    icon: appstoreoutlined
+    coll: demo_products
+    blocks:
+      - key: filter
+        type: filterForm
+        fields: [name, sku]
+
+      - key: table
+        type: table
+        fields: [sku, name, price, unit, stock]
+        actions: [filter, refresh, addNew, export]
+        recordActions: [edit, delete]
+
+  - page: 订单列表
+    icon: orderedlistoutlined
+    coll: demo_orders
+    blocks:
+      - key: filter
+        type: filterForm
+        fields: [order_no, customer_name, status]
+        field_layout:
+          - [order_no, customer_name, status]
+
+      - key: table
+        type: table
+        fields: [order_no, customer_name, total_amount, status, order_date, delivery_date]
+        actions: [filter, refresh, addNew, export]
+        recordActions: [edit, view]
