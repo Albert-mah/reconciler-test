@@ -203,7 +203,7 @@ def deploy_surface(nb: NocoBase, tab_uid: str, spec: dict,
             if key in blocks_state:
                 continue  # already created by compose
             btype = bs.get("type", "")
-            block_uid = _create_legacy_block(nb, grid_uid, bs, coll)
+            block_uid = _create_legacy_block(nb, grid_uid, bs, coll, mod)
             if block_uid:
                 blocks_state[key] = {"uid": block_uid, "type": btype}
 
@@ -496,7 +496,7 @@ def _configure_filter(nb: NocoBase, bs: dict, block_uid: str,
 # ══════════════════════════════════════════════════════════════════
 
 def _create_legacy_block(nb: NocoBase, grid_uid: str, bs: dict,
-                         default_coll: str) -> str | None:
+                         default_coll: str, mod: Path = None) -> str | None:
     """Create a block via legacy flowModels:save. Returns UID or None."""
     btype = bs.get("type", "")
     coll = bs.get("coll", default_coll)
@@ -536,7 +536,7 @@ def _create_legacy_block(nb: NocoBase, grid_uid: str, bs: dict,
             "stepParams": sp,
         })
 
-        # Comments needs CommentItemModel child
+        # ── Comments: add CommentItemModel child ──
         if btype == "comments":
             nb.save_model({
                 "uid": uid(), "use": "CommentItemModel",
@@ -544,11 +544,124 @@ def _create_legacy_block(nb: NocoBase, grid_uid: str, bs: dict,
                 "sortIndex": 0, "stepParams": {}, "flowRegistry": {},
             })
 
+        # ── List/GridCard: add ListItem + fields + JS items + actions ──
+        if btype in ("list", "gridCard"):
+            _fill_list_block(nb, block_uid, bs, coll, mod)
+
         print(f"    + {btype}:\"{title}\" (legacy)")
         return block_uid
     except Exception as e:
         print(f"    ! {btype}: {e}")
         return None
+
+
+def _fill_list_block(nb: NocoBase, block_uid: str, bs: dict,
+                     coll: str, mod: Path = None):
+    """Fill a ListBlock with ListItem → DetailsGrid → fields/JS items + actions.
+
+    List structure:
+      ListBlockModel
+        ├── ListItemModel (subKey=item, subType=object)
+        │   ├── DetailsGridModel (subKey=grid, subType=object)
+        │   │   ├── DetailsItemModel → DisplayField (fields)
+        │   │   └── JSItemModel (JS items)
+        │   └── EditActionModel (item actions, subKey=actions)
+        ├── FilterActionModel (block actions, subKey=actions)
+        ├── RefreshActionModel
+        └── AddNewActionModel
+    """
+    # ListItem
+    list_item_uid = uid()
+    nb.save_model({
+        "uid": list_item_uid, "use": "ListItemModel",
+        "parentId": block_uid, "subKey": "item", "subType": "object",
+        "sortIndex": 0, "stepParams": {}, "flowRegistry": {},
+    })
+
+    # DetailsGrid inside ListItem
+    detail_grid_uid = uid()
+    nb.save_model({
+        "uid": detail_grid_uid, "use": "DetailsGridModel",
+        "parentId": list_item_uid, "subKey": "grid", "subType": "object",
+        "sortIndex": 0, "stepParams": {}, "flowRegistry": {},
+    })
+
+    # Item fields (DetailsItem → DisplayField)
+    item_fields = bs.get("item_fields", [])
+    for i, fp in enumerate(item_fields):
+        if isinstance(fp, dict):
+            fp = fp.get("field", fp.get("name", ""))
+        if not fp:
+            continue
+        item_uid_val = uid()
+        field_uid_val = uid()
+        nb.save_model({
+            "uid": item_uid_val, "use": "DetailsItemModel",
+            "parentId": detail_grid_uid, "subKey": "items", "subType": "array",
+            "sortIndex": i + 1, "flowRegistry": {},
+            "stepParams": {"fieldSettings": {"init": {
+                "dataSourceKey": "main", "collectionName": coll, "fieldPath": fp,
+            }}},
+        })
+        nb.save_model({
+            "uid": field_uid_val, "use": "DisplayTextFieldModel",
+            "parentId": item_uid_val, "subKey": "field", "subType": "object",
+            "sortIndex": 0, "stepParams": {}, "flowRegistry": {},
+        })
+
+    # Item JS items
+    item_js = bs.get("item_js", [])
+    for js_spec in item_js:
+        js_file = js_spec.get("file", "")
+        if not js_file:
+            continue
+        code = ""
+        if mod:
+            p = mod / js_file
+            if p.exists():
+                code = p.read_text()
+        if not code:
+            continue
+        js_uid_val = uid()
+        nb.save_model({
+            "uid": js_uid_val, "use": "JSItemModel",
+            "parentId": detail_grid_uid, "subKey": "items", "subType": "array",
+            "sortIndex": 0, "flowRegistry": {},
+            "stepParams": {"jsSettings": {"runJs": {"code": code, "version": "v1"}}},
+        })
+        desc = js_spec.get("desc", "")
+        print(f"      + list JS: {desc[:40]}")
+
+    # Item actions (e.g., edit)
+    item_actions = bs.get("item_actions", [])
+    action_map = {
+        "edit": "EditActionModel", "view": "ViewActionModel",
+        "delete": "DeleteActionModel",
+    }
+    for a in item_actions:
+        atype = a if isinstance(a, str) else a.get("type", "")
+        model = action_map.get(atype, f"{atype.title()}ActionModel")
+        nb.save_model({
+            "uid": uid(), "use": model,
+            "parentId": list_item_uid, "subKey": "actions", "subType": "array",
+            "sortIndex": 0, "stepParams": {}, "flowRegistry": {},
+        })
+
+    # Block-level actions (filter, refresh, addNew)
+    block_actions = bs.get("actions", [])
+    block_action_map = {
+        "filter": "FilterActionModel", "refresh": "RefreshActionModel",
+        "addNew": "AddNewActionModel", "export": "ExportActionModel",
+    }
+    for a in block_actions:
+        atype = a if isinstance(a, str) else a.get("type", "")
+        model = block_action_map.get(atype)
+        if model:
+            nb.save_model({
+                "uid": uid(), "use": model,
+                "parentId": block_uid, "subKey": "actions", "subType": "array",
+                "sortIndex": 0, "stepParams": {}, "flowRegistry": {},
+            })
 
 
 # ══════════════════════════════════════════════════════════════════

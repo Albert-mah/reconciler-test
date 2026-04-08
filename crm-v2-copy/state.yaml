@@ -1,51 +1,51 @@
-group_id: 357850295107584
+group_id: 357851148648448
 pages:
   customers:
-    route_id: 357850295107585
-    page_uid: t5g5x2k427f
-    tab_uid: r1f6w4ws35e
-    grid_uid: gdab2c7d12q
+    route_id: 357851148648449
+    page_uid: g3gz6p53zgi
+    tab_uid: t27kj2ejylj
+    grid_uid: yhfgu4bxe4v
     blocks:
       filter:
-        uid: u5dhjfmdxmc
+        uid: zde85boo3ae
         type: filterForm
-        grid_uid: zxx4385c3yr
+        grid_uid: 7oyu6ed3op6
         fields:
           name:
-            wrapper: pxk7cq9s9qm
-            field: j9ngbndjc4b
+            wrapper: mpbh3dkeenm
+            field: 2ctanq3nzug
       table:
-        uid: dc920eqz2x3
+        uid: qiesqk6fnva
         type: table
         grid_uid: ''
         fields:
           name:
-            wrapper: nmrlu3oqkeg
-            field: n6yjst812l6
+            wrapper: gpa673ivr2n
+            field: zvbmj9f1rx6
           type:
-            wrapper: 7ckivm6viuy
-            field: 030ih7wbk50
+            wrapper: s6qkh2ll9na
+            field: liwoyuas12w
           region:
-            wrapper: xha8ma4surb
-            field: idj81q0mvhi
+            wrapper: y2a3tuv6c49
+            field: c0ree8hzlyw
           level:
-            wrapper: 135k7dec33x
-            field: 29elnri5ryf
+            wrapper: pxnbpgb62st
+            field: bzl0mxngk0g
           status:
-            wrapper: mx94ymg1yqo
-            field: 0705mwyl2w2
+            wrapper: 9wm5d647qig
+            field: nu85cmknyn8
           owner:
-            wrapper: ke4z513m8ou
-            field: av4ynpmlral
+            wrapper: 6zi2qvaae5r
+            field: tmkc2bga0n4
         actions:
           filter:
-            uid: h21id77jpye
+            uid: ef4lcz652wc
           refresh:
-            uid: 694dae8ivju
+            uid: f52f4uiqcyd
           addNew:
-            uid: o7w1p4cyjxm
+            uid: gjkg7siywjl
         record_actions:
           edit:
-            uid: nw3ju9rybv7
+            uid: rcy3hsfmwat
           delete:
-            uid: y7sqojtjojh
+            uid: 5xbvy297oxx
