@@ -639,53 +639,46 @@ def apply_dsl(dsl_path: str, nb: NB, dry_run: bool = False) -> list[dict]:
     if not dry_run:
         _ensure_collections(grid, nb)
 
-    # ── Diff ──
-    diffs = diff_tree(grid, nb)
-
-    creates = [d for d in diffs if d["action"] == DiffAction.CREATE]
-    updates = [d for d in diffs if d["action"] == DiffAction.UPDATE]
-    noops = [d for d in diffs if d["action"] == DiffAction.NOOP]
-
-    print(f"\n  {len(creates)} create, {len(updates)} update, {len(noops)} unchanged\n")
-
-    for d in diffs:
-        sym = {"create": "+", "update": "~", "noop": "="}[d["action"]]
-        uid_str = d["uid"] or "(new)"
-        print(f"  {sym} {d['use']:30s} [{uid_str}]  {d['detail']}")
-
-    if dry_run:
-        return diffs
-
-    if not creates and not updates:
-        print("\n  Nothing to apply.")
-        # Still write back (route may have been created)
-        Path(dsl_path).write_text(
-            _dump_yaml(dsl))
-        return diffs
-
-    # ── Apply ──
-    print(f"\n  Applying...")
-
-    # Flatten DSL to flat records, then save each
+    # ── Flatten DSL to flat records ──
     records = dsl_to_flat(grid, tab_uid, "grid", "object")
 
-    applied = 0
-    for rec in records:
-        uid = rec["uid"]
-        node_diff = next((d for d in diffs if d.get("uid") == uid
-                          or (d["action"] == DiffAction.CREATE
-                              and d["dsl_node"].get("uid") == uid)),
-                         None)
+    if dry_run:
+        # Diff for reporting only
+        diffs = diff_tree(grid, nb)
+        creates = [d for d in diffs if d["action"] == DiffAction.CREATE]
+        updates = [d for d in diffs if d["action"] == DiffAction.UPDATE]
+        noops = [d for d in diffs if d["action"] == DiffAction.NOOP]
+        print(f"\n  {len(creates)} create, {len(updates)} update, {len(noops)} unchanged\n")
+        for d in diffs:
+            sym = {"create": "+", "update": "~", "noop": "="}[d["action"]]
+            uid_str = d["uid"] or "(new)"
+            print(f"  {sym} {d['use']:30s} [{uid_str}]  {d['detail']}")
+        return diffs
 
-        if node_diff and node_diff["action"] in (DiffAction.CREATE, DiffAction.UPDATE):
+    # ── Apply: upsert all nodes ──
+    # flowModels:save is idempotent — same UID = update, new UID = create.
+    # No need to diff first. This guarantees correctness (e.g., missing
+    # gridSettings.rows gets fixed in-place, not requiring delete+recreate).
+    print(f"\n  Applying {len(records)} nodes...")
+
+    errors = []
+    for rec in records:
+        try:
             nb.save_model(rec)
-            applied += 1
+        except Exception as e:
+            errors.append(f"  {rec['use']} [{rec['uid']}]: {e}")
 
     # Write back UIDs to DSL file
     Path(dsl_path).write_text(_dump_yaml(dsl))
 
-    print(f"\n  Applied {applied} changes. UIDs written back to {dsl_path}")
-    return diffs
+    if errors:
+        print(f"\n  {len(records) - len(errors)} ok, {len(errors)} errors:")
+        for e in errors:
+            print(f"    {e}")
+    else:
+        print(f"  Done. {len(records)} nodes saved. UIDs written to {dsl_path}")
+
+    return []
 
 
 # ── CLI ────────────────────────────────────────────────────────────
