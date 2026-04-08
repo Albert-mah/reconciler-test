@@ -59,7 +59,7 @@ popups:
         resource: { binding: currentCollection }
         fields: [name, level, contact, phone]
         field_layout:
-          - "--- 客户信息 ---"
+          - "--- 基本信息 ---"
           - [name, level]
           - "--- 联系方式 ---"
           - [contact, phone]
@@ -73,7 +73,7 @@ popups:
         resource: { binding: currentRecord }
         fields: [name, level, contact, phone]
         field_layout:
-          - "--- 客户信息 ---"
+          - "--- 基本信息 ---"
           - [name, level]
           - "--- 联系方式 ---"
           - [contact, phone]
@@ -87,7 +87,7 @@ popups:
         resource: { binding: currentRecord }
         fields: [name, level, contact, phone]
         field_layout:
-          - "--- 客户信息 ---"
+          - "--- 基本信息 ---"
           - [name, level]
           - "--- 联系方式 ---"
           - [contact, phone]
@@ -101,7 +101,7 @@ popups:
         resource: { binding: currentCollection }
         fields: [sku, name, price, unit, stock]
         field_layout:
-          - "--- 产品信息 ---"
+          - "--- 基本信息 ---"
           - [sku, name]
           - "--- 价格与库存 ---"
           - [price, unit, stock]
@@ -115,7 +115,7 @@ popups:
         resource: { binding: currentRecord }
         fields: [sku, name, price, unit, stock]
         field_layout:
-          - "--- 产品信息 ---"
+          - "--- 基本信息 ---"
           - [sku, name]
           - "--- 价格与库存 ---"
           - [price, unit, stock]
