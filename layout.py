@@ -36,12 +36,13 @@ def gen_row_id() -> str:
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
 
 
-def build_grid(layout_spec: list[list], uid_map: dict[str, str]) -> dict:
+def build_grid(layout_spec: list, uid_map: dict[str, str]) -> dict:
     """Convert layout DSL + name→UID map to gridSettings.
 
     Args:
-        layout_spec: list of rows, each row is list of items.
-            Item can be: str (name) or dict {name: size}
+        layout_spec: list of rows. Each row can be:
+            - list of items: [name1, name2] or [{name: size}]
+            - string "--- label ---": divider (must already be in uid_map)
         uid_map: mapping from item name to its UID
 
     Returns:
@@ -53,22 +54,34 @@ def build_grid(layout_spec: list[list], uid_map: dict[str, str]) -> dict:
 
     for row_items in layout_spec:
         row_id = gen_row_id()
+
+        # Divider row: "--- 基本信息 ---" (string, not list)
+        if isinstance(row_items, str) and row_items.strip().startswith("---"):
+            label = row_items.strip().strip("-").strip()
+            uid = uid_map.get(label, uid_map.get(f"divider.{label}", ""))
+            if uid:
+                rows[row_id] = [[uid]]
+                sizes[row_id] = [24]
+                row_order.append(row_id)
+            continue
+
+        if not isinstance(row_items, list):
+            continue
+
         row_cols = []
         row_sizes = []
 
         for item in row_items:
             if isinstance(item, dict):
-                # Explicit size: {name: 12}
                 name = list(item.keys())[0]
                 size = item[name]
             elif isinstance(item, str):
-                # Auto size: equal split
                 name = item
                 size = 24 // len(row_items)
             else:
                 continue
 
-            uid = uid_map.get(name, name)  # fallback to name if no mapping
+            uid = uid_map.get(name, name)
             row_cols.append([uid])
             row_sizes.append(size)
 
@@ -161,10 +174,17 @@ def apply_layout(nb, grid_uid: str, layout_spec: list[list],
         return False
 
 
-def describe_layout(layout_spec: list[list]) -> str:
+def describe_layout(layout_spec: list) -> str:
     """Human-readable layout description."""
     parts = []
-    for i, row in enumerate(layout_spec):
+    for row in layout_spec:
+        if isinstance(row, str):
+            # Divider row
+            label = row.strip().strip("-").strip()
+            parts.append(f"── {label} ──")
+            continue
+        if not isinstance(row, list):
+            continue
         items = []
         for item in row:
             if isinstance(item, dict):

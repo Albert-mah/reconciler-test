@@ -382,7 +382,7 @@ def _apply_all_layouts(nb: NocoBase, compose_result: dict, page_spec: dict):
 
 
 def _apply_popup_layouts(nb: NocoBase, compose_result: dict, popup_spec: dict):
-    """Apply field layouts inside popup blocks."""
+    """Apply field layouts inside popup blocks, including dividers."""
     block_specs = {bs.get("key", ""): bs for bs in popup_spec.get("blocks", [])}
     for b in compose_result.get("blocks", []):
         bkey = b.get("key", "")
@@ -390,7 +390,7 @@ def _apply_popup_layouts(nb: NocoBase, compose_result: dict, popup_spec: dict):
         bs = block_specs.get(bkey, {})
         field_results = b.get("fields", [])
 
-        if not grid_uid or not field_results or not bs.get("field_layout"):
+        if not grid_uid or not field_results:
             continue
 
         field_uid_map = {
@@ -398,7 +398,21 @@ def _apply_popup_layouts(nb: NocoBase, compose_result: dict, popup_spec: dict):
             for f in field_results
         }
         field_names = [f.get("fieldPath", f.get("key", "")) for f in field_results]
-        layout = parse_layout_spec(bs.get("field_layout"), field_names, max_per_row=2)
+
+        layout = bs.get("field_layout")
+        if not layout:
+            max_per_row = 2
+            layout = parse_layout_spec(None, field_names, max_per_row)
+
+        # Create dividers for "--- label ---" rows (legacy API)
+        # TODO: switch to flowSurfaces when divider support is added
+        for row in layout:
+            if isinstance(row, str) and row.strip().startswith("---"):
+                label = row.strip().strip("-").strip()
+                divider_uid = nb.add_divider(grid_uid, label)
+                field_uid_map[label] = divider_uid
+                field_uid_map[f"divider.{label}"] = divider_uid
+                print(f"      + divider: {label}")
 
         if apply_layout(nb, grid_uid, layout, field_uid_map):
             print(f"      {bkey} layout: {describe_layout(layout)}")

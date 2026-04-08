@@ -11,9 +11,11 @@ popups:
         resource: { binding: currentCollection }
         fields: [order_no, customer_name, total_amount, status, order_date, delivery_date, remark]
         field_layout:
-          - [{order_no: 8}, {customer_name: 8}, {status: 8}]       # 基本信息一行
-          - [{total_amount: 8}, {order_date: 8}, {delivery_date: 8}] # 金额+日期一行
-          - [remark]                                                  # 备注独占
+          - "--- 基本信息 ---"
+          - [order_no, customer_name, status]
+          - "--- 金额与日期 ---"
+          - [total_amount, order_date, delivery_date]
+          - [remark]
         actions: [submit]
 
   # ── 订单：编辑 ──
@@ -24,8 +26,10 @@ popups:
         resource: { binding: currentRecord }
         fields: [order_no, customer_name, total_amount, status, order_date, delivery_date, remark]
         field_layout:
-          - [{order_no: 8}, {customer_name: 8}, {status: 8}]
-          - [{total_amount: 8}, {order_date: 8}, {delivery_date: 8}]
+          - "--- 基本信息 ---"
+          - [order_no, customer_name, status]
+          - "--- 金额与日期 ---"
+          - [total_amount, order_date, delivery_date]
           - [remark]
         actions: [submit]
 
@@ -37,8 +41,10 @@ popups:
         resource: { binding: currentRecord }
         fields: [order_no, customer_name, status, total_amount, order_date, delivery_date, remark]
         field_layout:
-          - [{order_no: 8}, {customer_name: 8}, {status: 8}]
-          - [{total_amount: 8}, {order_date: 8}, {delivery_date: 8}]
+          - "--- 基本信息 ---"
+          - [order_no, customer_name, status]
+          - "--- 金额与日期 ---"
+          - [total_amount, order_date, delivery_date]
           - [remark]
         recordActions: [edit]
 

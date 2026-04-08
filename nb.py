@@ -190,6 +190,48 @@ class NocoBase:
             "position": position,
         })
 
+    # ── Legacy API (flowModels:save) ─────────────────────────────
+    # TODO: migrate to flowSurfaces when divider/markdown support is added
+
+    def save_model(self, node: dict):
+        """flowModels:save — upsert a single FlowModel node (legacy)."""
+        r = self.s.post(f"{self.base}/api/flowModels:save",
+                        json=node, timeout=self._timeout)
+        if not r.ok:
+            raise RuntimeError(f"flowModels:save → {r.status_code}: {r.text[:200]}")
+        return r.json().get("data")
+
+    def add_divider(self, grid_uid: str, label: str) -> str:
+        """Insert a DividerItemModel into a form/detail grid.
+
+        Uses legacy flowModels:save (flowSurfaces doesn't support divider yet).
+        TODO: switch to flowSurfaces:addField when renderer='divider' is supported.
+
+        Returns the divider UID.
+        """
+        import random, string
+        divider_uid = ''.join(random.choices(string.ascii_lowercase + string.digits, k=11))
+        self.save_model({
+            "uid": divider_uid,
+            "use": "DividerItemModel",
+            "parentId": grid_uid,
+            "subKey": "items",
+            "subType": "array",
+            "sortIndex": 0,
+            "stepParams": {
+                "markdownItemSetting": {
+                    "title": {
+                        "label": label,
+                        "orientation": "left",
+                        "color": "rgba(0, 0, 0, 0.88)",
+                        "borderColor": "rgba(5, 5, 5, 0.06)",
+                    }
+                }
+            },
+            "flowRegistry": {},
+        })
+        return divider_uid
+
     # ── Collections (raw API, not flowSurfaces) ───────────────────
 
     def collection_exists(self, name: str) -> bool:
