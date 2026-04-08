@@ -173,6 +173,11 @@ def _build_compose_blocks(page_spec: dict) -> list[dict]:
         btype = bs.get("type", "")
         if btype in COMPOSE_UNSUPPORTED:
             continue  # handled by _deploy_legacy_blocks
+        # Skip association-bound blocks (compose doesn't support associatedRecords)
+        res = bs.get("resource", {})
+        res_binding = bs.get("resource_binding", {})
+        if res.get("binding") == "associatedRecords" or res_binding.get("associationName"):
+            continue  # handled by _deploy_legacy_blocks
         key = bs.get("key", f"{btype}_{len(blocks)}")
 
         block: dict[str, Any] = {"key": key, "type": btype}
@@ -773,19 +778,52 @@ def _deploy_tabbed_popup(nb: NocoBase, target_uid: str, target_ref: str,
                 print(f"    tab '{tab_title}': {block_count} blocks")
                 _apply_popup_layouts(nb, result, first_tab)
 
-                # Apply tab-level layout if specified
-                tab_layout = first_tab.get("layout")
-                if tab_layout and result.get("layout", {}).get("uid"):
-                    from layout import build_grid, apply_layout
-                    block_map = {b["key"]: b["uid"] for b in result.get("blocks", [])}
-                    apply_layout(nb, result["layout"]["uid"], tab_layout, block_map)
-                    print(f"      tab layout applied")
             except Exception as e:
                 print(f"    ! tab '{first_tab.get('title', 'Tab0')}': {e}")
 
-        # Add unsupported blocks via legacy API (comments, recordHistory)
+        # Add unsupported blocks via legacy API (comments, recordHistory, associations)
         # TODO: switch to flowSurfaces when these types are supported
         _deploy_legacy_blocks(nb, target_uid, first_tab, coll)
+
+        # Re-apply tab layout AFTER legacy blocks are created
+        # Need fresh read to get all block UIDs including legacy ones
+        tab_layout = first_tab.get("layout")
+        if tab_layout:
+            try:
+                fresh = nb.get(uid=target_uid)
+                ftree = fresh.get("tree", {})
+                fpopup = ftree.get("subModels", {}).get("page", {})
+                ftabs = fpopup.get("subModels", {}).get("tabs", [])
+                if isinstance(ftabs, list) and ftabs:
+                    fgrid = ftabs[0].get("subModels", {}).get("grid", {})
+                    fgrid_uid = fgrid.get("uid", "")
+                    fitems = fgrid.get("subModels", {}).get("items", [])
+                    # Build block key → uid map from all items
+                    block_map = {}
+                    all_specs = first_tab.get("blocks", [])
+                    spec_keys = [b.get("key", "") for b in all_specs]
+                    for fi in (fitems if isinstance(fitems, list) else []):
+                        fi_uid = fi.get("uid", "")
+                        fi_title = fi.get("stepParams", {}).get("cardSettings", {}).get("titleDescription", {}).get("title", "")
+                        # Match by title or by order
+                        for sk in spec_keys:
+                            if sk not in block_map:
+                                if fi_title and fi_title.lower() == sk.replace("_", " "):
+                                    block_map[sk] = fi_uid
+                                    break
+                        if fi_uid not in block_map.values():
+                            # Assign by position
+                            for sk in spec_keys:
+                                if sk not in block_map:
+                                    block_map[sk] = fi_uid
+                                    break
+
+                    from layout import apply_layout
+                    if fgrid_uid and block_map:
+                        apply_layout(nb, fgrid_uid, tab_layout, block_map)
+                        print(f"      tab layout applied ({len(block_map)} blocks)")
+            except Exception as e:
+                print(f"      ! tab layout: {e}")
 
     # 3. Read popup structure for remaining tabs
     data = nb.get(uid=target_uid)
@@ -845,7 +883,10 @@ def _deploy_legacy_blocks(nb: NocoBase, target_uid: str, tab_spec: dict,
 
     for bs in tab_spec.get("blocks", []):
         btype = bs.get("type", "")
-        if btype not in COMPOSE_UNSUPPORTED:
+        res = bs.get("resource", {})
+        res_binding = bs.get("resource_binding", {})
+        is_association = res.get("binding") == "associatedRecords" or res_binding.get("associationName")
+        if btype not in COMPOSE_UNSUPPORTED and not is_association:
             continue
 
         coll = bs.get("coll", default_coll)
@@ -910,6 +951,31 @@ def _deploy_legacy_blocks(nb: NocoBase, target_uid: str, tab_spec: dict,
                 "stepParams": {"resourceSettings": {"init": res_init}},
             })
             print(f"    + recordHistory [{block_uid[:8]}] (legacy)")
+
+        elif is_association:
+            # Association-bound list/table block
+            # TODO: switch to flowSurfaces when associatedRecords binding is fixed
+            use_map = {"list": "ListBlockModel", "table": "TableBlockModel",
+                       "details": "DetailsBlockModel", "gridCard": "GridCardBlockModel"}
+            model_use = use_map.get(btype, f"{btype.title()}BlockModel")
+            block_title = bs.get("title", "")
+
+            res_init = {"dataSourceKey": "main", "collectionName": coll}
+            if binding.get("associationName"):
+                res_init["associationName"] = binding["associationName"]
+                res_init["sourceId"] = binding.get("sourceId", "{{ctx.view.inputArgs.filterByTk}}")
+
+            sp: dict = {"resourceSettings": {"init": res_init}}
+            if block_title:
+                sp["cardSettings"] = {"titleDescription": {"title": block_title}}
+
+            nb.save_model({
+                "uid": block_uid, "use": model_use,
+                "parentId": grid_uid, "subKey": "items", "subType": "array",
+                "sortIndex": 99, "flowRegistry": {},
+                "stepParams": sp,
+            })
+            print(f"    + {btype}:\"{block_title}\" [{block_uid[:8]}] (legacy, association)")
 
         # Update grid layout to include new block
         try:

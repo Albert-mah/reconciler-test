@@ -1,53 +1,53 @@
-group_id: 357843122847744
+group_id: 357843817005056
 pages:
   customers:
-    route_id: 357843122847745
-    page_uid: 2nurxt4p6ep
-    tab_uid: o54gaa5nhfv
-    grid_uid: gvcw9991byn
+    route_id: 357843817005057
+    page_uid: zb82ouccxhv
+    tab_uid: hec670815e4
+    grid_uid: f0649covrl5
     blocks:
       filter:
-        uid: i0bqolmdcuv
+        uid: fr3gn30y283
         type: filterForm
-        grid_uid: l5i43dnnbzs
+        grid_uid: lxwzef0hild
         fields:
           name:
-            wrapper: d7z15h7ojic
-            field: amecfbq9fhw
+            wrapper: nn5jz6besl3
+            field: x1p3819swi2
       table:
-        uid: lh63piardre
+        uid: vxxzlh12wuk
         type: table
-        actions_column_uid: izx3dlten9a
+        actions_column_uid: zhw86efagnu
         fields:
           name:
-            wrapper: dyrtbmp2deg
-            field: 502p4rmvggb
+            wrapper: rqey2cto6bt
+            field: 1qmies6hlm6
           type:
-            wrapper: 5r92rhrncc2
-            field: i1uf7l6s6s2
+            wrapper: 8rqrugb0d8t
+            field: ddpnj11b16y
           region:
-            wrapper: 19p3jag3f6i
-            field: y95sv34jepl
+            wrapper: o554qxn4ynq
+            field: phzu83j9zz3
           level:
-            wrapper: tb31o2jg9ww
-            field: ww3ajpkhlr5
+            wrapper: bzfdpmupzhz
+            field: h5jew5yt3lt
           status:
-            wrapper: bdg1x7dju1h
-            field: 8tmeomfggbx
+            wrapper: 8vec7n106vj
+            field: 8v62hv9to7y
           owner:
-            wrapper: jajximmff3u
-            field: mhqtakek7g6
+            wrapper: an596abl7r7
+            field: iqxf6w7hzfa
         actions:
           filter:
-            uid: g79n6gtzxv3
+            uid: ggdqgnq98d2
           refresh:
-            uid: jk1fl68sv6k
+            uid: svel84693ar
           addNew:
-            uid: t0v0eftav0n
+            uid: 0r08t3nkm11
         record_actions:
           edit:
-            uid: d8ctwpn28g8
+            uid: klp3fe2ygeg
           view:
-            uid: tz35esdqo8f
+            uid: 86lrg6ya4wy
           delete:
-            uid: kjz2wrjmei8
+            uid: 76ugjs6bicj
