@@ -3,10 +3,9 @@
 # ═══════════════════════════════════
 
 popups:
-  # ── 产品 ──
+  # ── 产品：新建+编辑 ──
   - target: $产品管理.table.actions.addNew
-    auto: [edit, view]
-    view_field: name
+    auto: [edit]
     coll: erp_products
     blocks:
       - key: form
@@ -24,10 +23,32 @@ popups:
           - [spec]
         actions: [submit]
 
-  # ── 客户 ──
+  # ── 产品：详情（点击 name 弹出）──
+  - target: $产品管理.table.fields.name
+    mode: drawer
+    coll: erp_products
+    blocks:
+      - key: detail
+        type: details
+        resource: { binding: currentRecord }
+        fields: [product_code, name, category, unit, price, cost, stock_qty, min_stock, status, spec]
+        js_items:
+          - desc: 产品概览卡片 — 显示价格/成本/利润率/库存状态的KPI卡片
+            file: ./js/detail_product_overview.js
+        field_layout:
+          - "--- 基本信息 ---"
+          - [product_code, name, category]
+          - [unit, status]
+          - "--- 价格与库存 ---"
+          - [price, cost]
+          - [stock_qty, min_stock]
+          - "--- 描述 ---"
+          - [spec]
+        recordActions: [edit]
+
+  # ── 客户：新建+编辑 ──
   - target: $客户管理.table.actions.addNew
-    auto: [edit, view]
-    view_field: name
+    auto: [edit]
     coll: erp_customers
     blocks:
       - key: form
@@ -44,7 +65,29 @@ popups:
           - [payment_terms, credit_limit]
         actions: [submit]
 
-  # ── 供应商 ──
+  # ── 客户：详情 ──
+  - target: $客户管理.table.fields.name
+    mode: drawer
+    coll: erp_customers
+    blocks:
+      - key: detail
+        type: details
+        resource: { binding: currentRecord }
+        fields: [name, short_name, contact, phone, email, address, level, payment_terms, credit_limit]
+        js_items:
+          - desc: 客户信用状态卡片 — 信用额度使用率+等级徽章+付款条件
+            file: ./js/detail_customer_credit.js
+        field_layout:
+          - "--- 基本信息 ---"
+          - [name, short_name, level]
+          - "--- 联系方式 ---"
+          - [contact, phone, email]
+          - [address]
+          - "--- 财务信息 ---"
+          - [payment_terms, credit_limit]
+        recordActions: [edit]
+
+  # ── 供应商：新建+编辑+详情（auto view）──
   - target: $供应商管理.table.actions.addNew
     auto: [edit, view]
     view_field: name
@@ -64,7 +107,7 @@ popups:
           - [payment_terms]
         actions: [submit]
 
-  # ── 采购订单 ──
+  # ── 采购订单：新建+编辑+详情（auto view）──
   - target: $采购管理.table.actions.addNew
     auto: [edit, view]
     view_field: po_no
@@ -85,7 +128,7 @@ popups:
           - [remark]
         actions: [submit]
 
-  # ── 销售订单 ──
+  # ── 销售订单：新建+编辑+详情（auto view）──
   - target: $销售管理.table.actions.addNew
     auto: [edit, view]
     view_field: so_no

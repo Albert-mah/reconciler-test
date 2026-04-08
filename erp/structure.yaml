@@ -90,6 +90,13 @@ pages:
       - key: table
         type: table
         fields: [product_code, name, category, unit, price, cost, stock_qty, status]
+        js_columns:
+          - title: 库存状态
+            desc: 库存预警标签 — stock_qty < min_stock 红色, < min_stock*2 橙色, 否则绿色
+            file: ./js/col_stock_status.js
+          - title: 利润率
+            desc: 利润率百分比 — (price-cost)/price, 红<10% 橙<20% 绿>=20%
+            file: ./js/col_profit_rate.js
         actions: [filter, refresh, addNew, export]
         recordActions: [edit, delete]
 
@@ -158,6 +165,10 @@ pages:
       - key: table
         type: table
         fields: [po_no, supplier_name, total_amount, status, order_date, expected_date, buyer]
+        js_columns:
+          - title: 到货倒计时
+            desc: 距离expected_date的天数倒计时 — 已过期红色, <3天橙色, 其他蓝色, 已入库显示✓
+            file: ./js/col_po_countdown.js
         actions: [filter, refresh, addNew, export]
         recordActions: [edit, delete]
 
@@ -182,6 +193,10 @@ pages:
       - key: table
         type: table
         fields: [so_no, customer_name, total_amount, status, order_date, delivery_date, sales_rep]
+        js_columns:
+          - title: 交货倒计时
+            desc: 距离delivery_date的天数倒计时 — 已过期红色, <3天橙色, 其他蓝色, 已签收/已取消显示对应状态
+            file: ./js/col_so_countdown.js
         actions: [filter, refresh, addNew, export]
         recordActions: [edit, delete]
 
