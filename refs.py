@@ -55,20 +55,24 @@ class RefResolver:
     def resolve(self, ref: str) -> Any:
         """Resolve a $path to its value.
 
-        Returns the value at the path, or raises KeyError.
-        If the path points to a dict with 'uid' key, returns the uid string.
+        Supports shorthand paths — auto-inserts 'blocks.' if needed:
+          $订单列表.table.actions.addNew
+            → tries: 订单列表.table.actions.addNew
+            → tries: 订单列表.blocks.table.actions.addNew  ← match
         """
         path = ref.lstrip("$").strip()
 
         # Direct match
         if path in self._index:
-            val = self._index[path]
-            return val
+            return self._index[path]
 
-        # Try with "pages." prefix
-        prefixed = f"pages.{path}"
-        if prefixed in self._index:
-            return self._index[prefixed]
+        # Auto-insert "blocks." after page name
+        # e.g., "订单列表.table.xxx" → "订单列表.blocks.table.xxx"
+        parts = path.split(".", 1)
+        if len(parts) == 2 and parts[1] and not parts[1].startswith("blocks."):
+            with_blocks = f"{parts[0]}.blocks.{parts[1]}"
+            if with_blocks in self._index:
+                return self._index[with_blocks]
 
         raise KeyError(f"Ref not found: {ref}\n  Available: {self.suggest(path)}")
 

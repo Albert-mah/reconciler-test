@@ -1,0 +1,108 @@
+# ═══════════════════════════════════
+#  Layer 2: 订单管理 — 弹窗 + 增强
+# ═══════════════════════════════════
+#
+# 弹窗 = 小页面，可以包含任意区块、多 tab
+# 所有 target 用 $变量引用，从 state.yaml 解析 UID
+
+popups:
+  # ── 新建订单弹窗 ──
+  - target: $订单列表.table.actions.addNew
+    blocks:
+      - key: form
+        type: createForm
+        resource: { binding: currentCollection }
+        fields: [order_no, customer_name, total_amount, status, order_date, delivery_date, remark]
+        field_layout:
+          - [order_no, customer_name]
+          - [total_amount, status]
+          - [order_date, delivery_date]
+          - [remark]
+        actions: [submit]
+
+  # ── 编辑订单弹窗 ──
+  - target: $订单列表.table.record_actions.edit
+    blocks:
+      - key: form
+        type: editForm
+        resource: { binding: currentRecord }
+        fields: [order_no, customer_name, total_amount, status, order_date, delivery_date, remark]
+        field_layout:
+          - [order_no, customer_name]
+          - [total_amount, status]
+          - [order_date, delivery_date]
+          - [remark]
+        actions: [submit]
+
+  # ── 查看订单弹窗（多 tab）──
+  - target: $订单列表.table.record_actions.view
+    blocks:
+      - key: detail
+        type: details
+        resource: { binding: currentRecord }
+        fields: [order_no, customer_name, total_amount, status, order_date, delivery_date, remark]
+        field_layout:
+          - [order_no, customer_name]
+          - [total_amount, status]
+          - [order_date, delivery_date]
+          - [remark]
+        recordActions: [edit]
+
+  # ── 新建客户弹窗 ──
+  - target: $客户.table.actions.addNew
+    blocks:
+      - key: form
+        type: createForm
+        resource: { binding: currentCollection }
+        fields: [name, contact, phone, level]
+        field_layout:
+          - [name, level]
+          - [contact, phone]
+        actions: [submit]
+
+  # ── 编辑客户弹窗 ──
+  - target: $客户.table.record_actions.edit
+    blocks:
+      - key: form
+        type: editForm
+        resource: { binding: currentRecord }
+        fields: [name, contact, phone, level]
+        field_layout:
+          - [name, level]
+          - [contact, phone]
+        actions: [submit]
+
+  # ── 查看客户弹窗 ──
+  - target: $客户.table.record_actions.view
+    blocks:
+      - key: detail
+        type: details
+        resource: { binding: currentRecord }
+        fields: [name, contact, phone, level]
+        field_layout:
+          - [name, level]
+          - [contact, phone]
+
+  # ── 新建产品弹窗 ──
+  - target: $产品.table.actions.addNew
+    blocks:
+      - key: form
+        type: createForm
+        resource: { binding: currentCollection }
+        fields: [sku, name, price, unit, stock]
+        field_layout:
+          - [sku, name]
+          - [price, unit, stock]
+        actions: [submit]
+
+  # ── 编辑产品弹窗 ──
+  - target: $产品.table.record_actions.edit
+    blocks:
+      - key: form
+        type: editForm
+        resource: { binding: currentRecord }
+        fields: [sku, name, price, unit, stock]
+        field_layout:
+          - [sku, name]
+          - [price, unit, stock]
+        actions: [submit]

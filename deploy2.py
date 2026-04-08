@@ -139,8 +139,12 @@ def _build_compose_blocks(page_spec: dict) -> list[dict]:
         block: dict[str, Any] = {"key": key, "type": btype}
 
         # Resource binding
+        resource = bs.get("resource")
         block_coll = bs.get("coll", coll)
-        if block_coll and btype != "filterForm":
+        if resource:
+            # Explicit resource (e.g., {binding: currentCollection} for popups)
+            block["resource"] = resource
+        elif block_coll and btype != "filterForm":
             block["resource"] = {
                 "collectionName": block_coll,
                 "dataSourceKey": "main",
@@ -224,16 +228,24 @@ def deploy_l2(nb: NocoBase, spec: dict, state: dict, mod: Path):
     for popup_spec in spec.get("popups", []):
         target_ref = popup_spec.get("target", "")
         try:
-            popup_grid_uid = resolver.resolve_uid(target_ref)
+            # resolve_uid auto-picks popup_grid > uid
+            target_uid = resolver.resolve_uid(target_ref)
         except KeyError as e:
             print(f"  ! popup: {e}")
             continue
 
-        # Compose blocks inside popup
+        # Compose blocks inside popup (popup = mini page)
         blocks = _build_compose_blocks(popup_spec)
         if blocks:
-            result = nb.compose(popup_grid_uid, blocks, mode="replace")
-            print(f"  + popup [{target_ref}]: {len(result.get('blocks',[]))} blocks")
+            try:
+                result = nb.compose(target_uid, blocks, mode="replace")
+                block_count = len(result.get("blocks", []))
+                print(f"  + popup [{target_ref}]: {block_count} blocks")
+
+                # Apply field layouts inside popup blocks
+                _apply_popup_layouts(nb, result, popup_spec)
+            except Exception as e:
+                print(f"  ! popup [{target_ref}]: {e}")
 
     for js_spec in spec.get("js", []):
         target_ref = js_spec.get("target", "")
@@ -367,6 +379,29 @@ def _apply_all_layouts(nb: NocoBase, compose_result: dict, page_spec: dict):
                 })
             except Exception:
                 pass
+
+
+def _apply_popup_layouts(nb: NocoBase, compose_result: dict, popup_spec: dict):
+    """Apply field layouts inside popup blocks."""
+    block_specs = {bs.get("key", ""): bs for bs in popup_spec.get("blocks", [])}
+    for b in compose_result.get("blocks", []):
+        bkey = b.get("key", "")
+        grid_uid = b.get("gridUid")
+        bs = block_specs.get(bkey, {})
+        field_results = b.get("fields", [])
+
+        if not grid_uid or not field_results or not bs.get("field_layout"):
+            continue
+
+        field_uid_map = {
+            f.get("fieldPath", f.get("key", "")): f.get("wrapperUid", f.get("uid"))
+            for f in field_results
+        }
+        field_names = [f.get("fieldPath", f.get("key", "")) for f in field_results]
+        layout = parse_layout_spec(bs.get("field_layout"), field_names, max_per_row=2)
+
+        if apply_layout(nb, grid_uid, layout, field_uid_map):
+            print(f"      {bkey} layout: {describe_layout(layout)}")
 
 
 def _extract_block_state(compose_result: dict) -> dict:
