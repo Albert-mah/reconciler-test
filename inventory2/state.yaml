@@ -1,0 +1,26 @@
+group_id: 357759823970305
+pages:
+  产品管理:
+    route_id: 357759823970307
+    page_uid: qrehviw25pf
+    tab_uid: 3gy2ffp3eln
+    grid_uid: j1zqwyt2cp7
+    blocks:
+      filter:
+        uid: y9ksw6cew12
+        type: filterForm
+      table:
+        uid: hy8q7vtjv97
+        type: table
+  出入库:
+    route_id: 357759823970310
+    page_uid: 87wyi7w9985
+    tab_uid: lv031w2vipc
+    grid_uid: 16wv3st1iu9
+    blocks:
+      filter:
+        uid: yceojhzjkjo
+        type: filterForm
+      table:
+        uid: nobotxr2sr8
+        type: table
