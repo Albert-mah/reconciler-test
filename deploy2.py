@@ -286,7 +286,8 @@ def deploy_l2(nb: NocoBase, spec: dict, state: dict, mod: Path):
                 # Get collection from expanded popup spec or structure
                 coll = popup_spec.get("_view_coll", "")
 
-                # Safe partial update — preserves parentId/subKey/sortIndex
+                # openView.uid must point to the field ITSELF (not ChildPageModel)
+                # NocoBase uses the field UID to locate its popup subtree
                 # TODO: switch to flowSurfaces:configure when supported
                 nb.update_model(field_uid, {
                     "popupSettings": {
@@ -296,7 +297,7 @@ def deploy_l2(nb: NocoBase, spec: dict, state: dict, mod: Path):
                             "mode": "drawer",
                             "size": "large",
                             "pageModelClass": "ChildPageModel",
-                            "uid": popup_page_uid,
+                            "uid": field_uid,  # self-reference
                         }
                     },
                     "displayFieldSettings": {
