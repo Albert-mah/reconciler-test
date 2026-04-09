@@ -498,6 +498,32 @@ def _fix_display_models(nb: NocoBase, block_uid: str, coll: str, btype: str):
                     })
 
 
+def _ensure_js_header(code: str, desc: str = "", js_type: str = "",
+                      coll: str = "", fields: list = None) -> str:
+    """Ensure JS code has a standard header comment.
+
+    If already has /** ... */ header, leave it.
+    Otherwise prepend the standard template.
+    """
+    if code.strip().startswith("/**"):
+        return code  # already has header
+
+    header_lines = ["/**"]
+    if desc:
+        header_lines.append(f" * {desc}")
+    header_lines.append(f" *")
+    if js_type:
+        header_lines.append(f" * @type {js_type}")
+    if coll:
+        header_lines.append(f" * @collection {coll}")
+    if fields:
+        header_lines.append(f" * @fields {', '.join(fields[:10])}")
+    header_lines.append(" */")
+    header_lines.append("")
+
+    return "\n".join(header_lines) + code
+
+
 def _replace_js_uids(code: str, block_state_all: dict) -> str:
     """Replace TARGET_BLOCK_UID and similar hardcoded UID references in JS code.
 
@@ -554,6 +580,10 @@ def _fill_block(nb: NocoBase, block_uid: str, grid_uid: str,
             p = mod / js_file
             if p.exists():
                 code = p.read_text()
+                code = _ensure_js_header(code, desc=bs.get("desc", ""),
+                                         js_type="JSBlockModel", coll=coll)
+                if all_blocks_state:
+                    code = _replace_js_uids(code, all_blocks_state)
                 try:
                     nb.configure(block_uid, {"changes": {"code": code}})
                 except Exception:
@@ -608,6 +638,9 @@ def _fill_block(nb: NocoBase, block_uid: str, grid_uid: str,
             code = p.read_text()
             desc = js_spec.get("desc", f"js_{idx}")
 
+            # Ensure standard header comment
+            code = _ensure_js_header(code, desc=desc, js_type="JSItemModel", coll=coll)
+
             # Auto-replace TARGET_BLOCK_UID references
             if all_blocks_state:
                 code = _replace_js_uids(code, all_blocks_state)
@@ -651,6 +684,8 @@ def _fill_block(nb: NocoBase, block_uid: str, grid_uid: str,
             if not p.exists():
                 continue
             code = p.read_text()
+            code = _ensure_js_header(code, desc=jc.get("desc", jc_title),
+                                     js_type="JSColumnModel", coll=coll)
             if all_blocks_state:
                 code = _replace_js_uids(code, all_blocks_state)
 

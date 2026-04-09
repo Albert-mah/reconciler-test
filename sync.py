@@ -58,6 +58,14 @@ def sync(mod_dir: str, page_filter: str = None):
             print(f"  ! {title}: no tab_uid in state")
             continue
 
+        # Use English-safe prefix for JS file naming
+        # page_key from _slugify may contain Chinese — use index-based prefix
+        safe_prefix = f"page{structure['pages'].index(page_spec)}"
+        for bkey in page_state.get("blocks", {}):
+            if "table" in bkey:
+                safe_prefix = page_state["blocks"][bkey].get("uid", safe_prefix)[:6]
+                break
+
         print(f"  ~ {title}")
         _sync_page(nb, tab_uid, page_spec, page_state, mod, js_dir, page_key)
 
@@ -201,9 +209,19 @@ def _sync_table_fields(item: dict, spec: dict, block_state: dict,
             if desc:
                 entry["desc"] = desc
 
-            # Write JS code back to file
-            safe = _slugify(col_title or desc or f"col_{len(js_columns)}")
-            fname = f"{prefix}_{block_key}_col_{safe}.js"
+            # Keep existing file path from spec, or generate new one
+            existing_file = ""
+            for jc in spec.get("js_columns", []):
+                if jc.get("title") == col_title:
+                    existing_file = jc.get("file", "")
+                    break
+
+            if existing_file:
+                fname = existing_file.replace("./js/", "")
+            else:
+                safe = _slugify(col_title or desc or f"col_{len(js_columns)}")
+                fname = f"{prefix}_{block_key}_col_{safe}.js"
+
             if code:
                 (js_dir / fname).write_text(code)
                 entry["file"] = f"./js/{fname}"
@@ -257,8 +275,24 @@ def _sync_form_fields(item: dict, spec: dict, block_state: dict,
             if desc:
                 entry["desc"] = desc
 
-            js_name = _slugify(desc) if desc else f"js_{len(js_items)}"
-            fname = f"{prefix}_{block_key}_{js_name}.js"
+            # Keep existing file path from spec if available
+            existing_file = ""
+            for ji in spec.get("js_items", []):
+                if ji.get("desc") == desc and desc:
+                    existing_file = ji.get("file", "")
+                    break
+                # Match by index
+                spec_idx = spec.get("js_items", []).index(ji) if ji in spec.get("js_items", []) else -1
+                if spec_idx == len(js_items):
+                    existing_file = ji.get("file", "")
+                    break
+
+            if existing_file:
+                fname = existing_file.replace("./js/", "")
+            else:
+                js_name = _slugify(desc) if desc else f"js_{len(js_items)}"
+                fname = f"{prefix}_{block_key}_{js_name}.js"
+
             if code:
                 (js_dir / fname).write_text(code)
                 entry["file"] = f"./js/{fname}"
