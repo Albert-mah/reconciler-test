@@ -16,7 +16,7 @@
  * ====================
  */
 
-const TARGET_BLOCK_UID = '__TABLE_UID__';
+const TARGET_BLOCK_UID = '2t7vj9ur7zl';
 
 // ─── CONFIG: AI modifies here ────────────────────────────────
 const COLLECTION = 'pm_projects';

@@ -16,7 +16,7 @@
  * ====================
  */
 
-const TARGET_BLOCK_UID = '__TABLE_UID__';
+const TARGET_BLOCK_UID = '95cafa3yjax';
 
 // ─── CONFIG: AI modifies here ────────────────────────────────
 const COLLECTION = 'pm_timesheets';

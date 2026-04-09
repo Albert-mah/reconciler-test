@@ -135,6 +135,8 @@ pages:
   - key: filter
     type: filterForm
     fields:
+    - field: status
+      label: Status
     - field: name
       label: Search
       filterPaths:
@@ -142,32 +144,30 @@ pages:
       - name
       - client
       - manager
-    - field: status
-      label: Status
     js_items:
-    - desc: Project Stats Filter
+    - desc: Filter Stats Button Group Block Template (CRM-style)
       file: ./js/filter_projects.js
     field_layout:
-    - - '[JS:Project Stats Filter]'
+    - - '[JS:Filter Stats Button Group Block Template (CRM-style)]'
     - - name
       - status
   - key: table
     type: table
     fields:
-    - code
-    - name
-    - client
-    - manager
     - status
-    - budget
     - start_date
+    - manager
+    - client
+    - code
     - end_date
+    - budget
+    - name
     js_columns:
     - title: Budget Util
-      desc: Budget utilization bar
+      desc: Budget Utilization — formatted budget display with color coding
       file: ./js/col_budget_util.js
     - title: Timeline
-      desc: Project timeline countdown
+      desc: Project Timeline Countdown — days remaining with color coding
       file: ./js/col_timeline.js
     actions:
     - filter
@@ -187,41 +187,41 @@ pages:
   - key: filter
     type: filterForm
     fields:
+    - field: status
+      label: Status
+    - field: priority
+      label: Priority
     - field: title
       label: Search
       filterPaths:
       - title
       - project_name
       - assignee
-    - field: status
-      label: Status
-    - field: priority
-      label: Priority
     js_items:
-    - desc: Task Stats Filter
+    - desc: Filter Stats Button Group Block Template (CRM-style)
       file: ./js/filter_tasks.js
     field_layout:
-    - - '[JS:Task Stats Filter]'
+    - - '[JS:Filter Stats Button Group Block Template (CRM-style)]'
     - - title
       - status
       - priority
   - key: table
     type: table
     fields:
-    - title
+    - actual_hours
+    - status
+    - priority
+    - estimated_hours
+    - due_date
     - project_name
     - assignee
-    - priority
-    - status
-    - due_date
-    - estimated_hours
-    - actual_hours
+    - title
     js_columns:
     - title: Priority Tag
-      desc: Priority colored tag
+      desc: Task Priority Tag — colored by priority level
       file: ./js/col_priority_tag.js
     - title: Hours
-      desc: Estimated vs actual hours comparison
+      desc: Estimated vs Actual Hours — comparison with color coding
       file: ./js/col_hours_compare.js
     actions:
     - filter
@@ -241,37 +241,37 @@ pages:
   - key: filter
     type: filterForm
     fields:
+    - field: status
+      label: Status
+    - field: billable
+      label: Billable
     - field: emp_name
       label: Search
       filterPaths:
       - emp_name
       - project_name
       - task_title
-    - field: billable
-      label: Billable
-    - field: status
-      label: Status
     js_items:
-    - desc: Timesheet Stats Filter
+    - desc: Filter Stats Button Group Block Template (CRM-style)
       file: ./js/filter_timesheets.js
     field_layout:
-    - - '[JS:Timesheet Stats Filter]'
+    - - '[JS:Filter Stats Button Group Block Template (CRM-style)]'
     - - emp_name
       - billable
       - status
   - key: table
     type: table
     fields:
-    - emp_name
-    - project_name
-    - task_title
-    - date
-    - hours
-    - billable
     - status
+    - date
+    - billable
+    - task_title
+    - project_name
+    - hours
+    - emp_name
     js_columns:
     - title: Billable
-      desc: Billable indicator tag
+      desc: Billable Indicator — Yes/No tag
       file: ./js/col_billable_tag.js
     actions:
     - filter
@@ -291,31 +291,31 @@ pages:
   - key: filter
     type: filterForm
     fields:
+    - field: status
+      label: Status
     - field: title
       label: Search
       filterPaths:
       - project_name
       - title
-    - field: status
-      label: Status
     js_items:
-    - desc: Milestone Stats Filter
+    - desc: Filter Stats Button Group Block Template (CRM-style)
       file: ./js/filter_milestones.js
     field_layout:
-    - - '[JS:Milestone Stats Filter]'
+    - - '[JS:Filter Stats Button Group Block Template (CRM-style)]'
     - - title
       - status
   - key: table
     type: table
     fields:
-    - project_name
-    - title
-    - due_date
     - status
     - completion_pct
+    - due_date
+    - project_name
+    - title
     js_columns:
     - title: Progress
-      desc: Milestone completion progress bar
+      desc: Milestone Completion Progress Bar — div-based bar with percentage
       file: ./js/col_milestone_progress.js
     actions:
     - filter
@@ -341,11 +341,11 @@ pages:
     file: ./js/kpi_tasks_due.js
   - key: kpi_hours
     type: jsBlock
-    desc: Hours Logged This Month KPI Card
+    desc: Hours This Month KPI Card
     file: ./js/kpi_hours_logged.js
   - key: kpi_budget
     type: jsBlock
-    desc: Budget Utilization KPI Card
+    desc: Total Budget KPI Card
     file: ./js/kpi_budget_util.js
   - key: chart_project_status
     type: chart

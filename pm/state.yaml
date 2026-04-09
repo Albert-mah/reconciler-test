@@ -18,7 +18,7 @@ pages:
             wrapper: 3dg51ipijkg
             field: xcx2kaf4khp
         js_items:
-          Project Stats Filter:
+          Filter Stats Button Group Block Template (CRM-style):
             uid: ay0xii4fst2
       table:
         uid: 2t7vj9ur7zl
@@ -89,7 +89,7 @@ pages:
             wrapper: cofa0qg39if
             field: i5b0xv2x244
         js_items:
-          Task Stats Filter:
+          Filter Stats Button Group Block Template (CRM-style):
             uid: oyiuv5em0tc
       table:
         uid: hiyjojh1m4v
@@ -160,7 +160,7 @@ pages:
             wrapper: vy8ki9127li
             field: l0eqhk6hy77
         js_items:
-          Timesheet Stats Filter:
+          Filter Stats Button Group Block Template (CRM-style):
             uid: sw6un8trapv
       table:
         uid: 95cafa3yjax
@@ -223,7 +223,7 @@ pages:
             wrapper: pz6kuu2vt6v
             field: 39330h1zftq
         js_items:
-          Milestone Stats Filter:
+          Filter Stats Button Group Block Template (CRM-style):
             uid: wrnefx0x6v2
       table:
         uid: 4tdaz7xmqqs

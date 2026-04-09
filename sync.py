@@ -82,6 +82,10 @@ def sync(mod_dir: str, page_filter: str = None):
         (mod / "enhance.yaml").write_text(dump_yaml(enhance))
     state_file.write_text(dump_yaml(state))
 
+    # Auto-split: detail popups → popups/*.yaml
+    from split_popups import split_popups
+    split_popups(mod_dir)
+
     print(f"\n  Synced. Files updated.")
 
 
