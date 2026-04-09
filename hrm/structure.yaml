@@ -238,8 +238,7 @@ pages:
       - name
       - department
       - position
-    - field: department
-      label: Department
+      - phone
     - field: status
       label: Status
     js_items:
@@ -340,8 +339,6 @@ pages:
       - emp_name
     - field: status
       label: Status
-    - field: date
-      label: Date
     js_items:
     - desc: Attendance Stats Filter
       file: ./js/filter_attendance.js
@@ -438,8 +435,6 @@ pages:
       filterPaths:
       - emp_name
       - period
-    - field: period
-      label: Period
     - field: status
       label: Status
     js_items:
