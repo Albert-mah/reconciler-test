@@ -1,0 +1,19 @@
+group_id: 358015765315584
+pages:
+  sales_pipeline:
+    route_id: 358015765315586
+    page_uid: sfi7tpuf13k
+    tab_uid: vrnutf60fb4
+    grid_uid: rtsrpbj0jru
+    blocks:
+      filterForm_0:
+        uid: 83jn5fv5inm
+        type: filterForm
+        grid_uid: m4q3agxc8i2
+        fields: {}
+        js_items:
+          Pipeline Stats Filter Block:
+            uid: bae2vn821p7
+      reference_1:
+        uid: r4q00l1rv05
+        type: reference
