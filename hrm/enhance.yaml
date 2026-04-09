@@ -53,21 +53,19 @@ popups:
         binding: currentRecord
       fields:
       - emp_code
-      - name
-      - department
       - position
-      - hire_date
-      - status
+      - name
+      - emergency_contact
+      - email
       - gender
       - phone
-      - email
-      - emergency_contact
+      - hire_date
+      - department
+      - status
       js_items:
       - desc: Employee Detail KPI — tenure, salary, department, position, status badge
         file: ./js/detail_employee_kpi.js
       field_layout:
-      - - '[JS:Employee Detail KPI — tenure, salary, department, position, status
-          badge]'
       - '--- Personal Info ---'
       - - emp_code
         - name
@@ -80,6 +78,8 @@ popups:
         - position
         - status
       - - hire_date
+      - - '[JS:Employee Detail KPI — tenure, salary, department, position, status
+          badge]'
       recordActions:
       - edit
     - key: detail_aux
@@ -88,15 +88,15 @@ popups:
       resource:
         binding: currentRecord
       fields:
-      - salary
       - bank_account
+      - salary
       field_layout:
       - '--- Compensation ---'
       - - salary
       - - bank_account
     layout:
-    - - detail_main: 16
-      - detail_aux: 8
+    - - detailsblock_4ldjvt: 16
+      - detailsblock_9uoz0u: 8
   - title: History
     blocks:
     - key: recordHistory_0
@@ -213,20 +213,18 @@ popups:
       resource:
         binding: currentRecord
       fields:
-      - emp_name
       - leave_type
-      - start_date
+      - emp_name
       - end_date
-      - days
-      - status
-      - reason
       - approver
+      - start_date
+      - days
+      - reason
+      - status
       js_items:
       - desc: Leave Request Overview — leave type badge, duration, status badge, approver
         file: ./js/detail_leave_overview.js
       field_layout:
-      - - '[JS:Leave Request Overview — leave type badge, duration, status badge,
-          approver]'
       - '--- Employee ---'
       - - emp_name
         - leave_type
@@ -239,10 +237,12 @@ popups:
       - - approver
       - '--- Reason ---'
       - - reason
+      - - '[JS:Leave Request Overview — leave type badge, duration, status badge,
+          approver]'
       recordActions:
       - edit
     layout:
-    - - detail_main
+    - - detailsblock_2sr5wo
   - title: History
     blocks:
     - key: recordHistory_0

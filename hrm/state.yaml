@@ -21,7 +21,7 @@ pages:
             wrapper: dlyw9xi46a5
             field: dftazo3hiac
         js_items:
-          Employee Stats Filter:
+          Filter Stats Button Group Block Template (CRM-style):
             uid: w3f04gsat6i
       table:
         uid: tm1fvy09gnn
@@ -92,7 +92,7 @@ pages:
             wrapper: 3lvvpvd6uvz
             field: ebxiswp4x6m
         js_items:
-          Department Stats Filter:
+          Filter Stats Button Group Block Template (CRM-style):
             uid: bmy5u42rkpi
       table:
         uid: wim92p9enb1
@@ -158,7 +158,7 @@ pages:
             wrapper: daozifudzh7
             field: ch5b9k0lu3n
         js_items:
-          Attendance Stats Filter:
+          Filter Stats Button Group Block Template (CRM-style):
             uid: kbol8t5pogw
       table:
         uid: 35tf1aeye0t
@@ -227,7 +227,7 @@ pages:
             wrapper: grzy48ipjer
             field: kmcxh840vzb
         js_items:
-          Leave Stats Filter:
+          Filter Stats Button Group Block Template (CRM-style):
             uid: jcdpjr72x6e
       table:
         uid: hmu316ktwst
@@ -296,7 +296,7 @@ pages:
             wrapper: n5qdzhfo3dj
             field: 7zi4azg5syc
         js_items:
-          Payroll Stats Filter:
+          Filter Stats Button Group Block Template (CRM-style):
             uid: 5kx70f6y5eg
       table:
         uid: 7vaeykvra1c
@@ -368,7 +368,7 @@ pages:
             wrapper: w83qzq2aidd
             field: 6b4t8nt65j6
         js_items:
-          Recruitment Stats Filter:
+          Filter Stats Button Group Block Template (CRM-style):
             uid: uw3sspk3v7w
       table:
         uid: 024na8lxr82

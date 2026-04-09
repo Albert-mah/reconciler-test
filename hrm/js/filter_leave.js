@@ -16,7 +16,7 @@
  * ====================
  */
 
-const TARGET_BLOCK_UID = '__TABLE_UID__';
+const TARGET_BLOCK_UID = 'hmu316ktwst';
 
 // ─── CONFIG: AI modifies here ────────────────────────────────
 const COLLECTION = 'hrm_leave_requests';

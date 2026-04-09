@@ -16,7 +16,7 @@
  * ====================
  */
 
-const TARGET_BLOCK_UID = '__TABLE_UID__';
+const TARGET_BLOCK_UID = '35tf1aeye0t';
 
 // ─── CONFIG: AI modifies here ────────────────────────────────
 const COLLECTION = 'hrm_attendance';

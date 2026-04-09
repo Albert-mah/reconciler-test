@@ -629,7 +629,14 @@ def _apply_complete_layout(nb: NocoBase, grid_uid: str, field_layout: list):
                 name = item if isinstance(item, str) else (
                     list(item.keys())[0] if isinstance(item, dict) else None)
                 if name:
-                    u = uid_map.get(name)
+                    # Handle [JS:xxx] references in list rows
+                    if name.startswith("[JS:"):
+                        u = uid_map.get("_js_")
+                    elif name.startswith("---"):
+                        label = name.strip().strip("-").strip()
+                        u = uid_map.get(label)
+                    else:
+                        u = uid_map.get(name)
                     if u and u not in covered:
                         cols.append([u]); covered.add(u)
             if cols:

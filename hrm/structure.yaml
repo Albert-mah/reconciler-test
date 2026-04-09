@@ -242,30 +242,30 @@ pages:
     - field: status
       label: Status
     js_items:
-    - desc: Employee Stats Filter
+    - desc: Filter Stats Button Group Block Template (CRM-style)
       file: ./js/filter_employees.js
     field_layout:
-    - - '[JS:Employee Stats Filter]'
+    - - '[JS:Filter Stats Button Group Block Template (CRM-style)]'
     - - name
       - status
   - key: table
     type: table
     fields:
     - emp_code
+    - hire_date
+    - position
     - name
     - department
-    - position
-    - hire_date
     - gender
     - phone
     - salary
     - status
     js_columns:
     - title: Tenure
-      desc: Years+months since hire_date
+      desc: Tenure — Years+months since hire_date
       file: ./js/col_tenure.js
     - title: Salary Band
-      desc: Tag by salary range
+      desc: Salary Band Tag — by salary range
       file: ./js/col_salary_band.js
     actions:
     - filter
@@ -294,10 +294,10 @@ pages:
     - field: status
       label: Status
     js_items:
-    - desc: Department Stats Filter
+    - desc: Filter Stats Button Group Block Template (CRM-style)
       file: ./js/filter_departments.js
     field_layout:
-    - - '[JS:Department Stats Filter]'
+    - - '[JS:Filter Stats Button Group Block Template (CRM-style)]'
     - - name
       - status
   - key: table
@@ -339,26 +339,26 @@ pages:
     - field: status
       label: Status
     js_items:
-    - desc: Attendance Stats Filter
+    - desc: Filter Stats Button Group Block Template (CRM-style)
       file: ./js/filter_attendance.js
     field_layout:
-    - - '[JS:Attendance Stats Filter]'
+    - - '[JS:Filter Stats Button Group Block Template (CRM-style)]'
     - - emp_name
       - status
   - key: table
     type: table
     fields:
-    - emp_name
-    - date
-    - check_in
     - check_out
-    - status
     - work_hours
+    - emp_name
     - overtime_hours
+    - check_in
     - remark
+    - date
+    - status
     js_columns:
     - title: Hours
-      desc: Work hours indicator tag
+      desc: Work Hours Indicator Tag
       file: ./js/col_hours.js
     actions:
     - filter
@@ -378,6 +378,8 @@ pages:
   - key: filter
     type: filterForm
     fields:
+    - field: leave_type
+      label: Type
     - field: emp_name
       label: Search
       filterPaths:
@@ -385,30 +387,28 @@ pages:
       - approver
     - field: status
       label: Status
-    - field: leave_type
-      label: Type
     js_items:
-    - desc: Leave Stats Filter
+    - desc: Filter Stats Button Group Block Template (CRM-style)
       file: ./js/filter_leave.js
     field_layout:
-    - - '[JS:Leave Stats Filter]'
+    - - '[JS:Filter Stats Button Group Block Template (CRM-style)]'
     - - emp_name
       - status
       - leave_type
   - key: table
     type: table
     fields:
-    - emp_name
     - leave_type
-    - start_date
+    - emp_name
     - end_date
-    - days
-    - status
-    - reason
     - approver
+    - start_date
+    - days
+    - reason
+    - status
     js_columns:
     - title: Duration
-      desc: Leave days count with color
+      desc: Leave Days Count with Color
       file: ./js/col_leave_days.js
     actions:
     - filter
@@ -436,27 +436,27 @@ pages:
     - field: status
       label: Status
     js_items:
-    - desc: Payroll Stats Filter
+    - desc: Filter Stats Button Group Block Template (CRM-style)
       file: ./js/filter_payroll.js
     field_layout:
-    - - '[JS:Payroll Stats Filter]'
+    - - '[JS:Filter Stats Button Group Block Template (CRM-style)]'
     - - emp_name
       - status
   - key: table
     type: table
     fields:
-    - emp_name
     - period
-    - base_salary
-    - overtime_pay
-    - bonus
-    - deductions
+    - emp_name
     - tax
-    - net_pay
+    - base_salary
     - status
+    - bonus
+    - overtime_pay
+    - deductions
+    - net_pay
     js_columns:
     - title: Net Pay
-      desc: Formatted net pay amount
+      desc: Formatted Net Pay Amount
       file: ./js/col_net_pay.js
     actions:
     - filter
@@ -476,6 +476,8 @@ pages:
   - key: filter
     type: filterForm
     fields:
+    - field: priority
+      label: Priority
     - field: position
       label: Search
       filterPaths:
@@ -484,30 +486,28 @@ pages:
       - recruiter
     - field: status
       label: Status
-    - field: priority
-      label: Priority
     js_items:
-    - desc: Recruitment Stats Filter
+    - desc: Filter Stats Button Group Block Template (CRM-style)
       file: ./js/filter_recruitment.js
     field_layout:
-    - - '[JS:Recruitment Stats Filter]'
+    - - '[JS:Filter Stats Button Group Block Template (CRM-style)]'
     - - position
       - status
       - priority
   - key: table
     type: table
     fields:
-    - position
-    - department
-    - candidates
-    - status
     - priority
     - posted_date
-    - deadline
+    - position
     - recruiter
+    - candidates
+    - deadline
+    - department
+    - status
     js_columns:
     - title: Days Open
-      desc: Days since posted_date
+      desc: Days Since Posted — recruitment age
       file: ./js/col_recruit_age.js
     actions:
     - filter
@@ -556,7 +556,7 @@ pages:
     - kpi_attendance
     - kpi_leave
     - kpi_openings
-  - - chart_dept_headcount: 12
-    - chart_attendance_trend: 12
-  - - chart_leave_distribution: 12
-    - chart_recruitment_pipeline: 12
+  - - chart_dept_headcount
+    - chart_attendance_trend
+  - - chart_leave_distribution
+    - chart_recruitment_pipeline
