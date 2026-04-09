@@ -40,6 +40,15 @@ def deploy(mod_dir: str, force: bool = False):
     enhance = {}
     if (mod / "enhance.yaml").exists():
         enhance = yaml.safe_load((mod / "enhance.yaml").read_text()) or {}
+
+    # Load popup detail files from popups/ directory (Phase 2+)
+    popups_dir = mod / "popups"
+    if popups_dir.is_dir():
+        for pf in sorted(popups_dir.glob("*.yaml")):
+            popup_spec = yaml.safe_load(pf.read_text())
+            if popup_spec and popup_spec.get("target"):
+                enhance.setdefault("popups", []).append(popup_spec)
+                print(f"  + popup file: {pf.name}")
     state_file = mod / "state.yaml"
     state = yaml.safe_load(state_file.read_text()) if state_file.exists() else {}
 

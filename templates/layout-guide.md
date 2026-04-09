@@ -164,3 +164,62 @@ Every page with a table MUST have:
 - Phase 1: addNew + auto [edit, view] for all pages (minimum viable)
 - Phase 2: upgrade key pages to custom detail with JS KPI + tabs
 - Phase 3: add related data tabs, association tables
+
+## File Organization — Popup Separation
+
+Detail popups can be split into separate files for phased development:
+
+```
+module/
+├── structure.yaml          # Pages + blocks (Phase 1)
+├── enhance.yaml            # addNew popups + auto [edit, view] (Phase 1)
+├── popups/                 # Custom detail popups (Phase 2+)
+│   ├── projects-detail.yaml
+│   ├── tasks-detail.yaml
+│   └── ...
+├── js/
+├── charts/
+└── state.yaml
+```
+
+### Phase 1 (enhance.yaml — minimum viable)
+```yaml
+popups:
+  - target: $projects.table.actions.addNew
+    auto: [edit, view]        # auto-generates edit + view from addNew
+    view_field: name          # click this field → drawer detail
+    coll: pm_projects
+    blocks:
+      - key: form
+        type: createForm
+        fields: [...]
+        field_layout: [...]   # divider groups mandatory
+        actions: [submit]
+```
+
+### Phase 2 (popups/*.yaml — custom detail, loaded by deployer)
+```yaml
+# popups/projects-detail.yaml
+target: $projects.table.fields.name
+mode: embed
+coll: pm_projects
+tabs:
+  - title: Overview
+    blocks:
+      - key: detail_main
+        type: details
+        resource: { binding: currentRecord }
+        js_items: [...]
+        field_layout: [...]
+        recordActions: [edit]
+      - key: detail_aux
+        ...
+    layout: [{col: [detail_main], size: 16}, {col: [detail_aux], size: 8}]
+  - title: History
+    blocks:
+      - key: history
+        type: recordHistory
+```
+
+deployer auto-loads `popups/*.yaml` and merges into enhance.yaml popups.
+This way Phase 1 agent doesn't need to worry about detail complexity.
