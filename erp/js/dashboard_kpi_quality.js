@@ -21,8 +21,8 @@ const FMT = (v) => `${v.toFixed(1)}%`;
 // 日期变量由 JS 自动替换: ${startDate}, ${endDate}, ${prevStart}, ${prevEnd}
 const buildSql = (startDate, endDate, prevStart, prevEnd) => `
 SELECT
-  CASE WHEN SUM(CASE WHEN "createdAt" >= '\${startDate}' AND "createdAt" <= '\${endDate}' THEN sample_qty ELSE 0 END) > 0
-  THEN ROUND(SUM(CASE WHEN "createdAt" >= '\${startDate}' AND "createdAt" <= '\${endDate}' THEN pass_qty ELSE 0 END)::numeric / SUM(CASE WHEN "createdAt" >= '\${startDate}' AND "createdAt" <= '\${endDate}' THEN sample_qty ELSE 0 END) * 100, 1)
+  CASE WHEN SUM(CASE WHEN "createdAt" >= '${startDate}' AND "createdAt" <= '${endDate}' THEN sample_qty ELSE 0 END) > 0
+  THEN ROUND(SUM(CASE WHEN "createdAt" >= '${startDate}' AND "createdAt" <= '${endDate}' THEN pass_qty ELSE 0 END)::numeric / SUM(CASE WHEN "createdAt" >= '${startDate}' AND "createdAt" <= '${endDate}' THEN sample_qty ELSE 0 END) * 100, 1)
   ELSE 0 END as current_value,
   0 as growth_rate
 FROM nb_erp_quality

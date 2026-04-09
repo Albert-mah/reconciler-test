@@ -21,9 +21,9 @@ const FMT = (v) => v >= 1e6 ? `¥${(v/1e6).toFixed(1)}M` : v >= 1e3 ? `¥${(v/1e
 // 日期变量由 JS 自动替换: ${startDate}, ${endDate}, ${prevStart}, ${prevEnd}
 const buildSql = (startDate, endDate, prevStart, prevEnd) => `
 SELECT
-  COALESCE(SUM(CASE WHEN order_date >= '\${startDate}' AND order_date <= '\${endDate}' THEN total_amount ELSE 0 END), 0) as current_value,
-  CASE WHEN COALESCE(SUM(CASE WHEN order_date >= '\${prevStart}' AND order_date < '\${prevEnd}' THEN total_amount ELSE 0 END), 0) > 0
-  THEN ROUND((COALESCE(SUM(CASE WHEN order_date >= '\${startDate}' AND order_date <= '\${endDate}' THEN total_amount ELSE 0 END), 0) - COALESCE(SUM(CASE WHEN order_date >= '\${prevStart}' AND order_date < '\${prevEnd}' THEN total_amount ELSE 0 END), 0))::numeric / COALESCE(SUM(CASE WHEN order_date >= '\${prevStart}' AND order_date < '\${prevEnd}' THEN total_amount ELSE 0 END), 1) * 100, 1)
+  COALESCE(SUM(CASE WHEN order_date >= '${startDate}' AND order_date <= '${endDate}' THEN total_amount ELSE 0 END), 0) as current_value,
+  CASE WHEN COALESCE(SUM(CASE WHEN order_date >= '${prevStart}' AND order_date < '${prevEnd}' THEN total_amount ELSE 0 END), 0) > 0
+  THEN ROUND((COALESCE(SUM(CASE WHEN order_date >= '${startDate}' AND order_date <= '${endDate}' THEN total_amount ELSE 0 END), 0) - COALESCE(SUM(CASE WHEN order_date >= '${prevStart}' AND order_date < '${prevEnd}' THEN total_amount ELSE 0 END), 0))::numeric / COALESCE(SUM(CASE WHEN order_date >= '${prevStart}' AND order_date < '${prevEnd}' THEN total_amount ELSE 0 END), 1) * 100, 1)
   ELSE 0 END as growth_rate
 FROM nb_erp_purchase_orders WHERE status NOT IN ('已取消', '草稿')
 `;
