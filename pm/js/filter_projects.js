@@ -1,8 +1,19 @@
 /**
- * Project Stats Filter
+ * Filter Stats Button Group Block Template (CRM-style)
  *
  * @type JSItemModel
  * @template filter-stats
+ *
+ * === AI Modification Guide ===
+ * 1. Modify COLLECTION (collection name)
+ * 2. Modify GROUPS (button group definitions)
+ *    - key: unique identifier
+ *    - label: button text
+ *    - filter: NocoBase filter condition (null = all)
+ *    - danger: true shows red
+ * 3. You can have multiple groups (separated by Divider)
+ * 4. Do not modify useStats/StatsFilter components — they are generic
+ * ====================
  */
 
 const TARGET_BLOCK_UID = '__TABLE_UID__';
@@ -11,31 +22,17 @@ const TARGET_BLOCK_UID = '__TABLE_UID__';
 const COLLECTION = 'pm_projects';
 
 const GROUPS = [
-  {
-    name: 'Status',
-    items: [
-      { key: 'all', label: 'All', filter: null },
-      { key: 'planning', label: 'Planning', filter: { status: { $eq: 'Planning' } } },
-      { key: 'active', label: 'Active', filter: { status: { $eq: 'Active' } } },
-      { key: 'on_hold', label: 'On Hold', filter: { status: { $eq: 'On Hold' } } },
-      { key: 'completed', label: 'Completed', filter: { status: { $eq: 'Completed' } } },
-      { key: 'cancelled', label: 'Cancelled', filter: { status: { $eq: 'Cancelled' } } },
-    ],
-  },
-  {
-    name: 'Smart',
-    items: [
-      { key: 'overdue', label: 'Overdue', filterFn: () => {
-          const today = ctx.libs.dayjs().format('YYYY-MM-DD');
-          return { $and: [{ end_date: { $lt: today } }, { status: { $notIn: ['Completed', 'Cancelled'] } }] };
-        }, danger: true },
-      { key: 'high_budget', label: 'High Budget', filter: { budget: { $gte: 100000 } } },
-    ],
-  },
+  { name: 'status', items: [
+    { key: 'all', label: 'All', filter: null },
+    { key: 'planning', label: 'Planning', filter: { status: { $eq: 'Planning' } } },
+    { key: 'progress', label: 'In Progress', filter: { status: { $eq: 'In Progress' } } },
+    { key: 'hold', label: 'On Hold', filter: { status: { $eq: 'On Hold' } } },
+    { key: 'completed', label: 'Completed', filter: { status: { $eq: 'Completed' } } },
+  ]},
 ];
 // ─── CONFIG END ────────────────────────────────────
 
-// ─── Do not modify below ─────────────────────────────────────
+// ─── Do not modify below (CRM-identical style) ─────────────
 const { useState, useEffect, useCallback } = ctx.React;
 const { Button, Badge, Space, Spin, Divider } = ctx.antd;
 
@@ -46,7 +43,7 @@ function useStats() {
   const fetchCounts = useCallback(async () => {
     setLoading(true);
     try {
-      const allItems = GROUPS.flatMap(g => g.items).filter(item => !item.filterFn);
+      const allItems = GROUPS.flatMap(g => g.items);
       const results = await Promise.all(
         allItems.map(item =>
           ctx.api.request({
@@ -83,8 +80,7 @@ const StatsFilter = () => {
     try {
       const target = ctx.engine?.getModel(TARGET_BLOCK_UID);
       if (!target) return;
-      const filterVal = item.filterFn ? item.filterFn() : (item.filter || { $and: [] });
-      target.resource.addFilterGroup(ctx.model.uid, filterVal);
+      target.resource.addFilterGroup(ctx.model.uid, item.filter || { $and: [] });
       await target.resource.refresh();
     } catch (e) {
       console.error('Filter error:', e);
@@ -94,18 +90,30 @@ const StatsFilter = () => {
   if (loading) return (<Spin size="small" />);
 
   const renderGroup = (group, idx) => (
-    <Space key={idx} wrap size={[6, 6]}>
+    <Space key={idx} wrap size={[8, 8]}>
       {group.items.map(item => (
-        <Badge key={item.key} count={counts[item.key] ?? 0} overflowCount={9999} offset={[6, 0]}>
-          <Button
-            type={active === item.key ? 'primary' : 'default'}
-            size="small"
-            danger={item.danger}
-            onClick={() => handleClick(item)}
-          >
-            {item.label}
-          </Button>
-        </Badge>
+        <Button
+          key={item.key}
+          type={active === item.key ? 'primary' : 'default'}
+          danger={item.danger}
+          style={group.name !== GROUPS[0]?.name && active !== item.key ? { borderStyle: 'dashed' } : {}}
+          onClick={() => handleClick(item)}
+        >
+          {item.label}{counts[item.key] != null ? ' ' : ''}
+          {counts[item.key] != null && (
+            <Badge
+              count={counts[item.key]}
+              showZero
+              overflowCount={9999}
+              style={{
+                marginLeft: 4,
+                backgroundColor: active === item.key ? '#fff' : '#f0f0f0',
+                color: active === item.key ? '#1677ff' : 'rgba(0,0,0,0.65)',
+                boxShadow: 'none',
+              }}
+            />
+          )}
+        </Button>
       ))}
     </Space>
   );
