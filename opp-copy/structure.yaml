@@ -12,6 +12,7 @@ pages:
     field_layout:
     - - '[JS:Pipeline Stats Filter Block]'
     - - name
+    coll: nb_crm_opportunities
   - key: reference_1
     type: reference
     template_uid: m39e2ahdwsf
