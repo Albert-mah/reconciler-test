@@ -144,6 +144,27 @@ def deploy_surface(nb: NocoBase, tab_uid: str, spec: dict,
         for i, bs in enumerate(blocks_spec)
     )
 
+    # Find page-level grid_uid (needed for filterManager + layout)
+    grid_uid = ""
+    for getter in [lambda: nb.get(tabSchemaUid=tab_uid), lambda: nb.get(uid=tab_uid)]:
+        try:
+            data = getter()
+            tree = data.get("tree", {})
+            g = tree.get("subModels", {}).get("grid", {})
+            if isinstance(g, dict) and g.get("uid"):
+                grid_uid = g["uid"]
+                break
+            popup = tree.get("subModels", {}).get("page", {})
+            if popup:
+                tabs = popup.get("subModels", {}).get("tabs", [])
+                if isinstance(tabs, list) and tabs:
+                    pg = tabs[0].get("subModels", {}).get("grid", {})
+                    if isinstance(pg, dict) and pg.get("uid"):
+                        grid_uid = pg["uid"]
+                        break
+        except Exception as e:
+            continue
+
     if all_exist:
         if force:
             # Force: check for missing fields, fix display models, JS, layout
@@ -177,22 +198,11 @@ def deploy_surface(nb: NocoBase, tab_uid: str, spec: dict,
                             except Exception as e:
                                 print(f"      ! field {fp}: {e}")
 
-                _fill_block(nb, block_uid, block_grid, bs, coll, mod, blocks_state[key], blocks_state)
+                _fill_block(nb, block_uid, block_grid, bs, coll, mod, blocks_state[key], blocks_state, grid_uid)
         else:
             print(f"    = {len(existing)} blocks exist (skip)")
 
-        # Apply layout (always, in case it changed)
-        grid_uid = ""
-        for getter in [lambda: nb.get(tabSchemaUid=tab_uid), lambda: nb.get(uid=tab_uid)]:
-            try:
-                data = getter()
-                g = data.get("tree", {}).get("subModels", {}).get("grid", {})
-                if isinstance(g, dict) and g.get("uid"):
-                    grid_uid = g["uid"]
-                    break
-            except Exception as e:
-                continue
-
+        # Apply layout
         layout_spec = spec.get("layout")
         if layout_spec and grid_uid:
             uid_map = {k: v["uid"] for k, v in blocks_state.items() if "uid" in v}
@@ -264,7 +274,7 @@ def deploy_surface(nb: NocoBase, tab_uid: str, spec: dict,
                     continue
                 block_uid = blocks_state[key]["uid"]
                 block_grid = blocks_state[key].get("grid_uid", "")
-                _fill_block(nb, block_uid, block_grid, bs, coll, mod, blocks_state[key], blocks_state)
+                _fill_block(nb, block_uid, block_grid, bs, coll, mod, blocks_state[key], blocks_state, grid_uid)
 
         except Exception as e:
             print(f"    ! compose: {e}")
@@ -668,7 +678,8 @@ def _apply_complete_layout(nb: NocoBase, grid_uid: str, field_layout: list):
 
 def _fill_block(nb: NocoBase, block_uid: str, grid_uid: str,
                 bs: dict, default_coll: str, mod: Path,
-                block_state: dict, all_blocks_state: dict = None):
+                block_state: dict, all_blocks_state: dict = None,
+                page_grid_uid: str = ""):
     """Fill a compose-created block with fields, actions, JS items, dividers."""
     btype = bs.get("type", "")
     coll = bs.get("coll", default_coll)
@@ -908,9 +919,9 @@ def _fill_block(nb: NocoBase, block_uid: str, grid_uid: str,
                     except Exception as e:
                         pass  # filter layout best-effort
 
-        _configure_filter(nb, bs, block_uid, field_states, default_coll, all_blocks_state)
+        _configure_filter(nb, bs, block_uid, field_states, default_coll, all_blocks_state, page_grid_uid)
     elif btype == "filterForm":
-        _configure_filter(nb, bs, block_uid, field_states, default_coll, all_blocks_state)
+        _configure_filter(nb, bs, block_uid, field_states, default_coll, all_blocks_state, page_grid_uid)
 
     # ── Event Flows (formValuesChange JS) ──
     event_flows = bs.get("event_flows", [])
@@ -978,34 +989,23 @@ def _fill_block(nb: NocoBase, block_uid: str, grid_uid: str,
 
 def _configure_filter(nb: NocoBase, bs: dict, block_uid: str,
                       field_states: dict, coll: str,
-                      all_blocks_state: dict = None):
-    """Configure filter field connections via filterManager on GridModel.
+                      all_blocks_state: dict = None,
+                      page_grid_uid: str = ""):
+    """Configure filter field connections via filterManager.
 
-    NocoBase stores filter connections as `filterManager` array on the
-    FilterFormGridModel (top-level field, NOT in stepParams).
+    CRITICAL: filterManager is stored on the PAGE-LEVEL BlockGridModel,
+    NOT on the FilterFormBlock's internal FilterFormGridModel.
 
-    Format: flowModels:save {
-      uid: grid_uid,
-      filterManager: [
-        {filterId: "field_item_uid", targetId: "table_uid", filterPaths: ["name", "email", ...]},
-        ...
-      ]
-    }
-
-    Spec format:
-      fields:
-        - field: name
-          label: Search
-          filterPaths: [name, company, email, phone]
-        - field: status
-          label: Status
-          # no filterPaths → just label + defaultTargetUid
+    Page structure:
+      PageTab → BlockGridModel ← filterManager lives HERE
+        ├── FilterFormBlock → FilterFormGridModel (NOT here)
+        └── TableBlock / ReferenceBlock
     """
-    # Find target table UIDs
+    # Find target table/reference block UIDs
     target_uids = []
     if all_blocks_state:
         for bkey, binfo in all_blocks_state.items():
-            if isinstance(binfo, dict) and binfo.get("type") == "table":
+            if isinstance(binfo, dict) and binfo.get("type") in ("table", "reference"):
                 target_uids.append(binfo.get("uid", ""))
     default_target = target_uids[0] if target_uids else ""
 
@@ -1039,18 +1039,30 @@ def _configure_filter(nb: NocoBase, bs: dict, block_uid: str,
             except Exception as e:
                 print(f"      ! filter {fp}: {e}")
 
-    # 2. Set filterManager on GridModel (multi-field connections)
-    # Read live grid to get FilterFormItem UIDs
-    grid_uid = ""
+    # 2. Set filterManager on PAGE-LEVEL BlockGridModel
+    if not page_grid_uid:
+        print(f"      ⚠ filterManager: no page_grid_uid — filter fields won't be connected!")
+        print(f"        filterManager MUST be on page-level BlockGridModel, not FilterFormGridModel")
+        return
+
+    # Validate: page_grid_uid must be a BlockGridModel, not FilterFormGridModel
+    try:
+        r_check = nb.s.get(f"{nb.base}/api/flowModels:get",
+                           params={"filterByTk": page_grid_uid}, timeout=30)
+        pg_use = r_check.json().get("data", {}).get("use", "")
+        if pg_use == "FilterFormGridModel":
+            print(f"      ⚠ filterManager: page_grid_uid points to FilterFormGridModel!")
+            print(f"        Must point to page-level BlockGridModel instead")
+            return
+    except Exception as e:
+        pass
+
+    # Read filter grid to get FilterFormItem UIDs
     try:
         data = nb.get(uid=block_uid)
         grid = data.get("tree", {}).get("subModels", {}).get("grid", {})
-        grid_uid = grid.get("uid", "")
         grid_items = grid.get("subModels", {}).get("items", [])
     except Exception as e:
-        return
-
-    if not grid_uid:
         return
 
     fm_entries = []
@@ -1066,26 +1078,35 @@ def _configure_filter(nb: NocoBase, bs: dict, block_uid: str,
         for item in (grid_items if isinstance(grid_items, list) else []):
             item_fp = item.get("stepParams", {}).get("fieldSettings", {}).get("init", {}).get("fieldPath", "")
             if item_fp == fp:
-                fm_entries.append({
-                    "filterId": item["uid"],
-                    "targetId": default_target,
-                    "filterPaths": filter_paths,
-                })
-                print(f"      filter {fp} → {filter_paths}")
+                # Add entry for each target block
+                for tid in target_uids:
+                    fm_entries.append({
+                        "filterId": item["uid"],
+                        "targetId": tid,
+                        "filterPaths": filter_paths,
+                    })
+                print(f"      filter {fp} → {filter_paths} ({len(target_uids)} targets)")
                 break
 
     if fm_entries:
-        nb.s.post(f"{nb.base}/api/flowModels:save", json={
-            "uid": grid_uid,
-            "use": grid.get("use", "FilterFormGridModel"),
-            "parentId": block_uid,
-            "subKey": "grid",
-            "subType": "object",
-            "sortIndex": 0,
-            "stepParams": grid.get("stepParams", {}),
-            "flowRegistry": grid.get("flowRegistry", {}),
-            "filterManager": fm_entries,
-        }, timeout=30)
+        # Save on PAGE-LEVEL grid (not filter grid)
+        try:
+            r = nb.s.get(f"{nb.base}/api/flowModels:get",
+                         params={"filterByTk": page_grid_uid}, timeout=30)
+            pg_data = r.json().get("data", {})
+            nb.s.post(f"{nb.base}/api/flowModels:save", json={
+                "uid": page_grid_uid,
+                "use": pg_data.get("use", "BlockGridModel"),
+                "parentId": pg_data.get("parentId", ""),
+                "subKey": "grid",
+                "subType": "object",
+                "sortIndex": 0,
+                "stepParams": pg_data.get("stepParams", {}),
+                "flowRegistry": pg_data.get("flowRegistry", {}),
+                "filterManager": fm_entries,
+            }, timeout=30)
+        except Exception as e:
+            print(f"      ! filterManager: {e}")
 
 
 # ══════════════════════════════════════════════════════════════════

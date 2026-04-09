@@ -137,14 +137,14 @@ const data = ctx.data?.objects || [];  // ✅ Correct: SQL results are in .objec
 
 ## FilterManager — Multi-field Search Connection
 
-Filter connections are stored on **GridModel** (not FilterFormItem) as a top-level `filterManager` field:
+Filter connections are stored on the **PAGE-LEVEL BlockGridModel** (NOT FilterFormGridModel!) as a top-level `filterManager` field:
 
 ```python
-# flowModels:save on the FilterFormGridModel
+# flowModels:save on the PAGE-LEVEL BlockGridModel
 nb.s.post(f'{nb.base}/api/flowModels:save', json={
-    "uid": grid_uid,
-    "use": "FilterFormGridModel",
-    "parentId": filter_block_uid,
+    "uid": page_grid_uid,          # PAGE grid, NOT filter grid!
+    "use": "BlockGridModel",       # BlockGridModel, NOT FilterFormGridModel!
+    "parentId": page_tab_uid,
     "filterManager": [
         {
             "filterId": "filter_item_uid",    # FilterFormItem UID
