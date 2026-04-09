@@ -20,6 +20,24 @@ popups:
     - status
     actions:
     - submit
+    field_layout:
+    - '--- Basic Info ---'
+    - - code
+      - name
+      - category
+    - - spec
+      - unit
+      - status
+    - '--- Pricing ---'
+    - - list_price
+      - cost_price
+    - '--- Inventory ---'
+    - - stock_qty
+      - min_stock
+      - max_stock
+    - - lead_time
+    - '--- Remark ---'
+    - - remark
 - target: $customers.table.actions.addNew
   auto:
   - edit
@@ -41,6 +59,22 @@ popups:
     - status
     actions:
     - submit
+    field_layout:
+    - '--- Basic Info ---'
+    - - code
+      - name
+      - level
+    - - industry
+      - status
+    - '--- Contact ---'
+    - - contact
+      - phone
+      - email
+    - - address
+    - '--- Financial ---'
+    - - payment_terms
+      - credit_limit
+      - tax_rate
 - target: $suppliers.table.actions.addNew
   auto:
   - edit
@@ -64,6 +98,22 @@ popups:
     - status
     actions:
     - submit
+    field_layout:
+    - '--- Basic Info ---'
+    - - code
+      - name
+      - category
+    - - rating
+      - status
+    - '--- Contact ---'
+    - - contact
+      - phone
+      - email
+    - - address
+    - '--- Evaluation ---'
+    - - delivery_score
+      - quality_score
+    - - payment_terms
 - target: $purchasing.table.actions.addNew
   auto:
   - edit
@@ -86,6 +136,21 @@ popups:
     - buyer
     actions:
     - submit
+    field_layout:
+    - '--- Order Info ---'
+    - - po_no
+      - supplier_name
+      - status
+    - - priority
+      - buyer
+    - '--- Amount ---'
+    - - total_amount
+      - tax_amount
+    - '--- Dates ---'
+    - - order_date
+      - expected_date
+    - '--- Remark ---'
+    - - remark
 - target: $sales.table.actions.addNew
   auto:
   - edit
@@ -106,6 +171,21 @@ popups:
     - sales_rep
     actions:
     - submit
+    field_layout:
+    - '--- Order Info ---'
+    - - so_no
+      - customer_name
+      - status
+    - - priority
+      - sales_rep
+    - '--- Amount ---'
+    - - total_amount
+      - tax_amount
+    - '--- Dates ---'
+    - - order_date
+      - delivery_date
+    - '--- Remark ---'
+    - - remark
 - target: $production.table.actions.addNew
   auto:
   - edit
@@ -127,6 +207,22 @@ popups:
     - workshop
     actions:
     - submit
+    field_layout:
+    - '--- Work Order ---'
+    - - wo_no
+      - product_name
+      - status
+    - - priority
+      - workshop
+    - '--- Quantity ---'
+    - - planned_qty
+    - '--- Schedule ---'
+    - - planned_start
+      - planned_end
+    - '--- Related ---'
+    - - so_no
+    - '--- Remark ---'
+    - - remark
 - target: $inventory.table.actions.addNew
   auto:
   - edit
@@ -149,6 +245,18 @@ popups:
     - operator
     actions:
     - submit
+    field_layout:
+    - '--- Material ---'
+    - - product_name
+      - product_code
+    - '--- Transaction ---'
+    - - txn_type
+      - qty
+      - warehouse
+    - - ref_no
+      - operator
+    - '--- Remark ---'
+    - - remark
 - target: $quality.table.actions.addNew
   auto:
   - edit
@@ -172,6 +280,21 @@ popups:
     - inspector
     actions:
     - submit
+    field_layout:
+    - '--- Inspection ---'
+    - - qc_no
+      - product_name
+      - qc_type
+    - - batch_no
+      - ref_no
+    - '--- Results ---'
+    - - sample_qty
+      - pass_qty
+      - fail_qty
+    - - result
+      - inspector
+    - '--- Description ---'
+    - - remark
 - field: name
   mode: embed
   tabs:
