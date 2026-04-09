@@ -1,23 +1,15 @@
-const TARGET_BLOCK_UID = '__TABLE_UID__';
+const TARGET_BLOCK_UID = 'tzc8ctbo4ug';
 const { useState, useEffect, useCallback } = ctx.React;
-const { Button, Badge, Space, Spin, Divider } = ctx.antd;
+const { Button, Badge, Space, Spin } = ctx.antd;
 
-const RATING_STATS = [
-  { key: 'all', label: '全部', filter: null, group: 'rating' },
-  { key: 'rating_a', label: 'A-优秀', filter: { rating: { $eq: 'A' } }, group: 'rating' },
-  { key: 'rating_b', label: 'B-良好', filter: { rating: { $eq: 'B' } }, group: 'rating' },
-  { key: 'rating_c', label: 'C-合格', filter: { rating: { $eq: 'C' } }, group: 'rating' },
-  { key: 'rating_d', label: 'D-待改善', filter: { rating: { $eq: 'D' } }, group: 'rating' },
+const STATS = [
+  { key: 'all', label: '全部', filter: null },
+  { key: 'scheduled', label: '待排产', filter: { status: { $eq: '待排产' } } },
+  { key: 'producing', label: '生产中', filter: { status: { $eq: '生产中' } } },
+  { key: 'paused', label: '暂停', filter: { status: { $eq: '暂停' } } },
+  { key: 'completed', label: '已完工', filter: { status: { $eq: '已完工' } } },
+  { key: 'closed', label: '已关闭', filter: { status: { $eq: '已关闭' } } },
 ];
-
-const STATUS_STATS = [
-  { key: 'qualified', label: '合格', filter: { status: { $eq: '合格' } }, group: 'status' },
-  { key: 'trial', label: '试用', filter: { status: { $eq: '试用' } }, group: 'status' },
-  { key: 'paused', label: '暂停', filter: { status: { $eq: '暂停' } }, group: 'status' },
-  { key: 'eliminated', label: '淘汰', filter: { status: { $eq: '淘汰' } }, group: 'status' },
-];
-
-const ALL_STATS = [...RATING_STATS, ...STATUS_STATS];
 
 function useStats() {
   const [counts, setCounts] = useState({});
@@ -26,15 +18,15 @@ function useStats() {
   const fetchCounts = useCallback(async () => {
     setLoading(true);
     try {
-      const queries = ALL_STATS.filter((s) => s.filter).map((s) =>
+      const queries = STATS.filter((s) => s.filter).map((s) =>
         ctx.api.request({
-          url: 'nb_erp_suppliers:list',
+          url: 'nb_erp_work_orders:list',
           params: { pageSize: 1, filter: s.filter },
         }).then((res) => [s.key, res?.data?.meta?.count || 0])
       );
 
       const totalRes = await ctx.api.request({
-        url: 'nb_erp_suppliers:list',
+        url: 'nb_erp_work_orders:list',
         params: { pageSize: 1 },
       });
 
@@ -43,7 +35,7 @@ function useStats() {
       results.forEach(([k, v]) => { map[k] = v; });
       setCounts(map);
     } catch (e) {
-      console.error('filter_supplier_stats: fetch error', e);
+      console.error('filter_wo_stats: fetch error', e);
     } finally {
       setLoading(false);
     }
@@ -67,7 +59,7 @@ function StatsFilter() {
         await target.resource.refresh();
       }
     } catch (e) {
-      console.error('filter_supplier_stats: filter error', e);
+      console.error('filter_wo_stats: filter error', e);
     }
   }, []);
 
@@ -77,24 +69,12 @@ function StatsFilter() {
 
   return (
     <Space wrap size={[8, 8]}>
-      {RATING_STATS.map((stat) => (
+      {STATS.map((stat) => (
         <Badge key={stat.key} count={counts[stat.key] ?? 0} overflowCount={9999} offset={[6, 0]}>
           <Button
             type={active === stat.key ? 'primary' : 'default'}
             size="small"
-            onClick={() => handleClick(stat)}
-          >
-            {stat.label}
-          </Button>
-        </Badge>
-      ))}
-      <Divider type="vertical" />
-      {STATUS_STATS.map((stat) => (
-        <Badge key={stat.key} count={counts[stat.key] ?? 0} overflowCount={9999} offset={[6, 0]}>
-          <Button
-            type={active === stat.key ? 'primary' : 'default'}
-            size="small"
-            danger={stat.key === 'eliminated'}
+            danger={stat.key === 'paused'}
             onClick={() => handleClick(stat)}
           >
             {stat.label}

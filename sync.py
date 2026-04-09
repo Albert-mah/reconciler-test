@@ -185,10 +185,18 @@ def _sync_block(nb: NocoBase, live_item: dict, spec: dict,
 
 def _sync_table_fields(item: dict, spec: dict, block_state: dict,
                        mod: Path, js_dir: Path, prefix: str, block_key: str):
-    """Sync table columns back to spec."""
+    """Sync table columns back to spec.
+
+    Key rule: existing file paths in spec are preserved.
+    Only generates new paths for newly discovered JS columns.
+    """
     cols = item.get("subModels", {}).get("columns", [])
     if not isinstance(cols, list):
         return
+
+    # Index existing spec JS columns by title for file path lookup
+    existing_jscol_files = {jc.get("title", ""): jc.get("file", "")
+                            for jc in spec.get("js_columns", [])}
 
     fields = []
     js_columns = []
@@ -209,22 +217,16 @@ def _sync_table_fields(item: dict, spec: dict, block_state: dict,
             if desc:
                 entry["desc"] = desc
 
-            # Keep existing file path from spec, or generate new one
-            existing_file = ""
-            for jc in spec.get("js_columns", []):
-                if jc.get("title") == col_title:
-                    existing_file = jc.get("file", "")
-                    break
-
-            if existing_file:
-                fname = existing_file.replace("./js/", "")
-            else:
+            # Use existing file path from spec, fallback to block_key-based name
+            file_ref = existing_jscol_files.get(col_title, "")
+            if not file_ref:
                 safe = _slugify(col_title or desc or f"col_{len(js_columns)}")
-                fname = f"{prefix}_{block_key}_col_{safe}.js"
+                file_ref = f"./js/{block_key}_col_{safe}.js"
 
             if code:
+                fname = file_ref.replace("./js/", "")
                 (js_dir / fname).write_text(code)
-                entry["file"] = f"./js/{fname}"
+                entry["file"] = file_ref
 
             js_columns.append(entry)
             js_col_state[col_title] = {"uid": col_uid}
@@ -275,27 +277,27 @@ def _sync_form_fields(item: dict, spec: dict, block_state: dict,
             if desc:
                 entry["desc"] = desc
 
-            # Keep existing file path from spec if available
-            existing_file = ""
-            for ji in spec.get("js_items", []):
+            # Use existing file path from spec (match by desc or index)
+            file_ref = ""
+            spec_js = spec.get("js_items", [])
+            # Match by desc
+            for ji in spec_js:
                 if ji.get("desc") == desc and desc:
-                    existing_file = ji.get("file", "")
+                    file_ref = ji.get("file", "")
                     break
-                # Match by index
-                spec_idx = spec.get("js_items", []).index(ji) if ji in spec.get("js_items", []) else -1
-                if spec_idx == len(js_items):
-                    existing_file = ji.get("file", "")
-                    break
+            # Fallback: match by index
+            if not file_ref and len(js_items) < len(spec_js):
+                file_ref = spec_js[len(js_items)].get("file", "")
 
-            if existing_file:
-                fname = existing_file.replace("./js/", "")
-            else:
+            # Generate new path only for truly new items
+            if not file_ref:
                 js_name = _slugify(desc) if desc else f"js_{len(js_items)}"
-                fname = f"{prefix}_{block_key}_{js_name}.js"
+                file_ref = f"./js/{block_key}_{js_name}.js"
 
             if code:
+                fname = file_ref.replace("./js/", "")
                 (js_dir / fname).write_text(code)
-                entry["file"] = f"./js/{fname}"
+                entry["file"] = file_ref
 
             js_items.append(entry)
             js_key = desc or f"js_{len(js_items) - 1}"

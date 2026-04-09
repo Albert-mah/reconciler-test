@@ -1,22 +1,41 @@
-const TARGET_BLOCK_UID = '__TABLE_UID__';
+const TARGET_BLOCK_UID = 'pr52g7108ir';
 const { useState, useEffect, useCallback } = ctx.React;
 const { Button, Badge, Space, Spin, Divider } = ctx.antd;
 
-const LEVEL_STATS = [
-  { key: 'all', label: '全部', filter: null, group: 'level' },
-  { key: 'vip', label: 'VIP', filter: { level: { $eq: 'VIP' } }, group: 'level' },
-  { key: 'a', label: 'A级', filter: { level: { $eq: 'A' } }, group: 'level' },
-  { key: 'b', label: 'B级', filter: { level: { $eq: 'B' } }, group: 'level' },
-  { key: 'c', label: 'C级', filter: { level: { $eq: 'C' } }, group: 'level' },
+const INBOUND_TYPES = ['采购入库', '生产入库', '退货入库', '盘盈'];
+const OUTBOUND_TYPES = ['销售出库', '生产领料', '盘亏'];
+const TRANSFER_TYPES = ['调拨'];
+
+const STATS = [
+  { key: 'all', label: '全部', filter: null },
+  {
+    key: 'inbound',
+    label: '入库',
+    filter: { txn_type: { $in: INBOUND_TYPES } },
+  },
+  {
+    key: 'outbound',
+    label: '出库',
+    filter: { txn_type: { $in: OUTBOUND_TYPES } },
+  },
+  {
+    key: 'transfer',
+    label: '调拨',
+    filter: { txn_type: { $in: TRANSFER_TYPES } },
+  },
 ];
 
-const STATUS_STATS = [
-  { key: 'active', label: '活跃', filter: { status: { $eq: '活跃' } }, group: 'status' },
-  { key: 'paused', label: '暂停', filter: { status: { $eq: '暂停' } }, group: 'status' },
-  { key: 'blacklist', label: '黑名单', filter: { status: { $eq: '黑名单' } }, group: 'status' },
+const DETAIL_STATS = [
+  { key: 'purchase_in', label: '采购入库', filter: { txn_type: { $eq: '采购入库' } }, group: 'inbound' },
+  { key: 'produce_in', label: '生产入库', filter: { txn_type: { $eq: '生产入库' } }, group: 'inbound' },
+  { key: 'return_in', label: '退货入库', filter: { txn_type: { $eq: '退货入库' } }, group: 'inbound' },
+  { key: 'gain', label: '盘盈', filter: { txn_type: { $eq: '盘盈' } }, group: 'inbound' },
+  { key: 'sales_out', label: '销售出库', filter: { txn_type: { $eq: '销售出库' } }, group: 'outbound' },
+  { key: 'produce_out', label: '生产领料', filter: { txn_type: { $eq: '生产领料' } }, group: 'outbound' },
+  { key: 'loss', label: '盘亏', filter: { txn_type: { $eq: '盘亏' } }, group: 'outbound' },
 ];
 
-const ALL_STATS = [...LEVEL_STATS, ...STATUS_STATS];
+const ALL_STATS = [...STATS, ...DETAIL_STATS];
 
 function useStats() {
   const [counts, setCounts] = useState({});
@@ -27,13 +46,13 @@ function useStats() {
     try {
       const queries = ALL_STATS.filter((s) => s.filter).map((s) =>
         ctx.api.request({
-          url: 'nb_erp_customers:list',
+          url: 'nb_erp_inventory:list',
           params: { pageSize: 1, filter: s.filter },
         }).then((res) => [s.key, res?.data?.meta?.count || 0])
       );
 
       const totalRes = await ctx.api.request({
-        url: 'nb_erp_customers:list',
+        url: 'nb_erp_inventory:list',
         params: { pageSize: 1 },
       });
 
@@ -42,7 +61,7 @@ function useStats() {
       results.forEach(([k, v]) => { map[k] = v; });
       setCounts(map);
     } catch (e) {
-      console.error('filter_customer_stats: fetch error', e);
+      console.error('filter_inv_stats: fetch error', e);
     } finally {
       setLoading(false);
     }
@@ -66,7 +85,7 @@ function StatsFilter() {
         await target.resource.refresh();
       }
     } catch (e) {
-      console.error('filter_customer_stats: filter error', e);
+      console.error('filter_inv_stats: filter error', e);
     }
   }, []);
 
@@ -76,7 +95,7 @@ function StatsFilter() {
 
   return (
     <Space wrap size={[8, 8]}>
-      {LEVEL_STATS.map((stat) => (
+      {STATS.map((stat) => (
         <Badge key={stat.key} count={counts[stat.key] ?? 0} overflowCount={9999} offset={[6, 0]}>
           <Button
             type={active === stat.key ? 'primary' : 'default'}
@@ -88,12 +107,11 @@ function StatsFilter() {
         </Badge>
       ))}
       <Divider type="vertical" />
-      {STATUS_STATS.map((stat) => (
+      {DETAIL_STATS.map((stat) => (
         <Badge key={stat.key} count={counts[stat.key] ?? 0} overflowCount={9999} offset={[6, 0]}>
           <Button
             type={active === stat.key ? 'primary' : 'default'}
             size="small"
-            danger={stat.key === 'blacklist'}
             onClick={() => handleClick(stat)}
           >
             {stat.label}

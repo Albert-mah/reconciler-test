@@ -1,4 +1,4 @@
-const TARGET_BLOCK_UID = '__TABLE_UID__';
+const TARGET_BLOCK_UID = 'uzzmxckhlla';
 const { useState, useEffect, useCallback } = ctx.React;
 const { Button, Badge, Space, Spin } = ctx.antd;
 

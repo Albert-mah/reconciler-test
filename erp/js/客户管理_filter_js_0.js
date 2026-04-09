@@ -1,18 +1,22 @@
-const TARGET_BLOCK_UID = '__TABLE_UID__';
+const TARGET_BLOCK_UID = 'e9rm4gidu46';
 const { useState, useEffect, useCallback } = ctx.React;
-const { Button, Badge, Space, Spin } = ctx.antd;
+const { Button, Badge, Space, Spin, Divider } = ctx.antd;
 
-const STATS = [
-  { key: 'all', label: '全部', filter: null },
-  { key: 'draft', label: '草稿', filter: { status: { $eq: '草稿' } } },
-  { key: 'confirmed', label: '已确认', filter: { status: { $eq: '已确认' } } },
-  { key: 'producing', label: '生产中', filter: { status: { $eq: '生产中' } } },
-  { key: 'ready', label: '待发货', filter: { status: { $eq: '待发货' } } },
-  { key: 'partial_ship', label: '部分发货', filter: { status: { $eq: '部分发货' } } },
-  { key: 'shipped', label: '已发货', filter: { status: { $eq: '已发货' } } },
-  { key: 'signed', label: '已签收', filter: { status: { $eq: '已签收' } } },
-  { key: 'cancelled', label: '已取消', filter: { status: { $eq: '已取消' } } },
+const LEVEL_STATS = [
+  { key: 'all', label: '全部', filter: null, group: 'level' },
+  { key: 'vip', label: 'VIP', filter: { level: { $eq: 'VIP' } }, group: 'level' },
+  { key: 'a', label: 'A级', filter: { level: { $eq: 'A' } }, group: 'level' },
+  { key: 'b', label: 'B级', filter: { level: { $eq: 'B' } }, group: 'level' },
+  { key: 'c', label: 'C级', filter: { level: { $eq: 'C' } }, group: 'level' },
 ];
+
+const STATUS_STATS = [
+  { key: 'active', label: '活跃', filter: { status: { $eq: '活跃' } }, group: 'status' },
+  { key: 'paused', label: '暂停', filter: { status: { $eq: '暂停' } }, group: 'status' },
+  { key: 'blacklist', label: '黑名单', filter: { status: { $eq: '黑名单' } }, group: 'status' },
+];
+
+const ALL_STATS = [...LEVEL_STATS, ...STATUS_STATS];
 
 function useStats() {
   const [counts, setCounts] = useState({});
@@ -21,15 +25,15 @@ function useStats() {
   const fetchCounts = useCallback(async () => {
     setLoading(true);
     try {
-      const queries = STATS.filter((s) => s.filter).map((s) =>
+      const queries = ALL_STATS.filter((s) => s.filter).map((s) =>
         ctx.api.request({
-          url: 'nb_erp_sales_orders:list',
+          url: 'nb_erp_customers:list',
           params: { pageSize: 1, filter: s.filter },
         }).then((res) => [s.key, res?.data?.meta?.count || 0])
       );
 
       const totalRes = await ctx.api.request({
-        url: 'nb_erp_sales_orders:list',
+        url: 'nb_erp_customers:list',
         params: { pageSize: 1 },
       });
 
@@ -38,7 +42,7 @@ function useStats() {
       results.forEach(([k, v]) => { map[k] = v; });
       setCounts(map);
     } catch (e) {
-      console.error('filter_so_stats: fetch error', e);
+      console.error('filter_customer_stats: fetch error', e);
     } finally {
       setLoading(false);
     }
@@ -62,7 +66,7 @@ function StatsFilter() {
         await target.resource.refresh();
       }
     } catch (e) {
-      console.error('filter_so_stats: filter error', e);
+      console.error('filter_customer_stats: filter error', e);
     }
   }, []);
 
@@ -72,11 +76,24 @@ function StatsFilter() {
 
   return (
     <Space wrap size={[8, 8]}>
-      {STATS.map((stat) => (
+      {LEVEL_STATS.map((stat) => (
         <Badge key={stat.key} count={counts[stat.key] ?? 0} overflowCount={9999} offset={[6, 0]}>
           <Button
             type={active === stat.key ? 'primary' : 'default'}
             size="small"
+            onClick={() => handleClick(stat)}
+          >
+            {stat.label}
+          </Button>
+        </Badge>
+      ))}
+      <Divider type="vertical" />
+      {STATUS_STATS.map((stat) => (
+        <Badge key={stat.key} count={counts[stat.key] ?? 0} overflowCount={9999} offset={[6, 0]}>
+          <Button
+            type={active === stat.key ? 'primary' : 'default'}
+            size="small"
+            danger={stat.key === 'blacklist'}
             onClick={() => handleClick(stat)}
           >
             {stat.label}
