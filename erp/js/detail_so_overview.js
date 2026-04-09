@@ -1,97 +1,65 @@
-const { Card, Row, Col, Statistic, Tag, Space, Steps, Divider, Typography } = ctx.antd;
-const { Text } = Typography;
-const {
-  so_no,
-  customer_name,
-  total_amount,
-  tax_amount,
-  status,
-  priority,
-  order_date,
-  delivery_date,
-  shipped_date,
-} = ctx.record;
+/**
+ * Sales Order Overview KPI — amount + status steps + delivery countdown
+ * @type JSItemModel
+ */
+const { Card, Row, Col, Statistic, Steps, Tag, Space } = ctx.antd;
+const r = ctx.record;
 
-const total = (total_amount ?? 0) + (tax_amount ?? 0);
+const total = parseFloat(r.total_amount) || 0;
+const tax = parseFloat(r.tax_amount) || 0;
+const grand = total + tax;
+const status = r.status || 'Draft';
+const delivery = r.delivery_date;
 
-const priorityMap = {
-  '紧急': 'red',
-  '高': 'orange',
-  '普通': 'blue',
-  '低': 'gray',
-};
+const fmtAmt = (v) => v >= 1e6 ? `$${(v/1e6).toFixed(2)}M` : v >= 1e3 ? `$${(v/1e3).toFixed(1)}K` : `$${v.toFixed(2)}`;
 
-const statusColorMap = {
-  '草稿': 'default',
-  '已确认': 'processing',
-  '生产中': 'blue',
-  '待发货': 'orange',
-  '已发货': 'cyan',
-  '已签收': 'green',
-};
+const flow = ['Draft', 'Confirmed', 'In Production', 'Ready to Ship', 'Shipped', 'Delivered'];
+const currentIdx = flow.indexOf(status);
 
-const stepList = ['草稿', '已确认', '生产中', '待发货', '已发货', '已签收'];
-const currentStep = stepList.indexOf(status);
-
-const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('zh-CN') : '-');
-
-const now = new Date();
-const deliveryDt = delivery_date ? new Date(delivery_date) : null;
-const shippedDt = shipped_date ? new Date(shipped_date) : null;
-const isOverdue =
-  deliveryDt &&
-  !shippedDt &&
-  now > deliveryDt &&
-  currentStep >= 0 &&
-  currentStep < 4;
+let daysLeft = null;
+let daysColor = '#52c41a';
+if (delivery && status !== 'Delivered' && status !== 'Shipped' && status !== 'Cancelled') {
+  const now = ctx.libs.dayjs();
+  const target = ctx.libs.dayjs(delivery);
+  daysLeft = target.diff(now, 'day');
+  daysColor = daysLeft < 0 ? '#ff4d4f' : daysLeft <= 3 ? '#faad14' : daysLeft <= 7 ? '#1677ff' : '#52c41a';
+}
 
 ctx.render(
-  <Card size="small" style={{ marginBottom: 16 }} title="销售单概览">
-    <Row gutter={16} align="middle">
-      <Col span={8}>
-        <Statistic
-          title="合计金额（含税）"
-          value={total}
-          precision={2}
-          prefix="¥"
-        />
-      </Col>
-      <Col span={4}>
-        <div style={{ marginBottom: 4 }}>
-          <Text type="secondary" style={{ fontSize: 12 }}>优先级</Text>
-        </div>
-        <Tag color={priorityMap[priority] || 'default'}>{priority || '-'}</Tag>
-      </Col>
-      <Col span={4}>
-        <div style={{ marginBottom: 4 }}>
-          <Text type="secondary" style={{ fontSize: 12 }}>状态</Text>
-        </div>
-        <Tag color={statusColorMap[status] || 'default'}>{status || '-'}</Tag>
-      </Col>
-    </Row>
-    <Divider style={{ margin: '12px 0' }} />
-    <Steps
-      size="small"
-      current={currentStep >= 0 ? currentStep : 0}
-      status={isOverdue ? 'error' : 'process'}
-      items={stepList.map((s) => ({ title: s }))}
-    />
-    <Divider style={{ margin: '12px 0' }} />
+  <Card size="small" style={{ marginBottom: 12 }}>
     <Row gutter={16}>
       <Col span={8}>
-        <Text type="secondary">下单日期：</Text>
-        <Text>{fmtDate(order_date)}</Text>
+        <Statistic
+          title="Grand Total"
+          value={fmtAmt(grand)}
+          valueStyle={{ fontSize: 22, fontWeight: 700, color: '#1677ff' }}
+        />
+        <div style={{ color: '#999', fontSize: 11, marginTop: 2 }}>
+          Subtotal: {fmtAmt(total)} + Tax: {fmtAmt(tax)}
+        </div>
       </Col>
       <Col span={8}>
-        <Text type="secondary">交货日期：</Text>
-        <Text>{fmtDate(delivery_date)}</Text>
-      </Col>
-      <Col span={8}>
-        <Text type="secondary">发货日期：</Text>
-        {isOverdue ? (
-          <Text type="danger" strong>逾期未发货</Text>
+        {status === 'Cancelled' ? (
+          <Tag color="red" style={{ fontSize: 14, padding: '4px 12px' }}>Cancelled</Tag>
         ) : (
-          <Text>{fmtDate(shipped_date)}</Text>
+          <Steps
+            size="small"
+            current={currentIdx >= 0 ? currentIdx : 0}
+            items={flow.map(s => ({ title: s === status ? s : '' }))}
+            direction="vertical"
+            style={{ maxHeight: 120 }}
+          />
+        )}
+      </Col>
+      <Col span={8}>
+        {daysLeft !== null ? (
+          <Statistic
+            title="Delivery"
+            value={daysLeft < 0 ? `Overdue ${Math.abs(daysLeft)}d` : `${daysLeft}d left`}
+            valueStyle={{ fontSize: 18, color: daysColor }}
+          />
+        ) : (
+          <Statistic title="Delivery" value={status === 'Delivered' ? 'Complete' : '-'} valueStyle={{ fontSize: 16 }} />
         )}
       </Col>
     </Row>

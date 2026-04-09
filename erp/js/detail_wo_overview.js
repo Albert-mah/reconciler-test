@@ -1,153 +1,85 @@
-const { Card, Row, Col, Statistic, Tag, Space, Steps, Progress, Divider, Typography } = ctx.antd;
-const { Text } = Typography;
-const {
-  wo_no,
-  product_name,
-  planned_qty,
-  completed_qty,
-  defect_qty,
-  status,
-  priority,
-  planned_start,
-  planned_end,
-  actual_start,
-  actual_end,
-  workshop,
-} = ctx.record;
+/**
+ * Work Order Overview KPI — progress circle + yield + dates
+ * @type JSItemModel
+ */
+const { Card, Row, Col, Statistic, Progress, Tag, Space } = ctx.antd;
+const r = ctx.record;
 
-const planned = planned_qty ?? 0;
-const completed = completed_qty ?? 0;
-const defect = defect_qty ?? 0;
-const goodQty = completed - defect;
+const planned = parseInt(r.planned_qty) || 0;
+const completed = parseInt(r.completed_qty) || 0;
+const defect = parseInt(r.defect_qty) || 0;
+const total = completed + defect;
+const completionPct = planned > 0 ? Math.round(completed / planned * 100) : 0;
+const yieldPct = total > 0 ? (completed / total * 100).toFixed(1) : '0.0';
+const status = r.status || 'Scheduled';
 
-const completionPct = planned > 0 ? Math.round((completed / planned) * 100) : 0;
-const yieldRate = completed > 0 ? ((goodQty / completed) * 100).toFixed(1) : '-';
+const plannedStart = r.planned_start;
+const plannedEnd = r.planned_end;
+const actualStart = r.actual_start;
+const actualEnd = r.actual_end;
 
-let progressColor;
-if (completionPct >= 100) {
-  progressColor = '#52c41a';
-} else if (completionPct >= 60) {
-  progressColor = '#1890ff';
-} else if (completionPct >= 30) {
-  progressColor = '#faad14';
-} else {
-  progressColor = '#ff4d4f';
+let scheduleTag = null;
+if (plannedEnd && !actualEnd && status !== 'Completed' && status !== 'Closed') {
+  const now = ctx.libs.dayjs();
+  const end = ctx.libs.dayjs(plannedEnd);
+  const diff = end.diff(now, 'day');
+  if (diff < 0) {
+    scheduleTag = <Tag color="red">Behind {Math.abs(diff)}d</Tag>;
+  } else if (diff <= 2) {
+    scheduleTag = <Tag color="orange">Due in {diff}d</Tag>;
+  } else {
+    scheduleTag = <Tag color="green">On track</Tag>;
+  }
+} else if (actualEnd && plannedEnd) {
+  const actual = ctx.libs.dayjs(actualEnd);
+  const planned_ = ctx.libs.dayjs(plannedEnd);
+  const diff = actual.diff(planned_, 'day');
+  if (diff > 0) {
+    scheduleTag = <Tag color="orange">Finished {diff}d late</Tag>;
+  } else {
+    scheduleTag = <Tag color="green">On time</Tag>;
+  }
 }
 
-const priorityMap = {
-  '紧急': 'red',
-  '高': 'orange',
-  '普通': 'blue',
-  '低': 'gray',
-};
-
-const statusColorMap = {
-  '待排产': 'default',
-  '生产中': 'processing',
-  '暂停': 'warning',
-  '已完工': 'green',
-  '已关闭': 'gray',
-};
-
-const stepList = ['待排产', '生产中', '已完工', '已关闭'];
-const currentStep = stepList.indexOf(status);
-const isPaused = status === '暂停';
-
-const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('zh-CN') : '-');
-
-const now = new Date();
-const plannedEndDt = planned_end ? new Date(planned_end) : null;
-const isOverdue =
-  plannedEndDt &&
-  !actual_end &&
-  now > plannedEndDt &&
-  status !== '已完工' &&
-  status !== '已关闭';
+const yieldColor = parseFloat(yieldPct) >= 98 ? '#52c41a' : parseFloat(yieldPct) >= 95 ? '#1677ff' : parseFloat(yieldPct) >= 90 ? '#faad14' : '#ff4d4f';
 
 ctx.render(
-  <Card size="small" style={{ marginBottom: 16 }} title="生产工单概览">
+  <Card size="small" style={{ marginBottom: 12 }}>
     <Row gutter={16} align="middle">
-      <Col span={5} style={{ textAlign: 'center' }}>
+      <Col span={6} style={{ textAlign: 'center' }}>
         <Progress
           type="circle"
-          percent={completionPct}
+          percent={Math.min(completionPct, 100)}
           size={80}
-          strokeColor={progressColor}
-          format={(pct) => `${pct}%`}
+          format={() => `${completed}/${planned}`}
+          strokeColor={completionPct >= 100 ? '#52c41a' : '#1677ff'}
         />
-        <div style={{ marginTop: 4 }}>
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            {completed}/{planned}
-          </Text>
-        </div>
+        <div style={{ marginTop: 4, fontSize: 12, color: '#666' }}>Completion</div>
       </Col>
-      <Col span={5}>
+      <Col span={6}>
         <Statistic
-          title="良品率"
-          value={yieldRate}
-          suffix={yieldRate !== '-' ? '%' : ''}
-          valueStyle={{
-            color:
-              yieldRate !== '-' && parseFloat(yieldRate) >= 98
-                ? '#3f8600'
-                : yieldRate !== '-' && parseFloat(yieldRate) >= 95
-                ? '#d4b106'
-                : '#cf1322',
-          }}
+          title="Yield Rate"
+          value={yieldPct}
+          suffix="%"
+          valueStyle={{ fontSize: 22, color: yieldColor }}
         />
-      </Col>
-      <Col span={4}>
-        <div style={{ marginBottom: 4 }}>
-          <Text type="secondary" style={{ fontSize: 12 }}>优先级</Text>
-        </div>
-        <Tag color={priorityMap[priority] || 'default'}>{priority || '-'}</Tag>
-      </Col>
-      <Col span={4}>
-        <div style={{ marginBottom: 4 }}>
-          <Text type="secondary" style={{ fontSize: 12 }}>状态</Text>
-        </div>
-        <Tag color={statusColorMap[status] || 'default'}>{status || '-'}</Tag>
-      </Col>
-      <Col span={4}>
-        <div style={{ marginBottom: 4 }}>
-          <Text type="secondary" style={{ fontSize: 12 }}>车间</Text>
-        </div>
-        <Text>{workshop || '-'}</Text>
-      </Col>
-    </Row>
-    <Divider style={{ margin: '12px 0' }} />
-    <Steps
-      size="small"
-      current={isPaused ? 1 : currentStep >= 0 ? currentStep : 0}
-      status={isPaused ? 'error' : isOverdue ? 'error' : 'process'}
-      items={stepList.map((s, i) => ({
-        title: s,
-        description: isPaused && i === 1 ? '⚠ 暂停中' : undefined,
-      }))}
-    />
-    <Divider style={{ margin: '12px 0' }} />
-    <Row gutter={16}>
-      <Col span={6}>
-        <Text type="secondary">计划开始：</Text>
-        <Text>{fmtDate(planned_start)}</Text>
+        <div style={{ color: '#999', fontSize: 11 }}>Defects: {defect}</div>
       </Col>
       <Col span={6}>
-        <Text type="secondary">计划结束：</Text>
-        <Text style={isOverdue ? { color: '#ff4d4f', fontWeight: 'bold' } : undefined}>
-          {fmtDate(planned_end)}
-        </Text>
+        <Space direction="vertical" size={2}>
+          <Statistic title="Status" value={status} valueStyle={{ fontSize: 16 }} />
+          {scheduleTag}
+        </Space>
       </Col>
       <Col span={6}>
-        <Text type="secondary">实际开始：</Text>
-        <Text>{fmtDate(actual_start)}</Text>
-      </Col>
-      <Col span={6}>
-        <Text type="secondary">实际结束：</Text>
-        {isOverdue ? (
-          <Text type="danger" strong>逾期</Text>
-        ) : (
-          <Text>{fmtDate(actual_end)}</Text>
-        )}
+        <Space direction="vertical" size={2}>
+          <div style={{ fontSize: 12, color: '#999' }}>
+            Plan: {plannedStart ? ctx.libs.dayjs(plannedStart).format('MM/DD') : '-'} ~ {plannedEnd ? ctx.libs.dayjs(plannedEnd).format('MM/DD') : '-'}
+          </div>
+          <div style={{ fontSize: 12, color: '#666' }}>
+            Actual: {actualStart ? ctx.libs.dayjs(actualStart).format('MM/DD') : '-'} ~ {actualEnd ? ctx.libs.dayjs(actualEnd).format('MM/DD') : '-'}
+          </div>
+        </Space>
       </Col>
     </Row>
   </Card>

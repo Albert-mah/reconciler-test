@@ -1,87 +1,58 @@
-const { Card, Row, Col, Statistic, Tag, Space, Badge, Divider, Typography } = ctx.antd;
-const { Text } = Typography;
-const {
-  level,
-  industry,
-  payment_terms,
-  credit_limit,
-  tax_rate,
-  contact,
-  phone,
-  status,
-} = ctx.record;
+/**
+ * Customer Profile KPI — level badge + credit + payment terms
+ * @type JSItemModel
+ */
+const { Card, Row, Col, Statistic, Badge, Tag, Space } = ctx.antd;
+const r = ctx.record;
 
-const levelConfig = {
-  VIP: { color: 'gold', fontSize: 28 },
-  A: { color: 'blue', fontSize: 22 },
-  B: { color: 'green', fontSize: 18 },
-  C: { color: 'gray', fontSize: 16 },
-};
-const lv = levelConfig[level] || { color: 'gray', fontSize: 16 };
+const level = r.level || '-';
+const credit = parseFloat(r.credit_limit) || 0;
+const taxRate = parseFloat(r.tax_rate) || 0;
+const payment = r.payment_terms || '-';
+const status = r.status || '-';
 
-const statusColorMap = {
-  '正常': 'green',
-  '停用': 'red',
-  '黑名单': 'red',
-  '待审核': 'orange',
-};
-
-const paymentColorMap = {
-  '预付': 'green',
-  '月结30天': 'blue',
-  '月结60天': 'orange',
-  '月结90天': 'red',
-};
+const levelColors = { VIP: '#722ed1', A: '#1677ff', B: '#52c41a', C: '#faad14' };
+const statusColors = { Active: 'green', Suspended: 'orange', Blocked: 'red' };
+const fmtCredit = credit >= 1e6 ? `$${(credit/1e6).toFixed(1)}M` : credit >= 1e3 ? `$${(credit/1e3).toFixed(0)}K` : `$${credit.toFixed(0)}`;
 
 ctx.render(
-  <Card size="small" style={{ marginBottom: 16 }} title="客户画像">
+  <Card size="small" style={{ marginBottom: 12 }}>
     <Row gutter={16} align="middle">
-      <Col span={4} style={{ textAlign: 'center' }}>
-        <Badge
-          color={lv.color}
-          text={
-            <span style={{ fontSize: lv.fontSize, fontWeight: 'bold', color: lv.color }}>
-              {level || '-'}
-            </span>
-          }
-        />
+      <Col span={6}>
+        <Space direction="vertical" size={2} align="center" style={{ width: '100%' }}>
+          <div style={{
+            width: 48, height: 48, borderRadius: '50%',
+            background: levelColors[level] || '#999',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: '#fff', fontWeight: 700, fontSize: 18
+          }}>
+            {level}
+          </div>
+          <Tag color={statusColors[status] || 'default'}>{status}</Tag>
+        </Space>
       </Col>
-      <Col span={5}>
+      <Col span={6}>
         <Statistic
-          title="信用额度"
-          value={credit_limit ?? 0}
-          precision={0}
-          prefix="¥"
+          title="Credit Limit"
+          value={fmtCredit}
+          valueStyle={{ fontSize: 18, color: levelColors[level] }}
         />
       </Col>
-      <Col span={4}>
-        <div style={{ marginBottom: 4 }}>
-          <Text type="secondary" style={{ fontSize: 12 }}>付款条件</Text>
-        </div>
-        <Tag color={paymentColorMap[payment_terms] || 'default'}>
-          {payment_terms || '-'}
-        </Tag>
+      <Col span={6}>
+        <Statistic
+          title="Tax Rate"
+          value={taxRate}
+          suffix="%"
+          valueStyle={{ fontSize: 18 }}
+        />
       </Col>
-      <Col span={4}>
-        <div style={{ marginBottom: 4 }}>
-          <Text type="secondary" style={{ fontSize: 12 }}>行业</Text>
-        </div>
-        <Tag color="purple">{industry || '-'}</Tag>
-      </Col>
-      <Col span={3}>
-        <Statistic title="税率" value={tax_rate ?? 0} suffix="%" precision={1} />
-      </Col>
-      <Col span={4}>
-        <div style={{ marginBottom: 4 }}>
-          <Text type="secondary" style={{ fontSize: 12 }}>状态</Text>
-        </div>
-        <Tag color={statusColorMap[status] || 'default'}>{status || '-'}</Tag>
+      <Col span={6}>
+        <Statistic
+          title="Payment Terms"
+          value={payment}
+          valueStyle={{ fontSize: 16 }}
+        />
       </Col>
     </Row>
-    <Divider style={{ margin: '12px 0' }} />
-    <Space size={24}>
-      <Text><Text type="secondary">联系人：</Text>{contact || '-'}</Text>
-      <Text><Text type="secondary">电话：</Text>{phone || '-'}</Text>
-    </Space>
   </Card>
 );

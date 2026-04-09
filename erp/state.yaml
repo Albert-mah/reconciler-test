@@ -1,625 +1,625 @@
-group_id: 357928941125641
+group_id: 357955354755088
 pages:
-  物料管理:
-    route_id: 357928941125643
-    page_uid: vzr060qxosl
-    tab_uid: apjl8j97m1b
-    grid_uid: oeof9f36uxi
+  materials:
+    route_id: 357955354755090
+    page_uid: 9zqy90j4znr
+    tab_uid: fmsyalfd96f
+    grid_uid: h6rquhf0gzi
     blocks:
       filter:
-        uid: 5h6qu51ac33
+        uid: ufzuit6axsc
         type: filterForm
-        grid_uid: ko2wcbqj06b
+        grid_uid: 9w3nbfhu702
         fields:
           name:
-            wrapper: cm1o0zyg41m
-            field: e1otcbq7uwq
+            wrapper: myitdvyisba
+            field: 2sah0my9ly0
           category:
-            wrapper: 7bj1bkty3oi
-            field: qygnmh7p4it
+            wrapper: 4utys7ynhd6
+            field: bt7gkwkcqfj
           status:
-            wrapper: 7ya0cky3947
-            field: nef0nu4au8t
+            wrapper: hn4stjk4kod
+            field: ytloi3eqz0e
         js_items:
-          js_0:
-            uid: va7argb1wmi
+          Material Stats Filter:
+            uid: 4hvahunmr1d
       table:
-        uid: uzzmxckhlla
+        uid: coozl7m9ex7
         type: table
         grid_uid: ''
         fields:
-          product_code:
-            wrapper: eurlqxihuvq
-            field: i8unsai1anh
+          code:
+            wrapper: nau8ppmsagx
+            field: ws0nf17f13t
           name:
-            wrapper: h17e99vqmr3
-            field: gktlecjn2u3
+            wrapper: o8x5l6zr1c1
+            field: 0frbtsshn07
           category:
-            wrapper: owy8c3em3jd
-            field: 44rds61kj9y
+            wrapper: dkx1xqgveo8
+            field: 40xhe43ln6m
           spec:
-            wrapper: o29oycw500c
-            field: 1g4mnx30jzf
+            wrapper: 7f6as6vyajo
+            field: 1iqkga460ei
           unit:
-            wrapper: 8sjiyk9gfa1
-            field: gao2i4yv4d7
-          standard_price:
-            wrapper: dfocx7qtato
-            field: 4i0bkajrnbb
+            wrapper: lvadugwz3kl
+            field: mpneck5m98b
+          list_price:
+            wrapper: eimlz1mvllj
+            field: alox0syt1he
           cost_price:
-            wrapper: 4d0553mrp4u
-            field: 5xex6gza8gv
+            wrapper: 60dvqjr46qd
+            field: i8mm7a4fwgu
           stock_qty:
-            wrapper: qcbvp4ttyl1
-            field: 3gza2cisd7b
+            wrapper: 0j3di94f0ry
+            field: l2phuunrakp
           status:
-            wrapper: qvqjhxz8qpk
-            field: tx6o04o1w85
+            wrapper: cjeb2yxwv68
+            field: vk7e8l0foyp
         actions:
           filter:
-            uid: 49ksciw1oay
+            uid: k8ozfuvxypn
           refresh:
-            uid: xr6s54zbuvh
+            uid: 8re8507yoof
           addNew:
-            uid: i7wljs7xqqh
+            uid: pbcnnl5ez46
           export:
-            uid: vlw69fmgol3
+            uid: 2bz9h8vriza
         record_actions:
           edit:
-            uid: 2bha39z4paj
+            uid: obfcysy4i4r
           delete:
-            uid: fu98xiy8dvi
+            uid: hwvboam470s
         js_columns:
-          库存状态:
-            uid: g4sjg2fgwtb
-          利润率:
-            uid: v2top64e1ej
-  客户管理:
-    route_id: 357928943222784
-    page_uid: zyx0itvnlry
-    tab_uid: mw8gdxt8a8e
-    grid_uid: pmnx0vi30ig
+          Stock Status:
+            uid: ac48v38ce06
+          Margin:
+            uid: l0bcljbcz76
+  customers:
+    route_id: 357955356852224
+    page_uid: xspkcu6y03b
+    tab_uid: si35a7k9ke4
+    grid_uid: 8erljuqq8tv
     blocks:
       filter:
-        uid: 6rntju30mfe
+        uid: ci35rt19wmt
         type: filterForm
-        grid_uid: j3co28suzcd
+        grid_uid: xbht71p3kjo
         fields:
           name:
-            wrapper: ogfg5nwbktg
-            field: 9h4rhg9gzj6
+            wrapper: 0g1iwrdw7ld
+            field: ci357zgg3b9
           level:
-            wrapper: ycncb2waaes
-            field: kqawsklv571
+            wrapper: 4wbc0gydxac
+            field: 10ndf4xg1qb
           status:
-            wrapper: c12duvcu5lz
-            field: n0jnysw426n
+            wrapper: hsuhhrsvr1x
+            field: 9pbuxyi7rp2
         js_items:
-          js_0:
-            uid: huw4mwx7p73
+          Customer Stats Filter:
+            uid: rqyfgsdy4mc
       table:
-        uid: e9rm4gidu46
+        uid: 85pvyxmyxm8
         type: table
         grid_uid: ''
         fields:
-          customer_code:
-            wrapper: du4ovpc05mt
-            field: ltlqyrdvj1r
+          code:
+            wrapper: qkv3bl4m71s
+            field: 00chsnaar9x
           name:
-            wrapper: k8v3zlav9bl
-            field: 18xdzxrfiqb
+            wrapper: 45q6yddfdpl
+            field: 204qd4wzm8o
           contact:
-            wrapper: plsy6wo7s2f
-            field: lvxu4uua3ve
+            wrapper: ezm0wl3e2xf
+            field: v55c7k46tfm
           phone:
-            wrapper: 2ucj0g82d2f
-            field: jwvl57h5irk
+            wrapper: gur8iw6ot18
+            field: uo7ifjtwd5f
           level:
-            wrapper: 5nwn314js1o
-            field: 1fz9kba7it2
+            wrapper: mwd5b1m7f23
+            field: 6mr0k25yzob
           industry:
-            wrapper: c8yqbm5pg7a
-            field: 2m10qgz9dsd
+            wrapper: eoy0djv5xtp
+            field: yen73wyp8ot
           payment_terms:
-            wrapper: ju6f7hz4d0n
-            field: ted2q75cnbh
+            wrapper: unxskd9d4pr
+            field: o6szli6cgcx
           credit_limit:
-            wrapper: bct2fdp1sgp
-            field: 3o85luj13ka
+            wrapper: wss2u3lxjud
+            field: ybj8edngnz1
           status:
-            wrapper: h1vzq7kcus8
-            field: 6jjpv74stfv
+            wrapper: zhljx0kubc9
+            field: b5astg2v3e0
         actions:
           filter:
-            uid: vfrkopcq594
+            uid: fgdk9499jv2
           refresh:
-            uid: gq0c5fdhbmn
+            uid: 0dsol7ypnbk
           addNew:
-            uid: wzx05gi83xc
+            uid: hosc5t12j0v
           export:
-            uid: 1pdcii2y1ir
+            uid: kvcq1zqqqli
         record_actions:
           edit:
-            uid: uhqzjizu06b
+            uid: vqe9p7sq53u
           delete:
-            uid: 7ekjuoo2jes
+            uid: z1hiyz3xpqn
         js_columns:
-          信用状况:
-            uid: sxame2jjxhs
-  供应商管理:
-    route_id: 357928945319936
-    page_uid: wfs2ab3u5ys
-    tab_uid: v3qobvivnj4
-    grid_uid: 3opj5egnrs5
+          Credit:
+            uid: 9fe1qgl0pyd
+  suppliers:
+    route_id: 357955358949376
+    page_uid: x5qib6mlyus
+    tab_uid: zj1yzwnbn25
+    grid_uid: 045i2isfzbm
     blocks:
       filter:
-        uid: 0dyswgxqlg1
+        uid: h76kcnw5lea
         type: filterForm
-        grid_uid: wvz3hefip8d
+        grid_uid: 77uvsmt7iuk
         fields:
           name:
-            wrapper: uh8i5hexuix
-            field: 427355uy9rb
+            wrapper: g6s6dr62otv
+            field: 22sa29bogbq
           rating:
-            wrapper: jcs741mxyp7
-            field: uz74dk06fqb
+            wrapper: 5qspt4tygsm
+            field: p1chynad01i
         js_items:
-          js_0:
-            uid: jzyiskmiz5j
+          Supplier Stats Filter:
+            uid: m36lrif7b74
       table:
-        uid: xek3spu6p7a
+        uid: m6h4ncv9igc
         type: table
         grid_uid: ''
         fields:
-          supplier_code:
-            wrapper: zohr39p1322
-            field: 8set90c89tn
+          code:
+            wrapper: 5z7e4eubfv3
+            field: r4nascxgpqh
           name:
-            wrapper: r4v3vuv8x44
-            field: q4kloe04q2n
+            wrapper: 4mk9yi32x7y
+            field: ovgv5c3rfcm
           contact:
-            wrapper: jz6s9nq2k9l
-            field: 54zo21jnrmb
+            wrapper: 3x0u3dxkrda
+            field: 9vlzcpvtn9p
           phone:
-            wrapper: bxqzv97udnb
-            field: 8ku0yymqgsv
+            wrapper: 7zea64ri1yo
+            field: ekq8lww5z9s
           category:
-            wrapper: drb0u78399t
-            field: xusx4ul64pq
+            wrapper: j1a04gjk0vo
+            field: u4jxg39em7u
           rating:
-            wrapper: ynxu5nqdtft
-            field: wofa2opyjzv
+            wrapper: sp637sjk2u4
+            field: fplfh3ipj8m
           delivery_score:
-            wrapper: e65w61p7yqa
-            field: e1b7f1ad1xn
+            wrapper: wbis5z9sy8y
+            field: hofvmcm9046
           quality_score:
-            wrapper: 1jqk8ooyjiw
-            field: knynqdyi1qp
+            wrapper: oovmje8l039
+            field: iyaa521a6hy
           status:
-            wrapper: sea6reupvks
-            field: 7daud2f36qy
+            wrapper: 7cmbngenc0d
+            field: x7j85rn18jt
         actions:
           filter:
-            uid: 0v7v24w5bpx
+            uid: nltkvc7kx5f
           refresh:
-            uid: ziissfne5p2
+            uid: lljyw3a4360
           addNew:
-            uid: 4c4apjdg5sw
+            uid: qtvxpfpm41p
           export:
-            uid: 0js8kpdmirt
+            uid: slpu1wtmx9b
         record_actions:
           edit:
-            uid: wi99pgqbkpq
+            uid: lkr3vkvkp08
           delete:
-            uid: w3dic8e2pqd
+            uid: b0uojm5im0c
         js_columns:
-          综合评分:
-            uid: d8m0jyomu5v
-  采购管理:
-    route_id: 357928947417088
-    page_uid: hlbdmzsn25y
-    tab_uid: t69pszh957d
-    grid_uid: b59rb6wpuhg
+          Score:
+            uid: fkeppig9vyi
+  purchasing:
+    route_id: 357955361046528
+    page_uid: qx22m2s0czh
+    tab_uid: yu9ukwhwwvy
+    grid_uid: 2jm0wranjze
     blocks:
       filter:
-        uid: h16a53qwa66
+        uid: xs1usdo7tn3
         type: filterForm
-        grid_uid: rvntrrkeus0
+        grid_uid: oji88dg5gi6
         fields:
           po_no:
-            wrapper: 24i3j2oe1ay
-            field: 6dpow6spff9
+            wrapper: kgvhistjmnd
+            field: vi4p1k39q4s
           status:
-            wrapper: 9j5dddbgube
-            field: yis6f3snu2x
+            wrapper: sk7ttxlomms
+            field: 3xo2p81zwoy
           priority:
-            wrapper: mi8k1gw20pb
-            field: 0iwx0njm16l
+            wrapper: iyvpgkoe5t7
+            field: to0g9c0w1bm
         js_items:
-          js_0:
-            uid: bhew80l7jrn
+          PO Stats Filter:
+            uid: 8fcsz7ujdsk
       table:
-        uid: ptmrrvi8g59
+        uid: ig1801dquea
         type: table
         grid_uid: ''
         fields:
           po_no:
-            wrapper: qb3jzaqw3df
-            field: kghtyup43kr
+            wrapper: nzzyofuedlv
+            field: qdvua7o7mot
           supplier_name:
-            wrapper: sx64rw1whuf
-            field: e6in4ydvvh1
+            wrapper: pfj6qfokovt
+            field: jugw3flbdvn
           total_amount:
-            wrapper: 359a2c7zl8z
-            field: g0f0nralvu6
+            wrapper: wyjjdcp5dfk
+            field: wlvw23r21zh
           status:
-            wrapper: lscujcmt6ew
-            field: eqxfixsdgu8
+            wrapper: 3vg6oiol3qx
+            field: ppxk84g14ne
           priority:
-            wrapper: 1nt1z4i6y2k
-            field: 8wgf9bjdljb
+            wrapper: gfqcs5tt45d
+            field: 1a9sqtjiin8
           order_date:
-            wrapper: p4p5u9nztor
-            field: 5gqxlg1zcpz
+            wrapper: qtr0cebvsr9
+            field: b8c7fh3gfeb
           expected_date:
-            wrapper: mpd43fjqog0
-            field: qzk710nlb7p
+            wrapper: us96m2q5syx
+            field: 340dv42u3jh
           buyer:
-            wrapper: nc4oc6f3r47
-            field: wwav26gn8j7
+            wrapper: csamouc306o
+            field: j9s8xo3rtx4
         actions:
           filter:
-            uid: pk47ac4m94n
+            uid: 70tsze6pngp
           refresh:
-            uid: qgeiwm4v3f1
+            uid: amdhjuss40k
           addNew:
-            uid: ahnmhc3d02t
+            uid: nwcbcs2a5km
           export:
-            uid: yk1mbhmrmk5
+            uid: m938di9doeb
         record_actions:
           edit:
-            uid: 12xj6msyayp
+            uid: b2v2zv2iw7c
           delete:
-            uid: gbwo1fnrcvm
+            uid: 61xtkj40kfh
         js_columns:
-          到货倒计时:
-            uid: 87rp8knebg4
-          金额(含税):
-            uid: wimokpum21i
-  销售管理:
-    route_id: 357928947417090
-    page_uid: sdkv2b3c8f6
-    tab_uid: thn3ds1qhf8
-    grid_uid: o8gyc0g0hzi
+          ETA:
+            uid: nagpd9or6mx
+          Total (incl. tax):
+            uid: 0s2uq0is2tq
+  sales:
+    route_id: 357955363143680
+    page_uid: 5b85uvb0djb
+    tab_uid: ajm6r9d9cfv
+    grid_uid: lj75dltrt8u
     blocks:
       filter:
-        uid: 7dt7llrol9c
+        uid: a7rur04oafs
         type: filterForm
-        grid_uid: 7iyi4ij5ds2
+        grid_uid: tan35ytci1t
         fields:
           so_no:
-            wrapper: j5ctqemif5a
-            field: bqj9j6i573t
+            wrapper: kqrsman7gfg
+            field: 335ygcha10h
           status:
-            wrapper: 6y6k125f0an
-            field: fl4vzr505yr
+            wrapper: 91ydvdsuljk
+            field: cyes3wz289r
           priority:
-            wrapper: frr5rezuyqw
-            field: 5h681qqy41g
+            wrapper: 1drxy8w43uf
+            field: mrzvzfq9uzu
         js_items:
-          js_0:
-            uid: z336m6iw3ig
+          SO Stats Filter:
+            uid: vsj21zo04in
       table:
-        uid: qwz3wob8vyb
+        uid: nez66vncbzg
         type: table
         grid_uid: ''
         fields:
           so_no:
-            wrapper: k3869yqtjgq
-            field: g5286kpus13
+            wrapper: o3aag2fubwr
+            field: iu6fj3ksmbj
           customer_name:
-            wrapper: rk6k1hivmgn
-            field: rwvgravtra7
+            wrapper: lo8ru5srbrx
+            field: wt495msq1iq
           total_amount:
-            wrapper: jog9xlpa3lv
-            field: gk18z22zfnw
+            wrapper: j15dnz2ofay
+            field: n84k3la9muo
           status:
-            wrapper: r89zuh0iafb
-            field: yz5nlpggq3v
+            wrapper: 0lv1vwgt6mr
+            field: p34zsu34poq
           priority:
-            wrapper: zjmyfnrwtju
-            field: hni3k7f25m9
+            wrapper: 0bumpwaom5m
+            field: rhpu73f3wtx
           order_date:
-            wrapper: wo5jq7mwbe7
-            field: ptdtik0cehn
+            wrapper: sct3omcqol3
+            field: 6z1vhh913bm
           delivery_date:
-            wrapper: guf28f9m61e
-            field: dhyh0773aoj
+            wrapper: ol1kidaw9i6
+            field: 8lf885m8wm3
           sales_rep:
-            wrapper: o4sy88g871v
-            field: 5n60qkhix1v
+            wrapper: 0iemq9qlti7
+            field: 5lxjqzqy44z
         actions:
           filter:
-            uid: 79qg8id5xyv
+            uid: 3sx23dp5g3t
           refresh:
-            uid: kniq4ewcbcl
+            uid: 9t4bg2dhbxh
           addNew:
-            uid: 79e865c28y4
+            uid: lwxl03gez8c
           export:
-            uid: wu6g0z2bruf
+            uid: 11i1lw5i8o2
         record_actions:
           edit:
-            uid: f862oo6vm4y
+            uid: qi3abefody8
           delete:
-            uid: 1jzc8rtm6h3
+            uid: 5pir1p2us58
         js_columns:
-          交货倒计时:
-            uid: w6w6ri0jpdo
-          订单进度:
-            uid: 5ppppd8a4fg
-  生产管理:
-    route_id: 357928949514240
-    page_uid: je93vwp6b7a
-    tab_uid: hh7dp6powd0
-    grid_uid: 17th4i56qzy
+          Delivery:
+            uid: 6jchfqe4620
+          Progress:
+            uid: y5r1wd6s9g3
+  production:
+    route_id: 357955365240832
+    page_uid: x4f99a8x8cf
+    tab_uid: r0wyo2iiehg
+    grid_uid: ks3p5qyxy9h
     blocks:
       filter:
-        uid: k6l0or2eyqt
+        uid: wtqd63s7u84
         type: filterForm
-        grid_uid: 8924v4lg7en
+        grid_uid: fzpfi3b6ilh
         fields:
           wo_no:
-            wrapper: jos3cji6qz7
-            field: jo4fhq8h19n
+            wrapper: 0len0p60psq
+            field: afx1ne9725g
           status:
-            wrapper: swch1wz5obd
-            field: cwuaxe3frmq
+            wrapper: buvcumh3585
+            field: mydhpsnwxno
           priority:
-            wrapper: rdg1s5emccx
-            field: zvkxs4z9hl9
+            wrapper: 9u313n0yehj
+            field: bf49qh6t3i4
         js_items:
-          js_0:
-            uid: yh9vu38zo6h
+          WO Stats Filter:
+            uid: 1wzwh12k8jy
       table:
-        uid: tzc8ctbo4ug
+        uid: ivkvlkwrwzn
         type: table
         grid_uid: ''
         fields:
           wo_no:
-            wrapper: h5gqomljb50
-            field: 23817g7srpd
+            wrapper: 6se9be559rz
+            field: 7gi796suyz9
           product_name:
-            wrapper: jnn557mdbv6
-            field: 8xav2e4l27l
+            wrapper: koi6d4j91ra
+            field: xcuff75tri7
           planned_qty:
-            wrapper: a4q5o2dm9r9
-            field: z7cm1z4qk8t
+            wrapper: 1nycp85q6th
+            field: jk8qqt946cg
           completed_qty:
-            wrapper: 8e0mwqxrkg4
-            field: aotks7t352i
+            wrapper: 1quki6u9iqw
+            field: f2jv6e3cqij
           status:
-            wrapper: 62erg7cmin0
-            field: ywpcdj4pu8o
+            wrapper: k80qqvo1uex
+            field: a6qbff6h7ce
           priority:
-            wrapper: 8yyusv9mf6m
-            field: uj550kotwc5
+            wrapper: eyx0k56q9s7
+            field: 7jaccnp3wbw
           planned_start:
-            wrapper: opo632v1un7
-            field: jj3p2z51810
+            wrapper: psy7mebp16q
+            field: zpwvodp0ftp
           planned_end:
-            wrapper: o4dnwi188lj
-            field: zealdowfse3
+            wrapper: ynpmlx4w95q
+            field: 4z4jydosc8f
           workshop:
-            wrapper: y3172yru8j4
-            field: dslxgb62118
+            wrapper: oyz1hony8uv
+            field: yk4jrs2zs5n
         actions:
           filter:
-            uid: twyfnh2nv2t
+            uid: e1ic632444i
           refresh:
-            uid: cmvdhquz6dl
+            uid: 1dqo9b2kg9l
           addNew:
-            uid: tpv9nileep9
+            uid: o4vvzu0qt4s
           export:
-            uid: ftd4c7l0q3u
+            uid: 0uxpi6ve790
         record_actions:
           edit:
-            uid: 022vvt5noxo
+            uid: 3gb9p703ql1
           delete:
-            uid: 3cgotv6ufaz
+            uid: itv1j72sfic
         js_columns:
-          完工进度:
-            uid: 34ficyghe2y
-          良品率:
-            uid: 644qrgu5lqm
-  库存流水:
-    route_id: 357928951611392
-    page_uid: 7mf4klmiml1
-    tab_uid: t2yjk9rlvrb
-    grid_uid: 8fz8tutme2u
+          Completion:
+            uid: tdh9pzxcus6
+          Yield:
+            uid: ardmoy44qml
+  inventory:
+    route_id: 357955367337984
+    page_uid: glqbapzq3j4
+    tab_uid: mrevjqvojar
+    grid_uid: pzym42ogudl
     blocks:
       filter:
-        uid: 6p24qt4bj6q
+        uid: khlcgh02ry7
         type: filterForm
-        grid_uid: sak38llvhhx
+        grid_uid: q6itzjlo9cd
         fields:
           product_name:
-            wrapper: biziiw47c5a
-            field: ywzzbv8qj3f
+            wrapper: ocok9tgdo97
+            field: 81385nudddw
           txn_type:
-            wrapper: tsr4bsqj5v3
-            field: cot3xbpjkhw
+            wrapper: 2izaouow55q
+            field: xtd71qwsdpq
           warehouse:
-            wrapper: huo88wza6v4
-            field: a0buf0u8d5x
+            wrapper: uaqgxoa5qvz
+            field: 0nlcsyhfoxa
         js_items:
-          js_0:
-            uid: gm9w6e6b8wq
+          Inventory Stats Filter:
+            uid: 39hwytknyb5
       table:
-        uid: pr52g7108ir
+        uid: w1l5l5e4t7j
         type: table
         grid_uid: ''
         fields:
           txn_no:
-            wrapper: 0zdyejqcbfr
-            field: utokkb3ii5j
+            wrapper: dlkx7s2fi1g
+            field: iy0gxiec9bq
           product_name:
-            wrapper: 2m8325p7jb7
-            field: b66obepz9tp
+            wrapper: 2l80qr7njra
+            field: u6f8iuao209
           product_code:
-            wrapper: n85wc44d12r
-            field: qzzpukdckwk
+            wrapper: 9v0jg9w1pta
+            field: jwfso4vdxh5
           txn_type:
-            wrapper: 3hdgc48j8sf
-            field: irmy94d67br
+            wrapper: j1je5i3t1b0
+            field: xmuc94zi8ez
           qty:
-            wrapper: q8mhk6ylnr6
-            field: lp0ydhvdfah
+            wrapper: i10r0s6qn91
+            field: 67wv5af8woa
           warehouse:
-            wrapper: egdnkvng3wi
-            field: hcequo426bn
+            wrapper: oh2w0lm5hgh
+            field: w1mut8e4447
           ref_no:
-            wrapper: ypxk22ggfay
-            field: tqgor492wpa
+            wrapper: 2nn28j86qo9
+            field: 6t1og0rlbgn
           operator:
-            wrapper: cin5x8889lg
-            field: vtuxgpmdbr3
+            wrapper: s7f1ncsz8sl
+            field: 4u2cq5eai3q
         actions:
           filter:
-            uid: vcubict4u4f
+            uid: ye7r8t4ou0e
           refresh:
-            uid: dawaborh7iq
+            uid: 0buoix123w0
           addNew:
-            uid: u1xwgnn1l03
+            uid: 9su389wr2is
           export:
-            uid: t7d6orlbn7j
+            uid: fbpsgl5w998
         record_actions:
           edit:
-            uid: en7yeysedoh
+            uid: 6k1k8mtp5te
           delete:
-            uid: oq48ha0mu2u
+            uid: vbgkvli0qy1
         js_columns:
-          出入标记:
-            uid: 1sb786j7ys8
-  质检管理:
-    route_id: 357928953708544
-    page_uid: 062vnabtevy
-    tab_uid: mjtzpmd1pzj
-    grid_uid: w2cd1ef6v9a
+          Direction:
+            uid: fbba2dnyynt
+  quality:
+    route_id: 357955367337987
+    page_uid: f5rm8es707y
+    tab_uid: 1rrabkaodz6
+    grid_uid: 3o2um7v9wr4
     blocks:
       filter:
-        uid: t5592go43ij
+        uid: jhzmn4xqbnj
         type: filterForm
-        grid_uid: pi21tr6qrzc
+        grid_uid: dn9nia32ir5
         fields:
           qc_no:
-            wrapper: j779pckfvhm
-            field: agosj5ovp5x
+            wrapper: iekbtmudutl
+            field: 6ipjrj4x1i8
           qc_type:
-            wrapper: ndmxeobnb9b
-            field: ex41x8neb7m
+            wrapper: ka477y6bkg4
+            field: yjp1xgri6a5
           result:
-            wrapper: fznp5wbdeyl
-            field: uciiol52n0y
+            wrapper: ht18hkfiisi
+            field: berwfvalco0
         js_items:
-          js_0:
-            uid: r5do4fau1dm
+          QC Stats Filter:
+            uid: 0fsrqpe845g
       table:
-        uid: mjz4km03jpr
+        uid: r405jyu04d1
         type: table
         grid_uid: ''
         fields:
           qc_no:
-            wrapper: n1r9z6lowf8
-            field: br7fwygttdc
+            wrapper: 8cfylc3kgxn
+            field: bokr3e90zp0
           product_name:
-            wrapper: uxxfslcywdo
-            field: p9vut809hfz
+            wrapper: 5pzxkmo5quu
+            field: d9aqwrtni89
           qc_type:
-            wrapper: inknbuq2a9l
-            field: rngxhkymyce
+            wrapper: u0fm62gphqg
+            field: 77gwpdyew38
           batch_no:
-            wrapper: 26ymbp9ar2n
-            field: ly90om0x280
+            wrapper: i9wckzgfxi7
+            field: 4geb4yj4347
           sample_qty:
-            wrapper: ewmcxdr11x9
-            field: w2ttxv574nw
+            wrapper: 5trmb4s25pi
+            field: dil31sq96xw
           pass_qty:
-            wrapper: mmz73ebyonb
-            field: 2kd13blfk0m
+            wrapper: u17r4hkdegy
+            field: ttwiusb4j3m
           fail_qty:
-            wrapper: lbm1nwddt5w
-            field: d1fn1plryzv
+            wrapper: rp67ksg3mqq
+            field: ryv2jam2v68
           result:
-            wrapper: dg9ga8vwzsv
-            field: jakied7t621
+            wrapper: os1l2tready
+            field: iggcqqmpamn
           inspector:
-            wrapper: 0fozcrkbgp6
-            field: 03o4spr5wew
+            wrapper: q8zbi1kgx4r
+            field: z192tdt5io9
         actions:
           filter:
-            uid: omw52sdw5ii
+            uid: 48eqa3p8mim
           refresh:
-            uid: cqm59dun3k4
+            uid: yoj4l3w3pf5
           addNew:
-            uid: yjp5v769xow
+            uid: d5z0vc2xbnt
           export:
-            uid: 701qeixcs67
+            uid: wi9i20a02yt
         record_actions:
           edit:
-            uid: v5898ql3eba
+            uid: 509ruc941gi
           delete:
-            uid: xzhob3zvj6d
+            uid: kpstiuycmwu
         js_columns:
-          合格率:
-            uid: a2eucp7sew2
-  经营仪表盘:
-    route_id: 357934553104384
-    page_uid: yh1a3c880ei
-    tab_uid: 6imlqeuqzzq
-    grid_uid: q3tedmzyjng
+          Pass Rate:
+            uid: pznzzltbcox
+  dashboard:
+    route_id: 357955369435136
+    page_uid: isyp59ualw1
+    tab_uid: qvlagtcqgzn
+    grid_uid: frexszljcd7
     blocks:
       kpi_sales:
-        uid: or7nt1gsznu
+        uid: 74u9z82ugwo
         type: jsBlock
         grid_uid: ''
         fields: {}
       kpi_purchase:
-        uid: 6uf8jyn4le1
+        uid: un7cztl0u12
         type: jsBlock
         grid_uid: ''
         fields: {}
       kpi_production:
-        uid: qyuumy91hk4
+        uid: lvu1a0pf88q
         type: jsBlock
         grid_uid: ''
         fields: {}
       kpi_quality:
-        uid: ue43xd2f8vf
+        uid: pyyrt4igrdw
         type: jsBlock
         grid_uid: ''
         fields: {}
       chart_po_status:
-        uid: 6187d0k1cvz
+        uid: 1ulcprsd2qo
         type: chart
         grid_uid: ''
         fields: {}
       chart_funnel:
-        uid: ud62rm1x1un
+        uid: 2a6qjrtips3
         type: chart
         grid_uid: ''
         fields: {}
       chart_sales_trend:
-        uid: 143n1fjvqrb
+        uid: a6r69l2789z
         type: chart
         grid_uid: ''
         fields: {}
       chart_production:
-        uid: f1m9zvi93fp
+        uid: ore3w3kn3mg
         type: chart
         grid_uid: ''
         fields: {}
-      chart_stock_dist:
-        uid: 2fe4mptad3d
+      chart_stock:
+        uid: i5rozh9zimx
         type: chart
         grid_uid: ''
         fields: {}

@@ -1,0 +1,12 @@
+{
+  "query": {
+    "mode": "sql",
+    "sql": "SELECT to_char(actual_end, 'YYYY-MM') as month, COALESCE(SUM(completed_qty), 0) as output, CASE WHEN COALESCE(SUM(completed_qty + defect_qty), 0) > 0 THEN ROUND(SUM(completed_qty)::numeric / SUM(completed_qty + defect_qty) * 100, 1) ELSE 0 END as yield_rate FROM erp_work_orders WHERE actual_end IS NOT NULL AND actual_end >= NOW() - INTERVAL '12 months' GROUP BY to_char(actual_end, 'YYYY-MM') ORDER BY month"
+  },
+  "chart": {
+    "option": {
+      "mode": "custom",
+      "raw": "const data = (() => { const raw = ctx.data; if (Array.isArray(raw)) return raw; if (raw && Array.isArray(raw.objects)) return raw.objects; if (raw && Array.isArray(raw.data)) return raw.data; return []; })(); if (data.length === 0) { return { title: { text: 'No Data', left: 'center', top: 'center', textStyle: { color: '#999', fontSize: 14 } } }; } const months = data.map(d => d.month || ''); const outputs = data.map(d => parseInt(d.output) || 0); const yields = data.map(d => parseFloat(d.yield_rate) || 0); return { title: { text: 'Monthly Production Output & Yield', left: 'center', textStyle: { fontSize: 14 } }, tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } }, legend: { top: 30, data: ['Output', 'Yield Rate'] }, grid: { top: 70, bottom: 30, left: 60, right: 60 }, xAxis: { type: 'category', data: months }, yAxis: [{ type: 'value', name: 'Output' }, { type: 'value', name: 'Yield %', min: 80, max: 100 }], series: [{ name: 'Output', type: 'bar', data: outputs, itemStyle: { color: '#10b981', borderRadius: [4, 4, 0, 0] } }, { name: 'Yield Rate', type: 'line', yAxisIndex: 1, data: yields, smooth: true, itemStyle: { color: '#8b5cf6' }, markLine: { data: [{ yAxis: 95, label: { formatter: 'Target 95%' }, lineStyle: { color: '#ff4d4f', type: 'dashed' } }], silent: true } }] };"
+    }
+  }
+}

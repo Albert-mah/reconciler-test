@@ -1,309 +1,75 @@
 popups:
-- target: $物料管理.table.actions.addNew
+- target: $materials.table.actions.addNew
   auto:
   - edit
-  coll: nb_erp_products
+  coll: erp_materials
   blocks:
   - key: form
     type: createForm
     resource:
       binding: currentCollection
     fields:
-    - product_code
+    - code
     - name
     - category
     - spec
     - unit
-    - standard_price
+    - list_price
     - cost_price
     - stock_qty
-    - min_stock
-    - max_stock
-    - lead_time
     - status
-    - remark
-    field_layout:
-    - '--- 基本信息 ---'
-    - - product_code
-      - name
-      - category
-    - - spec
-      - unit
-      - status
-    - '--- 价格 ---'
-    - - standard_price
-      - cost_price
-    - '--- 库存 ---'
-    - - stock_qty
-      - min_stock
-      - max_stock
-    - - lead_time
-    - '--- 备注 ---'
-    - - remark
     actions:
     - submit
-- target: $物料管理.table.fields.name
-  mode: embed
-  coll: nb_erp_products
-  tabs:
-  - title: 概览
-    blocks:
-    - key: detail_main
-      type: details
-      resource:
-        binding: currentRecord
-      fields:
-      - product_code
-      - name
-      - category
-      - spec
-      - unit
-      - status
-      - stock_qty
-      - min_stock
-      - max_stock
-      - lead_time
-      js_items:
-      - desc: 物料概览KPI卡片
-        file: ./js/detail_product_kpi.js
-      field_layout:
-      - '--- 基本信息 ---'
-      - - product_code
-        - name
-        - category
-      - - spec
-        - unit
-        - status
-      - '--- 库存 ---'
-      - - stock_qty
-        - min_stock
-        - max_stock
-      - - lead_time
-      recordActions:
-      - edit
-    - key: detail_price
-      type: details
-      resource:
-        binding: currentRecord
-      fields:
-      - standard_price
-      - cost_price
-      - remark
-      field_layout:
-      - '--- 价格 ---'
-      - - standard_price
-        - cost_price
-      - '--- 备注 ---'
-      - - remark
-    layout:
-    - - col:
-        - detail_main
-        size: 16
-      - col:
-        - detail_price
-        size: 8
-  - title: 库存流水
-    blocks:
-    - key: inv_table
-      type: table
-      coll: nb_erp_inventory
-      resource_binding:
-        associationName: nb_erp_products.inventories
-        sourceId: '{{ctx.view.inputArgs.filterByTk}}'
-      fields:
-      - txn_type
-      - qty
-      - warehouse
-      - ref_no
-      - operator
-      - createdAt
-  - title: 质检记录
-    blocks:
-    - key: qc_table
-      type: table
-      coll: nb_erp_quality
-      resource_binding:
-        associationName: nb_erp_products.quality_records
-        sourceId: '{{ctx.view.inputArgs.filterByTk}}'
-      fields:
-      - qc_type
-      - result
-      - sample_qty
-      - pass_qty
-      - fail_qty
-      - batch_no
-      - inspector
-  - title: 历史记录
-    blocks:
-    - key: history
-      type: recordHistory
-      resource:
-        binding: currentRecord
-- target: $客户管理.table.actions.addNew
+- target: $customers.table.actions.addNew
   auto:
   - edit
-  coll: nb_erp_customers
+  coll: erp_customers
   blocks:
   - key: form
     type: createForm
     resource:
       binding: currentCollection
     fields:
-    - customer_code
+    - code
     - name
     - contact
     - phone
-    - email
-    - address
     - level
     - industry
     - payment_terms
     - credit_limit
-    - tax_rate
     - status
-    field_layout:
-    - '--- 基本信息 ---'
-    - - customer_code
-      - name
-      - level
-    - - industry
-      - status
-    - '--- 联系方式 ---'
-    - - contact
-      - phone
-      - email
-    - - address
-    - '--- 财务信息 ---'
-    - - payment_terms
-      - credit_limit
-      - tax_rate
     actions:
     - submit
-- target: $客户管理.table.fields.name
-  mode: embed
-  coll: nb_erp_customers
-  tabs:
-  - title: 概览
-    blocks:
-    - key: detail_main
-      type: details
-      resource:
-        binding: currentRecord
-      fields:
-      - customer_code
-      - name
-      - level
-      - industry
-      - status
-      - contact
-      - phone
-      - email
-      - address
-      js_items:
-      - desc: 客户画像卡片
-        file: ./js/detail_customer_profile.js
-      field_layout:
-      - '--- 基本信息 ---'
-      - - customer_code
-        - name
-        - level
-      - - industry
-        - status
-      - '--- 联系方式 ---'
-      - - contact
-        - phone
-        - email
-      - - address
-      recordActions:
-      - edit
-    - key: detail_finance
-      type: details
-      resource:
-        binding: currentRecord
-      fields:
-      - payment_terms
-      - credit_limit
-      - tax_rate
-      field_layout:
-      - '--- 财务信息 ---'
-      - - payment_terms
-      - - credit_limit
-      - - tax_rate
-    layout:
-    - - col:
-        - detail_main
-        size: 16
-      - col:
-        - detail_finance
-        size: 8
-  - title: 销售订单
-    blocks:
-    - key: so_table
-      type: table
-      coll: nb_erp_sales_orders
-      resource_binding:
-        associationName: nb_erp_customers.sales_orders
-        sourceId: '{{ctx.view.inputArgs.filterByTk}}'
-      fields:
-      - so_no
-      - total_amount
-      - status
-      - priority
-      - order_date
-      - delivery_date
-      - sales_rep
-  - title: 历史记录
-    blocks:
-    - key: history
-      type: recordHistory
-      resource:
-        binding: currentRecord
-- target: $供应商管理.table.actions.addNew
+- target: $suppliers.table.actions.addNew
   auto:
   - edit
   - view
-  view_field: name
-  coll: nb_erp_suppliers
+  view_field: code
+  coll: erp_suppliers
   blocks:
   - key: form
     type: createForm
     resource:
       binding: currentCollection
     fields:
-    - supplier_code
+    - code
     - name
     - contact
     - phone
-    - email
-    - address
     - category
     - rating
-    - payment_terms
     - delivery_score
     - quality_score
     - status
-    field_layout:
-    - '--- 基本信息 ---'
-    - - supplier_code
-      - name
-      - category
-    - - rating
-      - status
-    - '--- 联系方式 ---'
-    - - contact
-      - phone
-      - email
-    - - address
-    - '--- 评估 ---'
-    - - delivery_score
-      - quality_score
-    - - payment_terms
     actions:
     - submit
-- target: $采购管理.table.actions.addNew
+- target: $purchasing.table.actions.addNew
   auto:
   - edit
-  coll: nb_erp_purchase_orders
+  - view
+  view_field: po_no
+  coll: erp_purchase_orders
   blocks:
   - key: form
     type: createForm
@@ -313,83 +79,17 @@ popups:
     - po_no
     - supplier_name
     - total_amount
-    - tax_amount
     - status
     - priority
     - order_date
     - expected_date
     - buyer
-    - remark
-    field_layout:
-    - '--- 订单信息 ---'
-    - - po_no
-      - supplier_name
-      - status
-    - - priority
-      - buyer
-    - '--- 金额 ---'
-    - - total_amount
-      - tax_amount
-    - '--- 日期 ---'
-    - - order_date
-      - expected_date
-    - '--- 备注 ---'
-    - - remark
     actions:
     - submit
-- target: $采购管理.table.fields.po_no
-  mode: drawer
-  coll: nb_erp_purchase_orders
-  tabs:
-  - title: 详情
-    blocks:
-    - key: detail_main
-      type: details
-      resource:
-        binding: currentRecord
-      fields:
-      - po_no
-      - supplier_name
-      - total_amount
-      - tax_amount
-      - status
-      - priority
-      - order_date
-      - expected_date
-      - actual_date
-      - buyer
-      - remark
-      js_items:
-      - desc: 采购单概览卡片 — 总金额(含税)/供应商/状态流转(草稿→审批→到货→关闭)进度条/到货倒计时/优先级徽章
-        file: ./js/detail_po_overview.js
-      field_layout:
-      - '--- 订单信息 ---'
-      - - po_no
-        - supplier_name
-        - status
-      - - priority
-        - buyer
-      - '--- 金额 ---'
-      - - total_amount
-        - tax_amount
-      - '--- 日期 ---'
-      - - order_date
-        - expected_date
-        - actual_date
-      - '--- 备注 ---'
-      - - remark
-      recordActions:
-      - edit
-  - title: 历史记录
-    blocks:
-    - key: history
-      type: recordHistory
-      resource:
-        binding: currentRecord
-- target: $销售管理.table.actions.addNew
+- target: $sales.table.actions.addNew
   auto:
   - edit
-  coll: nb_erp_sales_orders
+  coll: erp_sales_orders
   blocks:
   - key: form
     type: createForm
@@ -399,99 +99,17 @@ popups:
     - so_no
     - customer_name
     - total_amount
-    - tax_amount
     - status
     - priority
     - order_date
     - delivery_date
     - sales_rep
-    - remark
-    field_layout:
-    - '--- 订单信息 ---'
-    - - so_no
-      - customer_name
-      - status
-    - - priority
-      - sales_rep
-    - '--- 金额 ---'
-    - - total_amount
-      - tax_amount
-    - '--- 日期 ---'
-    - - order_date
-      - delivery_date
-    - '--- 备注 ---'
-    - - remark
     actions:
     - submit
-- target: $销售管理.table.fields.so_no
-  mode: embed
-  coll: nb_erp_sales_orders
-  tabs:
-  - title: 概览
-    blocks:
-    - key: detail_main
-      type: details
-      resource:
-        binding: currentRecord
-      fields:
-      - so_no
-      - customer_name
-      - status
-      - priority
-      - sales_rep
-      - total_amount
-      - tax_amount
-      - order_date
-      - delivery_date
-      - shipped_date
-      - remark
-      js_items:
-      - desc: 销售单概览卡片
-        file: ./js/detail_so_overview.js
-      field_layout:
-      - '--- 订单信息 ---'
-      - - so_no
-        - customer_name
-        - status
-      - - priority
-        - sales_rep
-      - '--- 金额 ---'
-      - - total_amount
-        - tax_amount
-      - '--- 日期 ---'
-      - - order_date
-        - delivery_date
-        - shipped_date
-      - '--- 备注 ---'
-      - - remark
-      recordActions:
-      - edit
-  - title: 生产工单
-    blocks:
-    - key: wo_table
-      type: table
-      coll: nb_erp_work_orders
-      resource_binding:
-        associationName: nb_erp_sales_orders.work_orders
-        sourceId: '{{ctx.view.inputArgs.filterByTk}}'
-      fields:
-      - wo_no
-      - product_name
-      - planned_qty
-      - completed_qty
-      - defect_qty
-      - status
-      - workshop
-  - title: 历史记录
-    blocks:
-    - key: history
-      type: recordHistory
-      resource:
-        binding: currentRecord
-- target: $生产管理.table.actions.addNew
+- target: $production.table.actions.addNew
   auto:
   - edit
-  coll: nb_erp_work_orders
+  coll: erp_work_orders
   blocks:
   - key: form
     type: createForm
@@ -501,108 +119,20 @@ popups:
     - wo_no
     - product_name
     - planned_qty
+    - completed_qty
     - status
     - priority
     - planned_start
     - planned_end
     - workshop
-    - so_no
-    - remark
-    field_layout:
-    - '--- 工单信息 ---'
-    - - wo_no
-      - product_name
-      - status
-    - - priority
-      - workshop
-    - '--- 数量与计划 ---'
-    - - planned_qty
-    - - planned_start
-      - planned_end
-    - '--- 关联 ---'
-    - - so_no
-    - '--- 备注 ---'
-    - - remark
     actions:
     - submit
-- target: $生产管理.table.fields.wo_no
-  mode: embed
-  coll: nb_erp_work_orders
-  tabs:
-  - title: 概览
-    blocks:
-    - key: detail_main
-      type: details
-      resource:
-        binding: currentRecord
-      fields:
-      - wo_no
-      - product_name
-      - status
-      - priority
-      - workshop
-      - planned_qty
-      - completed_qty
-      - defect_qty
-      - planned_start
-      - planned_end
-      - actual_start
-      - actual_end
-      - so_no
-      - remark
-      js_items:
-      - desc: 生产工单概览卡片
-        file: ./js/detail_wo_overview.js
-      field_layout:
-      - '--- 工单信息 ---'
-      - - wo_no
-        - product_name
-        - status
-      - - priority
-        - workshop
-      - '--- 数量 ---'
-      - - planned_qty
-        - completed_qty
-        - defect_qty
-      - '--- 计划 ---'
-      - - planned_start
-        - planned_end
-      - - actual_start
-        - actual_end
-      - '--- 关联 ---'
-      - - so_no
-      - '--- 备注 ---'
-      - - remark
-      recordActions:
-      - edit
-  - title: 质检记录
-    blocks:
-    - key: qc_table
-      type: table
-      coll: nb_erp_quality
-      resource_binding:
-        associationName: nb_erp_work_orders.quality_records
-        sourceId: '{{ctx.view.inputArgs.filterByTk}}'
-      fields:
-      - qc_type
-      - result
-      - sample_qty
-      - pass_qty
-      - fail_qty
-      - batch_no
-      - inspector
-  - title: 历史记录
-    blocks:
-    - key: history
-      type: recordHistory
-      resource:
-        binding: currentRecord
-- target: $库存流水.table.actions.addNew
+- target: $inventory.table.actions.addNew
   auto:
   - edit
   - view
   view_field: txn_no
-  coll: nb_erp_inventory
+  coll: erp_inventory
   blocks:
   - key: form
     type: createForm
@@ -617,25 +147,14 @@ popups:
     - warehouse
     - ref_no
     - operator
-    - remark
-    field_layout:
-    - '--- 物料信息 ---'
-    - - product_name
-      - product_code
-    - '--- 出入库 ---'
-    - - txn_type
-      - qty
-      - warehouse
-    - - ref_no
-      - operator
-    - '--- 备注 ---'
-    - - remark
     actions:
     - submit
-- target: $质检管理.table.actions.addNew
+- target: $quality.table.actions.addNew
   auto:
   - edit
-  coll: nb_erp_quality
+  - view
+  view_field: qc_no
+  coll: erp_quality
   blocks:
   - key: form
     type: createForm
@@ -650,71 +169,279 @@ popups:
     - pass_qty
     - fail_qty
     - result
-    - ref_no
     - inspector
-    - remark
-    field_layout:
-    - '--- 检验信息 ---'
-    - - qc_no
-      - product_name
-      - qc_type
-    - - batch_no
-      - ref_no
-    - '--- 检验数据 ---'
-    - - sample_qty
-      - pass_qty
-      - fail_qty
-    - - result
-      - inspector
-    - '--- 不合格描述 ---'
-    - - remark
     actions:
     - submit
-- target: $质检管理.table.fields.qc_no
-  mode: drawer
-  coll: nb_erp_quality
+- field: name
+  mode: embed
   tabs:
-  - title: 详情
+  - title: Overview
     blocks:
     - key: detail_main
       type: details
-      resource:
-        binding: currentRecord
+      coll: erp_materials
+      resource_binding:
+        filterByTk: '{{ctx.view.inputArgs.filterByTk}}'
       fields:
-      - qc_no
-      - product_name
-      - qc_type
-      - batch_no
-      - sample_qty
-      - pass_qty
-      - fail_qty
-      - result
-      - ref_no
-      - inspector
-      - remark
+      - code
+      - name
+      - category
+      - spec
+      - unit
+      - status
+      - stock_qty
+      - min_stock
+      - max_stock
+      - lead_time
       js_items:
-      - desc: 质检概览卡片 — 合格率环形图(pass/sample) + 检验结果大徽章(合格绿/不合格红/让步橙/待判灰) + 抽检/合格/不合格数值对比
-        file: ./js/detail_qc_overview.js
+      - desc: Material KPI Metrics
+        file: ./js/detail_material_kpi.js
       field_layout:
-      - '--- 检验信息 ---'
-      - - qc_no
-        - product_name
-        - qc_type
-      - - batch_no
-        - ref_no
-      - '--- 检验数据 ---'
-      - - sample_qty
-        - pass_qty
-        - fail_qty
-      - - result
-        - inspector
-      - '--- 不合格描述 ---'
-      - - remark
-      recordActions:
+      - - '[JS:Material KPI Metrics]'
+      - - '--- Basic Info ---'
+      - - code
+        - name
+        - category
+      - - spec
+        - unit
+        - status
+      - - '--- Inventory ---'
+      - - stock_qty
+        - min_stock
+        - max_stock
+      - - lead_time
+      actions:
       - edit
-  - title: 历史记录
+    - key: detail_price
+      type: details
+      title: Pricing
+      coll: erp_materials
+      resource_binding:
+        filterByTk: '{{ctx.view.inputArgs.filterByTk}}'
+      fields:
+      - list_price
+      - cost_price
+      - remark
+      field_layout:
+      - - '--- Pricing ---'
+      - - list_price
+        - cost_price
+      - - '--- Remark ---'
+      - - remark
+    layout:
+    - - col:
+        - detail_main
+        size: 16
+      - col:
+        - detail_price
+        size: 8
+  - title: History
     blocks:
-    - key: history
+    - key: recordHistory_0
       type: recordHistory
-      resource:
-        binding: currentRecord
+      coll: erp_materials
+  target: $materials.table.fields.name
+- field: name
+  mode: embed
+  tabs:
+  - title: Overview
+    blocks:
+    - key: detail_main
+      type: details
+      coll: erp_customers
+      resource_binding:
+        filterByTk: '{{ctx.view.inputArgs.filterByTk}}'
+      fields:
+      - code
+      - name
+      - contact
+      - phone
+      - email
+      - address
+      - level
+      - industry
+      - payment_terms
+      - status
+      js_items:
+      - desc: Customer Profile KPI
+        file: ./js/detail_customer_profile.js
+      field_layout:
+      - - '[JS:Customer Profile KPI]'
+      - - '--- Basic Info ---'
+      - - code
+        - name
+        - level
+      - - contact
+        - phone
+        - email
+      - - industry
+        - payment_terms
+        - status
+      - - '--- Address ---'
+      - - address
+      actions:
+      - edit
+    - key: detail_finance
+      type: details
+      title: Finance
+      coll: erp_customers
+      resource_binding:
+        filterByTk: '{{ctx.view.inputArgs.filterByTk}}'
+      fields:
+      - credit_limit
+      - tax_rate
+      field_layout:
+      - - '--- Credit ---'
+      - - credit_limit
+        - tax_rate
+    layout:
+    - - col:
+        - detail_main
+        size: 16
+      - col:
+        - detail_finance
+        size: 8
+  - title: History
+    blocks:
+    - key: recordHistory_0
+      type: recordHistory
+      coll: erp_customers
+  target: $customers.table.fields.name
+- field: so_no
+  mode: embed
+  tabs:
+  - title: Overview
+    blocks:
+    - key: detail_main
+      type: details
+      coll: erp_sales_orders
+      resource_binding:
+        filterByTk: '{{ctx.view.inputArgs.filterByTk}}'
+      fields:
+      - so_no
+      - customer_name
+      - total_amount
+      - tax_amount
+      - status
+      - priority
+      - order_date
+      - delivery_date
+      - shipped_date
+      - sales_rep
+      js_items:
+      - desc: Sales Order Overview KPI
+        file: ./js/detail_so_overview.js
+      field_layout:
+      - - '[JS:Sales Order Overview KPI]'
+      - - '--- Order Info ---'
+      - - so_no
+        - customer_name
+        - status
+      - - priority
+        - sales_rep
+      - - '--- Dates ---'
+      - - order_date
+        - delivery_date
+        - shipped_date
+      actions:
+      - edit
+    - key: detail_amount
+      type: details
+      title: Amount
+      coll: erp_sales_orders
+      resource_binding:
+        filterByTk: '{{ctx.view.inputArgs.filterByTk}}'
+      fields:
+      - total_amount
+      - tax_amount
+      - remark
+      field_layout:
+      - - '--- Amount ---'
+      - - total_amount
+        - tax_amount
+      - - '--- Remark ---'
+      - - remark
+    layout:
+    - - col:
+        - detail_main
+        size: 16
+      - col:
+        - detail_amount
+        size: 8
+  - title: History
+    blocks:
+    - key: recordHistory_0
+      type: recordHistory
+      coll: erp_sales_orders
+  target: $sales.table.fields.so_no
+- field: wo_no
+  mode: embed
+  tabs:
+  - title: Overview
+    blocks:
+    - key: detail_main
+      type: details
+      coll: erp_work_orders
+      resource_binding:
+        filterByTk: '{{ctx.view.inputArgs.filterByTk}}'
+      fields:
+      - wo_no
+      - product_name
+      - planned_qty
+      - completed_qty
+      - defect_qty
+      - status
+      - priority
+      - planned_start
+      - planned_end
+      - actual_start
+      - actual_end
+      - workshop
+      - so_no
+      js_items:
+      - desc: Work Order Overview KPI
+        file: ./js/detail_wo_overview.js
+      field_layout:
+      - - '[JS:Work Order Overview KPI]'
+      - - '--- Basic Info ---'
+      - - wo_no
+        - product_name
+        - status
+      - - priority
+        - workshop
+        - so_no
+      - - '--- Quantities ---'
+      - - planned_qty
+        - completed_qty
+        - defect_qty
+      - - '--- Schedule ---'
+      - - planned_start
+        - planned_end
+      - - actual_start
+        - actual_end
+      actions:
+      - edit
+    - key: detail_remark
+      type: details
+      title: Notes
+      coll: erp_work_orders
+      resource_binding:
+        filterByTk: '{{ctx.view.inputArgs.filterByTk}}'
+      fields:
+      - remark
+      field_layout:
+      - - '--- Remark ---'
+      - - remark
+    layout:
+    - - col:
+        - detail_main
+        size: 16
+      - col:
+        - detail_remark
+        size: 8
+  - title: History
+    blocks:
+    - key: recordHistory_0
+      type: recordHistory
+      coll: erp_work_orders
+  target: $production.table.fields.wo_no
