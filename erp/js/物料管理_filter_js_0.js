@@ -1,15 +1,43 @@
-const TARGET_BLOCK_UID = 'uzzmxckhlla';
-const { useState, useEffect, useCallback } = ctx.React;
-const { Button, Badge, Space, Spin } = ctx.antd;
+/**
+ * 筛选统计按钮组积木模板
+ *
+ * @type JSItemModel
+ * @template filter-stats
+ *
+ * === AI 修改指南 ===
+ * 1. 修改 COLLECTION（数据表名）
+ * 2. 修改 GROUPS（按钮分组定义）
+ *    - key: 唯一标识
+ *    - label: 按钮文字
+ *    - filter: NocoBase 过滤条件 (null = 全部)
+ *    - danger: true 显示红色
+ * 3. 可以有多个 group（用 Divider 分隔）
+ * 4. 不要动 useStats/StatsFilter 组件 — 它们是通用的
+ * ====================
+ */
 
-const STATS = [
-  { key: 'all', label: '全部', filter: null },
-  { key: 'active', label: '有效', filter: { status: { $eq: '有效' } } },
-  { key: 'developing', label: '开发中', filter: { status: { $eq: '开发中' } } },
-  { key: 'disabled', label: '停用', filter: { status: { $eq: '停用' } } },
-  { key: 'pending', label: '待审核', filter: { status: { $eq: '待审核' } } },
-  { key: 'low_stock', label: '低库存', filter: { stock_qty: { $lt: { $col: 'min_stock' } } } },
+const TARGET_BLOCK_UID = '__TABLE_UID__';
+
+// ─── CONFIG: AI 修改这里 ───────────────────────────
+const COLLECTION = 'nb_erp_products';
+
+const GROUPS = [
+  {
+    name: '状态',
+    items: [
+      { key: 'all', label: '全部', filter: null },
+      { key: 'active', label: '有效', filter: { status: { $eq: '有效' } } },
+      { key: 'dev', label: '开发中', filter: { status: { $eq: '开发中' } } },
+      { key: 'disabled', label: '停用', filter: { status: { $eq: '停用' } } },
+      { key: 'pending', label: '待审核', filter: { status: { $eq: '待审核' } } },
+    ],
+  },
 ];
+// ─── CONFIG END ────────────────────────────────────
+
+// ─── 以下不需要修改 ───────────────────────────────
+const { useState, useEffect, useCallback } = ctx.React;
+const { Button, Badge, Space, Spin, Divider } = ctx.antd;
 
 function useStats() {
   const [counts, setCounts] = useState({});
@@ -18,97 +46,74 @@ function useStats() {
   const fetchCounts = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await ctx.api.request({
-        url: 'nb_erp_products:list',
-        params: {
-          pageSize: 1,
-          appends: [],
-          fields: ['id', 'status', 'stock_qty', 'min_stock'],
-          page: 1,
-        },
+      const allItems = GROUPS.flatMap(g => g.items);
+      const results = await Promise.all(
+        allItems.map(item =>
+          ctx.api.request({
+            url: `${COLLECTION}:list`,
+            params: {
+              pageSize: 1,
+              ...(item.filter && { filter: item.filter }),
+            },
+          })
+        )
+      );
+      const c = {};
+      allItems.forEach((item, i) => {
+        c[item.key] = results[i]?.data?.meta?.count || 0;
       });
-      const total = res?.data?.meta?.count || 0;
-
-      const statusRes = await Promise.all([
-        ctx.api.request({
-          url: 'nb_erp_products:list',
-          params: { pageSize: 1, filter: { status: { $eq: '有效' } } },
-        }),
-        ctx.api.request({
-          url: 'nb_erp_products:list',
-          params: { pageSize: 1, filter: { status: { $eq: '开发中' } } },
-        }),
-        ctx.api.request({
-          url: 'nb_erp_products:list',
-          params: { pageSize: 1, filter: { status: { $eq: '停用' } } },
-        }),
-        ctx.api.request({
-          url: 'nb_erp_products:list',
-          params: { pageSize: 1, filter: { status: { $eq: '待审核' } } },
-        }),
-        ctx.api.request({
-          url: 'nb_erp_products:list',
-          params: { pageSize: 1, filter: { stock_qty: { $lt: { $col: 'min_stock' } } } },
-        }),
-      ]);
-
-      setCounts({
-        all: total,
-        active: statusRes[0]?.data?.meta?.count || 0,
-        developing: statusRes[1]?.data?.meta?.count || 0,
-        disabled: statusRes[2]?.data?.meta?.count || 0,
-        pending: statusRes[3]?.data?.meta?.count || 0,
-        low_stock: statusRes[4]?.data?.meta?.count || 0,
-      });
+      setCounts(c);
     } catch (e) {
-      console.error('filter_product_stats: fetch error', e);
+      console.error('Stats fetch error:', e);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => { fetchCounts(); }, [fetchCounts]);
-
-  return { counts, loading, refresh: fetchCounts };
+  return { counts, loading };
 }
 
-function StatsFilter() {
-  const { counts, loading, refresh } = useStats();
+const StatsFilter = () => {
+  const { counts, loading } = useStats();
   const [active, setActive] = useState('all');
 
-  const handleClick = useCallback(async (stat) => {
-    setActive(stat.key);
+  const handleClick = useCallback(async (item) => {
+    setActive(item.key);
     try {
-      const target = ctx.engine.getModel(TARGET_BLOCK_UID);
-      if (target) {
-        target.resource.addFilterGroup(ctx.model.uid, stat.filter);
-        await target.resource.refresh();
-      }
+      const target = ctx.engine?.getModel(TARGET_BLOCK_UID);
+      if (!target) return;
+      target.resource.addFilterGroup(ctx.model.uid, item.filter || { $and: [] });
+      await target.resource.refresh();
     } catch (e) {
-      console.error('filter_product_stats: filter error', e);
+      console.error('Filter error:', e);
     }
   }, []);
 
-  if (loading) {
-    return (<Spin size="small" />);
-  }
+  if (loading) return (<Spin size="small" />);
 
-  return (
-    <Space wrap size={[8, 8]}>
-      {STATS.map((stat) => (
-        <Badge key={stat.key} count={counts[stat.key] ?? 0} overflowCount={9999} offset={[6, 0]}>
+  const renderGroup = (group, idx) => (
+    <Space key={idx} wrap size={[6, 6]}>
+      {group.items.map(item => (
+        <Badge key={item.key} count={counts[item.key] ?? 0} overflowCount={9999} offset={[6, 0]}>
           <Button
-            type={active === stat.key ? 'primary' : 'default'}
+            type={active === item.key ? 'primary' : 'default'}
             size="small"
-            danger={stat.key === 'low_stock'}
-            onClick={() => handleClick(stat)}
+            danger={item.danger}
+            onClick={() => handleClick(item)}
           >
-            {stat.label}
+            {item.label}
           </Button>
         </Badge>
       ))}
     </Space>
   );
-}
+
+  return (
+    <Space wrap size={[8, 8]} split={GROUPS.length > 1 ? <Divider type="vertical" style={{ margin: 0 }} /> : null}>
+      {GROUPS.map((group, idx) => renderGroup(group, idx))}
+    </Space>
+  );
+};
 
 ctx.render(<StatsFilter />);

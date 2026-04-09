@@ -1,172 +1,125 @@
 /**
- * 本月质检合格率KPI卡片
+ * KPI 卡片积木模板
+ *
  * @type JSBlockModel
- * @collection nb_erp_quality
- * @description 展示本月质检合格率及检验批次数，与上月对比趋势
+ * @template kpi-card
+ *
+ * === AI 修改指南 ===
+ * 1. 修改 CONFIG 对象（标题、颜色、SQL）
+ * 2. 修改 SQL（查询你的业务数据）
+ * 3. 修改 parseResult（从 SQL 结果提取数值）
+ * 4. 不要动 KpiCard 组件和样式 — 它们是通用的
+ * ====================
  */
-const { useState, useEffect } = ctx.React;
-const { Spin, Progress } = ctx.antd;
 
-function QualityKPI() {
-  const [loading, setLoading] = useState(true);
-  const [passQty, setPassQty] = useState(0);
-  const [sampleQty, setSampleQty] = useState(0);
-  const [inspectionCount, setInspectionCount] = useState(0);
-  const [lastPassQty, setLastPassQty] = useState(0);
-  const [lastSampleQty, setLastSampleQty] = useState(0);
+// ─── CONFIG: AI 修改这里 ───────────────────────────
+const CONFIG = {
+  title: '本月合格率',              // 卡片标题
+  gradient: ['#722ed1', '#b37feb'], // 渐变色 [起始, 结束]
+  textColor: '#fff',                // 文字颜色
+  prefix: '',                      // 数值前缀 (¥, 件, %)
+  suffix: '%',                        // 数值后缀
+};
+
+// SQL: 查询当前周期 + 上一周期（用于计算环比）
+// __var1=当前开始, __var2=当前结束, __var3=上期开始, __var4=上期结束
+const SQL = `
+SELECT
+  CASE WHEN SUM(CASE WHEN "createdAt" >= :__var1 AND "createdAt" <= :__var2
+    THEN sample_qty ELSE 0 END) > 0
+  THEN ROUND(SUM(CASE WHEN "createdAt" >= :__var1 AND "createdAt" <= :__var2
+    THEN pass_qty ELSE 0 END)::numeric
+    / SUM(CASE WHEN "createdAt" >= :__var1 AND "createdAt" <= :__var2
+    THEN sample_qty ELSE 0 END) * 100, 1)
+  ELSE 0 END as current_value,
+  CASE WHEN SUM(CASE WHEN "createdAt" >= :__var3 AND "createdAt" < :__var4
+    THEN sample_qty ELSE 0 END) > 0
+  THEN ROUND(SUM(CASE WHEN "createdAt" >= :__var3 AND "createdAt" < :__var4
+    THEN pass_qty ELSE 0 END)::numeric
+    / SUM(CASE WHEN "createdAt" >= :__var3 AND "createdAt" < :__var4
+    THEN sample_qty ELSE 0 END) * 100, 1)
+  ELSE 0 END as previous_value
+FROM nb_erp_quality
+`;
+
+// 从 SQL 结果提取数值
+const parseResult = (row) => ({
+  value: parseFloat(row?.current_value || 0),
+  previous: parseFloat(row?.previous_value || 0),
+});
+// ─── CONFIG END ────────────────────────────────────
+
+// ─── 以下不需要修改 ───────────────────────────────
+const { useState, useEffect } = ctx.React;
+const { Spin } = ctx.antd;
+
+const fmt = (v, prefix = '', suffix = '') => {
+  const abs = Math.abs(v);
+  const str = abs >= 1e8 ? `${(abs/1e8).toFixed(1)}亿`
+    : abs >= 1e4 ? `${(abs/1e4).toFixed(1)}万`
+    : abs.toLocaleString('zh-CN', { maximumFractionDigits: 0 });
+  return `${prefix}${str}${suffix}`;
+};
+
+const KpiCard = () => {
+  const [data, setData] = useState({ value: 0, previous: 0, loading: true });
 
   useEffect(() => {
-    const now = new Date();
-    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const thisMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+    (async () => {
+      try {
+        const now = ctx.libs.dayjs();
+        const start = now.startOf('month').format('YYYY-MM-DD 00:00:00');
+        const end = now.endOf('month').format('YYYY-MM-DD 23:59:59');
+        const prevStart = now.subtract(1, 'month').startOf('month').format('YYYY-MM-DD 00:00:00');
+        const prevEnd = now.startOf('month').format('YYYY-MM-DD 00:00:00');
 
-    const fmt = (d) => d.toISOString().split('T')[0];
-
-    const fetchCurrent = ctx.api.request({
-      url: 'nb_erp_quality:list',
-      params: {
-        filter: {
-          inspect_date: {
-            $gte: fmt(thisMonthStart),
-            $lte: fmt(thisMonthEnd),
-          },
-        },
-        pageSize: 9999,
-      },
-    });
-
-    const fetchLast = ctx.api.request({
-      url: 'nb_erp_quality:list',
-      params: {
-        filter: {
-          inspect_date: {
-            $gte: fmt(lastMonthStart),
-            $lte: fmt(lastMonthEnd),
-          },
-        },
-        pageSize: 9999,
-      },
-    });
-
-    Promise.all([fetchCurrent, fetchLast])
-      .then(([curRes, lastRes]) => {
-        const curRecords = curRes?.data?.data || [];
-        const lastRecords = lastRes?.data?.data || [];
-
-        const curPass = curRecords.reduce((s, r) => s + (Number(r.pass_qty) || 0), 0);
-        const curSample = curRecords.reduce((s, r) => s + (Number(r.sample_qty) || 0), 0);
-        const lPass = lastRecords.reduce((s, r) => s + (Number(r.pass_qty) || 0), 0);
-        const lSample = lastRecords.reduce((s, r) => s + (Number(r.sample_qty) || 0), 0);
-
-        setPassQty(curPass);
-        setSampleQty(curSample);
-        setInspectionCount(curRecords.length);
-        setLastPassQty(lPass);
-        setLastSampleQty(lSample);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+        const result = await ctx.sql.run({
+          sql: SQL,
+          bind: { __var1: start, __var2: end, __var3: prevStart, __var4: prevEnd },
+          type: 'selectRows', dataSourceKey: 'main',
+        });
+        const parsed = parseResult(result?.[0]);
+        setData({ ...parsed, loading: false });
+      } catch (e) {
+        console.error('KPI fetch error:', e);
+        setData(prev => ({ ...prev, loading: false }));
+      }
+    })();
   }, []);
 
-  const passRate = sampleQty > 0 ? (passQty / sampleQty) * 100 : 0;
-  const lastPassRate = lastSampleQty > 0 ? (lastPassQty / lastSampleQty) * 100 : 0;
-  const rateDiff = passRate - lastPassRate;
-  const rateUp = rateDiff >= 0;
-  const rateIcon = rateUp ? '↑' : '↓';
-  const rateColor = rateUp ? 'rgba(255,255,255,0.9)' : '#ffe58f';
+  const trend = data.previous > 0
+    ? ((data.value - data.previous) / data.previous * 100).toFixed(1)
+    : null;
+  const trendUp = parseFloat(trend) >= 0;
 
-  // Progress bar color based on pass rate level
-  const progressColor = passRate >= 98 ? '#b7eb8f' : passRate >= 95 ? '#ffffb8' : '#ffa39e';
+  const style = {
+    background: `linear-gradient(135deg, ${CONFIG.gradient[0]}, ${CONFIG.gradient[1]})`,
+    borderRadius: 12, padding: '24px 28px', minHeight: 120,
+    color: CONFIG.textColor, position: 'relative', overflow: 'hidden',
+    margin: '-24px', height: 'calc(100% + 48px)', width: 'calc(100% + 48px)',
+  };
+
+  if (data.loading) return (<div style={style}><Spin /></div>);
 
   return (
-    <div
-      style={{
-        background: 'linear-gradient(135deg, #722ed1 0%, #b37feb 100%)',
-        borderRadius: 12,
-        padding: '24px 28px',
-        minHeight: 120,
-        color: '#fff',
-        position: 'relative',
-        overflow: 'hidden',
-      }}
-    >
-      {loading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 80 }}>
-          <Spin size="large" />
+    <div style={style}>
+      <div style={{ fontSize: 14, opacity: 0.85, marginBottom: 8 }}>{CONFIG.title}</div>
+      <div style={{ fontSize: 32, fontWeight: 700, letterSpacing: '-0.03em' }}>
+        {fmt(data.value, CONFIG.prefix, CONFIG.suffix)}
+      </div>
+      {trend !== null && (
+        <div style={{ marginTop: 8, fontSize: 13, opacity: 0.9 }}>
+          <span style={{ marginRight: 4 }}>{trendUp ? '↑' : '↓'}</span>
+          <span>环比 {trendUp ? '+' : ''}{trend}%</span>
         </div>
-      ) : (
-        <>
-          <div style={{ fontSize: 14, opacity: 0.85, marginBottom: 8 }}>本月合格率</div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 10 }}>
-            <div style={{ fontSize: 36, fontWeight: 700, lineHeight: 1.2 }}>
-              {passRate.toFixed(1)}
-              <span style={{ fontSize: 18, fontWeight: 500 }}>%</span>
-            </div>
-          </div>
-          <div style={{ marginBottom: 10 }}>
-            <div
-              style={{
-                background: 'rgba(255,255,255,0.15)',
-                borderRadius: 4,
-                height: 8,
-                width: '100%',
-                overflow: 'hidden',
-              }}
-            >
-              <div
-                style={{
-                  background: progressColor,
-                  height: '100%',
-                  width: `${Math.min(passRate, 100)}%`,
-                  borderRadius: 4,
-                  transition: 'width 0.6s ease',
-                }}
-              />
-            </div>
-          </div>
-          <div style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ opacity: 0.7 }}>环比</span>
-              <span style={{ color: rateColor, fontWeight: 600, fontSize: 14 }}>
-                {rateIcon} {Math.abs(rateDiff).toFixed(1)}pp
-              </span>
-            </span>
-            <span style={{ opacity: 0.4 }}>|</span>
-            <span style={{ opacity: 0.7 }}>
-              检验 {inspectionCount.toLocaleString()} 批 · 抽样 {sampleQty.toLocaleString()} 件
-            </span>
-          </div>
-          <div style={{ fontSize: 12, opacity: 0.5, marginTop: 6 }}>
-            上月合格率 {lastPassRate.toFixed(1)}% · 合格 {passQty.toLocaleString()} / {sampleQty.toLocaleString()}
-          </div>
-        </>
       )}
-      <div
-        style={{
-          position: 'absolute',
-          right: -20,
-          top: -20,
-          width: 100,
-          height: 100,
-          borderRadius: '50%',
-          background: 'rgba(255,255,255,0.08)',
-        }}
-      />
-      <div
-        style={{
-          position: 'absolute',
-          right: 20,
-          bottom: -30,
-          width: 70,
-          height: 70,
-          borderRadius: '50%',
-          background: 'rgba(255,255,255,0.06)',
-        }}
-      />
+      {/* 装饰圆 */}
+      <div style={{ position: 'absolute', right: -20, top: -20, width: 100, height: 100,
+        borderRadius: '50%', background: 'rgba(255,255,255,0.1)' }} />
+      <div style={{ position: 'absolute', right: 30, bottom: -30, width: 80, height: 80,
+        borderRadius: '50%', background: 'rgba(255,255,255,0.08)' }} />
     </div>
   );
-}
+};
 
-ctx.render(<QualityKPI />);
+ctx.render(<KpiCard />);
