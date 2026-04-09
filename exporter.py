@@ -263,15 +263,25 @@ def _export_block(nb: NocoBase, item: dict, js_dir: Path = None,
 
     # ── Event Flows + Linkage Rules (forms/details) ──
     if btype in ("createForm", "editForm", "details"):
+        # Check block-level eventSettings
         event_settings = sp.get("eventSettings", {})
+
+        # Also check grid-level eventSettings (linkageRules stored on FormGridModel)
+        grid_sp = subs.get("grid", {}).get("stepParams", {}) if isinstance(subs.get("grid"), dict) else {}
+        grid_es = grid_sp.get("eventSettings", {})
+        if grid_es:
+            event_settings = {**event_settings, **grid_es}
+
         if event_settings:
-            # Extract linkage rules
             linkage = event_settings.get("linkageRules", {})
             if linkage:
                 spec["linkage_rules"] = linkage
 
-        # Extract custom event flow JS from flowRegistry
-        flow_registry = item.get("flowRegistry", {})
+        # Extract custom event flow JS from flowRegistry (on block or grid)
+        flow_registry = item.get("flowRegistry", {}) or {}
+        grid_fr = subs.get("grid", {}).get("flowRegistry", {}) if isinstance(subs.get("grid"), dict) else {}
+        if grid_fr:
+            flow_registry = {**flow_registry, **grid_fr}
         if flow_registry:
             for flow_key, flow_def in flow_registry.items():
                 if not isinstance(flow_def, dict):
