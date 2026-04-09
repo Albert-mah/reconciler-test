@@ -1,403 +1,901 @@
 module: Manufacturing ERP
 icon: tooloutlined
-
 collections:
   erp_materials:
     title: Materials
     fields:
-      - { name: code, interface: input, title: Material Code }
-      - { name: name, interface: input, title: Material Name }
-      - { name: category, interface: select, title: Category, options: [Raw Material, Semi-finished, Finished, Auxiliary, Packaging] }
-      - { name: unit, interface: select, title: Unit, options: [pcs, kg, ton, m, set, roll, box] }
-      - { name: spec, interface: input, title: Specification }
-      - { name: list_price, interface: number, title: List Price }
-      - { name: cost_price, interface: number, title: Cost Price }
-      - { name: stock_qty, interface: integer, title: Stock Qty }
-      - { name: min_stock, interface: integer, title: Safety Stock }
-      - { name: max_stock, interface: integer, title: Max Stock }
-      - { name: lead_time, interface: integer, title: Lead Time (days) }
-      - { name: status, interface: select, title: Status, options: [Active, In Development, Discontinued, Pending] }
-      - { name: remark, interface: textarea, title: Remark }
-
+    - name: code
+      interface: input
+      title: Material Code
+    - name: name
+      interface: input
+      title: Material Name
+    - name: category
+      interface: select
+      title: Category
+      options:
+      - Raw Material
+      - Semi-finished
+      - Finished
+      - Auxiliary
+      - Packaging
+    - name: unit
+      interface: select
+      title: Unit
+      options:
+      - pcs
+      - kg
+      - ton
+      - m
+      - set
+      - roll
+      - box
+    - name: spec
+      interface: input
+      title: Specification
+    - name: list_price
+      interface: number
+      title: List Price
+    - name: cost_price
+      interface: number
+      title: Cost Price
+    - name: stock_qty
+      interface: integer
+      title: Stock Qty
+    - name: min_stock
+      interface: integer
+      title: Safety Stock
+    - name: max_stock
+      interface: integer
+      title: Max Stock
+    - name: lead_time
+      interface: integer
+      title: Lead Time (days)
+    - name: status
+      interface: select
+      title: Status
+      options:
+      - Active
+      - In Development
+      - Discontinued
+      - Pending
+    - name: remark
+      interface: textarea
+      title: Remark
   erp_customers:
     title: Customers
     fields:
-      - { name: code, interface: input, title: Customer Code }
-      - { name: name, interface: input, title: Customer Name }
-      - { name: contact, interface: input, title: Contact Person }
-      - { name: phone, interface: input, title: Phone }
-      - { name: email, interface: input, title: Email }
-      - { name: address, interface: textarea, title: Address }
-      - { name: level, interface: select, title: Level, options: [VIP, A, B, C] }
-      - { name: industry, interface: select, title: Industry, options: [Manufacturing, Energy, Automotive, Electronics, Construction, Other] }
-      - { name: payment_terms, interface: select, title: Payment Terms, options: [Prepaid, COD, Net 30, Net 60, Net 90] }
-      - { name: credit_limit, interface: number, title: Credit Limit }
-      - { name: tax_rate, interface: number, title: Tax Rate (%) }
-      - { name: status, interface: select, title: Status, options: [Active, Suspended, Blocked] }
-
+    - name: code
+      interface: input
+      title: Customer Code
+    - name: name
+      interface: input
+      title: Customer Name
+    - name: contact
+      interface: input
+      title: Contact Person
+    - name: phone
+      interface: input
+      title: Phone
+    - name: email
+      interface: input
+      title: Email
+    - name: address
+      interface: textarea
+      title: Address
+    - name: level
+      interface: select
+      title: Level
+      options:
+      - VIP
+      - A
+      - B
+      - C
+    - name: industry
+      interface: select
+      title: Industry
+      options:
+      - Manufacturing
+      - Energy
+      - Automotive
+      - Electronics
+      - Construction
+      - Other
+    - name: payment_terms
+      interface: select
+      title: Payment Terms
+      options:
+      - Prepaid
+      - COD
+      - Net 30
+      - Net 60
+      - Net 90
+    - name: credit_limit
+      interface: number
+      title: Credit Limit
+    - name: tax_rate
+      interface: number
+      title: Tax Rate (%)
+    - name: status
+      interface: select
+      title: Status
+      options:
+      - Active
+      - Suspended
+      - Blocked
   erp_suppliers:
     title: Suppliers
     fields:
-      - { name: code, interface: input, title: Supplier Code }
-      - { name: name, interface: input, title: Supplier Name }
-      - { name: contact, interface: input, title: Contact Person }
-      - { name: phone, interface: input, title: Phone }
-      - { name: email, interface: input, title: Email }
-      - { name: address, interface: textarea, title: Address }
-      - { name: category, interface: select, title: Category, options: [Raw Material, Components, Equipment, Services, Packaging] }
-      - { name: rating, interface: select, title: Rating, options: [A-Excellent, B-Good, C-Acceptable, D-Needs Improvement] }
-      - { name: payment_terms, interface: select, title: Payment Terms, options: [Prepaid, Net 30, Net 60] }
-      - { name: delivery_score, interface: integer, title: Delivery Score }
-      - { name: quality_score, interface: integer, title: Quality Score }
-      - { name: status, interface: select, title: Status, options: [Approved, Trial, Suspended, Disqualified] }
-
+    - name: code
+      interface: input
+      title: Supplier Code
+    - name: name
+      interface: input
+      title: Supplier Name
+    - name: contact
+      interface: input
+      title: Contact Person
+    - name: phone
+      interface: input
+      title: Phone
+    - name: email
+      interface: input
+      title: Email
+    - name: address
+      interface: textarea
+      title: Address
+    - name: category
+      interface: select
+      title: Category
+      options:
+      - Raw Material
+      - Components
+      - Equipment
+      - Services
+      - Packaging
+    - name: rating
+      interface: select
+      title: Rating
+      options:
+      - A-Excellent
+      - B-Good
+      - C-Acceptable
+      - D-Needs Improvement
+    - name: payment_terms
+      interface: select
+      title: Payment Terms
+      options:
+      - Prepaid
+      - Net 30
+      - Net 60
+    - name: delivery_score
+      interface: integer
+      title: Delivery Score
+    - name: quality_score
+      interface: integer
+      title: Quality Score
+    - name: status
+      interface: select
+      title: Status
+      options:
+      - Approved
+      - Trial
+      - Suspended
+      - Disqualified
   erp_purchase_orders:
     title: Purchase Orders
     fields:
-      - { name: po_no, interface: input, title: PO Number }
-      - { name: supplier_name, interface: input, title: Supplier }
-      - { name: total_amount, interface: number, title: Total Amount }
-      - { name: tax_amount, interface: number, title: Tax Amount }
-      - { name: status, interface: select, title: Status, options: [Draft, Pending Approval, Approved, Partial Receipt, Received, Closed, Cancelled] }
-      - { name: priority, interface: select, title: Priority, options: [Urgent, High, Normal, Low] }
-      - { name: order_date, interface: datetime, title: Order Date }
-      - { name: expected_date, interface: datetime, title: Expected Date }
-      - { name: actual_date, interface: datetime, title: Actual Date }
-      - { name: buyer, interface: input, title: Buyer }
-      - { name: remark, interface: textarea, title: Remark }
-
+    - name: po_no
+      interface: input
+      title: PO Number
+    - name: supplier_name
+      interface: input
+      title: Supplier
+    - name: total_amount
+      interface: number
+      title: Total Amount
+    - name: tax_amount
+      interface: number
+      title: Tax Amount
+    - name: status
+      interface: select
+      title: Status
+      options:
+      - Draft
+      - Pending Approval
+      - Approved
+      - Partial Receipt
+      - Received
+      - Closed
+      - Cancelled
+    - name: priority
+      interface: select
+      title: Priority
+      options:
+      - Urgent
+      - High
+      - Normal
+      - Low
+    - name: order_date
+      interface: datetime
+      title: Order Date
+    - name: expected_date
+      interface: datetime
+      title: Expected Date
+    - name: actual_date
+      interface: datetime
+      title: Actual Date
+    - name: buyer
+      interface: input
+      title: Buyer
+    - name: remark
+      interface: textarea
+      title: Remark
   erp_sales_orders:
     title: Sales Orders
     fields:
-      - { name: so_no, interface: input, title: SO Number }
-      - { name: customer_name, interface: input, title: Customer }
-      - { name: total_amount, interface: number, title: Total Amount }
-      - { name: tax_amount, interface: number, title: Tax Amount }
-      - { name: status, interface: select, title: Status, options: [Draft, Confirmed, In Production, Ready to Ship, Partially Shipped, Shipped, Delivered, Cancelled] }
-      - { name: priority, interface: select, title: Priority, options: [Urgent, High, Normal, Low] }
-      - { name: order_date, interface: datetime, title: Order Date }
-      - { name: delivery_date, interface: datetime, title: Delivery Date }
-      - { name: shipped_date, interface: datetime, title: Shipped Date }
-      - { name: sales_rep, interface: input, title: Sales Rep }
-      - { name: remark, interface: textarea, title: Remark }
-
+    - name: so_no
+      interface: input
+      title: SO Number
+    - name: customer_name
+      interface: input
+      title: Customer
+    - name: total_amount
+      interface: number
+      title: Total Amount
+    - name: tax_amount
+      interface: number
+      title: Tax Amount
+    - name: status
+      interface: select
+      title: Status
+      options:
+      - Draft
+      - Confirmed
+      - In Production
+      - Ready to Ship
+      - Partially Shipped
+      - Shipped
+      - Delivered
+      - Cancelled
+    - name: priority
+      interface: select
+      title: Priority
+      options:
+      - Urgent
+      - High
+      - Normal
+      - Low
+    - name: order_date
+      interface: datetime
+      title: Order Date
+    - name: delivery_date
+      interface: datetime
+      title: Delivery Date
+    - name: shipped_date
+      interface: datetime
+      title: Shipped Date
+    - name: sales_rep
+      interface: input
+      title: Sales Rep
+    - name: remark
+      interface: textarea
+      title: Remark
   erp_work_orders:
     title: Work Orders
     fields:
-      - { name: wo_no, interface: input, title: WO Number }
-      - { name: product_name, interface: input, title: Product }
-      - { name: planned_qty, interface: integer, title: Planned Qty }
-      - { name: completed_qty, interface: integer, title: Completed Qty }
-      - { name: defect_qty, interface: integer, title: Defect Qty }
-      - { name: status, interface: select, title: Status, options: [Scheduled, In Progress, On Hold, Completed, Closed] }
-      - { name: priority, interface: select, title: Priority, options: [Urgent, High, Normal, Low] }
-      - { name: planned_start, interface: datetime, title: Planned Start }
-      - { name: planned_end, interface: datetime, title: Planned End }
-      - { name: actual_start, interface: datetime, title: Actual Start }
-      - { name: actual_end, interface: datetime, title: Actual End }
-      - { name: workshop, interface: input, title: Workshop }
-      - { name: so_no, interface: input, title: Related SO }
-      - { name: remark, interface: textarea, title: Remark }
-
+    - name: wo_no
+      interface: input
+      title: WO Number
+    - name: product_name
+      interface: input
+      title: Product
+    - name: planned_qty
+      interface: integer
+      title: Planned Qty
+    - name: completed_qty
+      interface: integer
+      title: Completed Qty
+    - name: defect_qty
+      interface: integer
+      title: Defect Qty
+    - name: status
+      interface: select
+      title: Status
+      options:
+      - Scheduled
+      - In Progress
+      - On Hold
+      - Completed
+      - Closed
+    - name: priority
+      interface: select
+      title: Priority
+      options:
+      - Urgent
+      - High
+      - Normal
+      - Low
+    - name: planned_start
+      interface: datetime
+      title: Planned Start
+    - name: planned_end
+      interface: datetime
+      title: Planned End
+    - name: actual_start
+      interface: datetime
+      title: Actual Start
+    - name: actual_end
+      interface: datetime
+      title: Actual End
+    - name: workshop
+      interface: input
+      title: Workshop
+    - name: so_no
+      interface: input
+      title: Related SO
+    - name: remark
+      interface: textarea
+      title: Remark
   erp_inventory:
     title: Inventory Transactions
     fields:
-      - { name: txn_no, interface: input, title: Transaction No }
-      - { name: product_name, interface: input, title: Material }
-      - { name: product_code, interface: input, title: Material Code }
-      - { name: txn_type, interface: select, title: Type, options: [Purchase Receipt, Production Receipt, Sales Issue, Production Issue, Return Receipt, Gain, Loss, Transfer] }
-      - { name: qty, interface: integer, title: Quantity }
-      - { name: warehouse, interface: select, title: Warehouse, options: [Raw Material, WIP, Finished Goods, Returns] }
-      - { name: ref_no, interface: input, title: Reference No }
-      - { name: operator, interface: input, title: Operator }
-      - { name: remark, interface: textarea, title: Remark }
-
+    - name: txn_no
+      interface: input
+      title: Transaction No
+    - name: product_name
+      interface: input
+      title: Material
+    - name: product_code
+      interface: input
+      title: Material Code
+    - name: txn_type
+      interface: select
+      title: Type
+      options:
+      - Purchase Receipt
+      - Production Receipt
+      - Sales Issue
+      - Production Issue
+      - Return Receipt
+      - Gain
+      - Loss
+      - Transfer
+    - name: qty
+      interface: integer
+      title: Quantity
+    - name: warehouse
+      interface: select
+      title: Warehouse
+      options:
+      - Raw Material
+      - WIP
+      - Finished Goods
+      - Returns
+    - name: ref_no
+      interface: input
+      title: Reference No
+    - name: operator
+      interface: input
+      title: Operator
+    - name: remark
+      interface: textarea
+      title: Remark
   erp_quality:
     title: Quality Records
     fields:
-      - { name: qc_no, interface: input, title: QC Number }
-      - { name: product_name, interface: input, title: Material }
-      - { name: qc_type, interface: select, title: Inspection Type, options: [Incoming, In-Process, Final, Outgoing] }
-      - { name: batch_no, interface: input, title: Batch No }
-      - { name: sample_qty, interface: integer, title: Sample Qty }
-      - { name: pass_qty, interface: integer, title: Pass Qty }
-      - { name: fail_qty, interface: integer, title: Fail Qty }
-      - { name: result, interface: select, title: Result, options: [Pass, Fail, Conditional Accept, Pending] }
-      - { name: ref_no, interface: input, title: Reference No }
-      - { name: inspector, interface: input, title: Inspector }
-      - { name: remark, interface: textarea, title: Defect Description }
-
+    - name: qc_no
+      interface: input
+      title: QC Number
+    - name: product_name
+      interface: input
+      title: Material
+    - name: qc_type
+      interface: select
+      title: Inspection Type
+      options:
+      - Incoming
+      - In-Process
+      - Final
+      - Outgoing
+    - name: batch_no
+      interface: input
+      title: Batch No
+    - name: sample_qty
+      interface: integer
+      title: Sample Qty
+    - name: pass_qty
+      interface: integer
+      title: Pass Qty
+    - name: fail_qty
+      interface: integer
+      title: Fail Qty
+    - name: result
+      interface: select
+      title: Result
+      options:
+      - Pass
+      - Fail
+      - Conditional Accept
+      - Pending
+    - name: ref_no
+      interface: input
+      title: Reference No
+    - name: inspector
+      interface: input
+      title: Inspector
+    - name: remark
+      interface: textarea
+      title: Defect Description
 pages:
-  - page: Materials
-    icon: appstoreoutlined
-    coll: erp_materials
-    blocks:
-      - key: filter
-        type: filterForm
-        fields:
-          - field: name
-            label: Search
-            filterPaths: [code, name, spec]
-          - field: category
-            label: Category
-          - field: status
-            label: Status
-        js_items:
-          - desc: Material Stats Filter
-            file: ./js/filter_materials.js
-      - key: table
-        type: table
-        fields: [code, name, category, spec, unit, list_price, cost_price, stock_qty, status]
-        js_columns:
-          - title: Stock Status
-            desc: Stock alert tag based on qty vs safety stock
-            file: ./js/col_stock_status.js
-          - title: Margin
-            desc: Profit margin percentage with color coding
-            file: ./js/col_margin.js
-        actions: [filter, refresh, addNew, export]
-        recordActions: [edit, delete]
-    layout: [[filter], [table]]
-
-  - page: Customers
-    icon: teamoutlined
-    coll: erp_customers
-    blocks:
-      - key: filter
-        type: filterForm
-        fields:
-          - field: name
-            label: Search
-            filterPaths: [code, name, contact, phone]
-          - field: level
-            label: Level
-          - field: status
-            label: Status
-        js_items:
-          - desc: Customer Stats Filter
-            file: ./js/filter_customers.js
-      - key: table
-        type: table
-        fields: [code, name, contact, phone, level, industry, payment_terms, credit_limit, status]
-        js_columns:
-          - title: Credit
-            desc: Credit level badge and formatted limit
-            file: ./js/col_credit.js
-        actions: [filter, refresh, addNew, export]
-        recordActions: [edit, delete]
-    layout: [[filter], [table]]
-
-  - page: Suppliers
-    icon: solutionoutlined
-    coll: erp_suppliers
-    blocks:
-      - key: filter
-        type: filterForm
-        fields:
-          - field: name
-            label: Search
-            filterPaths: [code, name, contact, phone]
-          - field: rating
-            label: Rating
-        js_items:
-          - desc: Supplier Stats Filter
-            file: ./js/filter_suppliers.js
-      - key: table
-        type: table
-        fields: [code, name, contact, phone, category, rating, delivery_score, quality_score, status]
-        js_columns:
-          - title: Score
-            desc: Combined delivery + quality score as stars
-            file: ./js/col_score.js
-        actions: [filter, refresh, addNew, export]
-        recordActions: [edit, delete]
-    layout: [[filter], [table]]
-
-  - page: Purchasing
-    icon: shoppingcartoutlined
-    coll: erp_purchase_orders
-    blocks:
-      - key: filter
-        type: filterForm
-        fields:
-          - field: po_no
-            label: Search
-            filterPaths: [po_no, supplier_name, buyer]
-          - field: status
-            label: Status
-          - field: priority
-            label: Priority
-        js_items:
-          - desc: PO Stats Filter
-            file: ./js/filter_po.js
-      - key: table
-        type: table
-        fields: [po_no, supplier_name, total_amount, status, priority, order_date, expected_date, buyer]
-        js_columns:
-          - title: ETA
-            desc: Days countdown to expected_date
-            file: ./js/col_po_eta.js
-          - title: Total (incl. tax)
-            desc: Formatted total + tax amount
-            file: ./js/col_po_total.js
-        actions: [filter, refresh, addNew, export]
-        recordActions: [edit, delete]
-    layout: [[filter], [table]]
-
-  - page: Sales
-    icon: fundoutlined
-    coll: erp_sales_orders
-    blocks:
-      - key: filter
-        type: filterForm
-        fields:
-          - field: so_no
-            label: Search
-            filterPaths: [so_no, customer_name, sales_rep]
-          - field: status
-            label: Status
-          - field: priority
-            label: Priority
-        js_items:
-          - desc: SO Stats Filter
-            file: ./js/filter_so.js
-      - key: table
-        type: table
-        fields: [so_no, customer_name, total_amount, status, priority, order_date, delivery_date, sales_rep]
-        js_columns:
-          - title: Delivery
-            desc: Days countdown to delivery_date
-            file: ./js/col_so_delivery.js
-          - title: Progress
-            desc: Order status flow as steps
-            file: ./js/col_so_progress.js
-        actions: [filter, refresh, addNew, export]
-        recordActions: [edit, delete]
-    layout: [[filter], [table]]
-
-  - page: Production
-    icon: experimentoutlined
-    coll: erp_work_orders
-    blocks:
-      - key: filter
-        type: filterForm
-        fields:
-          - field: wo_no
-            label: Search
-            filterPaths: [wo_no, product_name, workshop, so_no]
-          - field: status
-            label: Status
-          - field: priority
-            label: Priority
-        js_items:
-          - desc: WO Stats Filter
-            file: ./js/filter_wo.js
-      - key: table
-        type: table
-        fields: [wo_no, product_name, planned_qty, completed_qty, status, priority, planned_start, planned_end, workshop]
-        js_columns:
-          - title: Completion
-            desc: Progress bar of completed/planned
-            file: ./js/col_wo_completion.js
-          - title: Yield
-            desc: Yield rate percentage
-            file: ./js/col_wo_yield.js
-        actions: [filter, refresh, addNew, export]
-        recordActions: [edit, delete]
-    layout: [[filter], [table]]
-
-  - page: Inventory
-    icon: databaseoutlined
-    coll: erp_inventory
-    blocks:
-      - key: filter
-        type: filterForm
-        fields:
-          - field: product_name
-            label: Search
-            filterPaths: [txn_no, product_name, product_code, ref_no]
-          - field: txn_type
-            label: Type
-          - field: warehouse
-            label: Warehouse
-        js_items:
-          - desc: Inventory Stats Filter
-            file: ./js/filter_inv.js
-      - key: table
-        type: table
-        fields: [txn_no, product_name, product_code, txn_type, qty, warehouse, ref_no, operator]
-        js_columns:
-          - title: Direction
-            desc: In/Out/Transfer direction indicator
-            file: ./js/col_inv_direction.js
-        actions: [filter, refresh, addNew, export]
-        recordActions: [edit, delete]
-    layout: [[filter], [table]]
-
-  - page: Quality
-    icon: safetycertificateoutlined
-    coll: erp_quality
-    blocks:
-      - key: filter
-        type: filterForm
-        fields:
-          - field: qc_no
-            label: Search
-            filterPaths: [qc_no, product_name, batch_no, ref_no]
-          - field: qc_type
-            label: Type
-          - field: result
-            label: Result
-        js_items:
-          - desc: QC Stats Filter
-            file: ./js/filter_qc.js
-      - key: table
-        type: table
-        fields: [qc_no, product_name, qc_type, batch_no, sample_qty, pass_qty, fail_qty, result, inspector]
-        js_columns:
-          - title: Pass Rate
-            desc: Pass/sample percentage with color
-            file: ./js/col_qc_rate.js
-        actions: [filter, refresh, addNew, export]
-        recordActions: [edit, delete]
-    layout: [[filter], [table]]
-
-  - page: Dashboard
-    icon: dashboardoutlined
-    blocks:
-      - key: kpi_sales
-        type: jsBlock
-        desc: Monthly Sales KPI
-        file: ./js/kpi_sales.js
-      - key: kpi_purchase
-        type: jsBlock
-        desc: Monthly Purchase KPI
-        file: ./js/kpi_purchase.js
-      - key: kpi_production
-        type: jsBlock
-        desc: Monthly Output KPI
-        file: ./js/kpi_production.js
-      - key: kpi_quality
-        type: jsBlock
-        desc: Monthly Quality KPI
-        file: ./js/kpi_quality.js
-      - key: chart_po_status
-        type: chart
-        chart_config: ./charts/po_status.json
-      - key: chart_funnel
-        type: chart
-        chart_config: ./charts/order_funnel.json
-      - key: chart_sales_trend
-        type: chart
-        chart_config: ./charts/sales_trend.json
-      - key: chart_production
-        type: chart
-        chart_config: ./charts/production_output.json
-      - key: chart_stock
-        type: chart
-        chart_config: ./charts/stock_distribution.json
-    layout:
-      - [kpi_sales, kpi_purchase, kpi_production, kpi_quality]
-      - [{chart_po_status: 15}, {chart_funnel: 9}]
-      - [chart_sales_trend]
-      - [{chart_production: 14}, {chart_stock: 10}]
+- page: Materials
+  icon: appstoreoutlined
+  coll: erp_materials
+  blocks:
+  - key: filter
+    type: filterForm
+    fields:
+    - field: name
+      label: Search
+      filterPaths:
+      - code
+      - name
+      - spec
+    - field: category
+      label: Category
+    - field: status
+      label: Status
+    js_items:
+    - desc: Material Stats Filter
+      file: ./js/filter_materials.js
+    field_layout:
+    - - '[JS:Material Stats Filter]'
+    - - name
+      - category
+      - status
+  - key: table
+    type: table
+    fields:
+    - code
+    - name
+    - category
+    - spec
+    - unit
+    - list_price
+    - cost_price
+    - stock_qty
+    - status
+    js_columns:
+    - title: Stock Status
+      desc: Stock Status Tag — stock_qty vs min_stock
+      file: ./js/col_stock_status.js
+    - title: Margin
+      desc: Profit Margin Tag — (list_price - cost_price) / list_price
+      file: ./js/col_margin.js
+    actions:
+    - filter
+    - refresh
+    - addNew
+    - export
+    recordActions:
+    - edit
+    - delete
+  layout:
+  - - filter
+  - - table
+- page: Customers
+  icon: teamoutlined
+  coll: erp_customers
+  blocks:
+  - key: filter
+    type: filterForm
+    fields:
+    - field: name
+      label: Search
+      filterPaths:
+      - code
+      - name
+      - contact
+      - phone
+    - field: level
+      label: Level
+    - field: status
+      label: Status
+    js_items:
+    - desc: Customer Stats Filter
+      file: ./js/filter_customers.js
+    field_layout:
+    - - '[JS:Customer Stats Filter]'
+    - - name
+      - level
+      - status
+  - key: table
+    type: table
+    fields:
+    - code
+    - name
+    - contact
+    - phone
+    - level
+    - industry
+    - payment_terms
+    - credit_limit
+    - status
+    js_columns:
+    - title: Credit
+      desc: Credit Level Badge + formatted limit
+      file: ./js/col_credit.js
+    actions:
+    - filter
+    - refresh
+    - addNew
+    - export
+    recordActions:
+    - edit
+    - delete
+  layout:
+  - - filter
+  - - table
+- page: Suppliers
+  icon: solutionoutlined
+  coll: erp_suppliers
+  blocks:
+  - key: filter
+    type: filterForm
+    fields:
+    - field: name
+      label: Search
+      filterPaths:
+      - code
+      - name
+      - contact
+      - phone
+    - field: rating
+      label: Rating
+    js_items:
+    - desc: Supplier Stats Filter
+      file: ./js/filter_suppliers.js
+    field_layout:
+    - - '[JS:Supplier Stats Filter]'
+    - - name
+      - rating
+  - key: table
+    type: table
+    fields:
+    - code
+    - name
+    - contact
+    - phone
+    - category
+    - rating
+    - delivery_score
+    - quality_score
+    - status
+    js_columns:
+    - title: Score
+      desc: Combined delivery + quality score as stars
+      file: ./js/col_score.js
+    actions:
+    - filter
+    - refresh
+    - addNew
+    - export
+    recordActions:
+    - edit
+    - delete
+  layout:
+  - - filter
+  - - table
+- page: Purchasing
+  icon: shoppingcartoutlined
+  coll: erp_purchase_orders
+  blocks:
+  - key: filter
+    type: filterForm
+    fields:
+    - field: po_no
+      label: Search
+      filterPaths:
+      - po_no
+      - supplier_name
+      - buyer
+    - field: status
+      label: Status
+    - field: priority
+      label: Priority
+    js_items:
+    - desc: PO Stats Filter
+      file: ./js/filter_po.js
+    field_layout:
+    - - '[JS:PO Stats Filter]'
+    - - po_no
+      - status
+      - priority
+  - key: table
+    type: table
+    fields:
+    - po_no
+    - supplier_name
+    - total_amount
+    - status
+    - priority
+    - order_date
+    - expected_date
+    - buyer
+    js_columns:
+    - title: ETA
+      desc: PO ETA countdown to expected_date
+      file: ./js/col_po_eta.js
+    - title: Total (incl. tax)
+      desc: PO Total + Tax formatted
+      file: ./js/col_po_total.js
+    actions:
+    - filter
+    - refresh
+    - addNew
+    - export
+    recordActions:
+    - edit
+    - delete
+  layout:
+  - - filter
+  - - table
+- page: Sales
+  icon: fundoutlined
+  coll: erp_sales_orders
+  blocks:
+  - key: filter
+    type: filterForm
+    fields:
+    - field: so_no
+      label: Search
+      filterPaths:
+      - so_no
+      - customer_name
+      - sales_rep
+    - field: status
+      label: Status
+    - field: priority
+      label: Priority
+    js_items:
+    - desc: SO Stats Filter
+      file: ./js/filter_so.js
+    field_layout:
+    - - '[JS:SO Stats Filter]'
+    - - so_no
+      - status
+      - priority
+  - key: table
+    type: table
+    fields:
+    - so_no
+    - customer_name
+    - total_amount
+    - status
+    - priority
+    - order_date
+    - delivery_date
+    - sales_rep
+    js_columns:
+    - title: Delivery
+      desc: SO Delivery countdown to delivery_date
+      file: ./js/col_so_delivery.js
+    - title: Progress
+      desc: SO Status Flow as Steps component
+      file: ./js/col_so_progress.js
+    actions:
+    - filter
+    - refresh
+    - addNew
+    - export
+    recordActions:
+    - edit
+    - delete
+  layout:
+  - - filter
+  - - table
+- page: Production
+  icon: experimentoutlined
+  coll: erp_work_orders
+  blocks:
+  - key: filter
+    type: filterForm
+    fields:
+    - field: wo_no
+      label: Search
+      filterPaths:
+      - wo_no
+      - product_name
+      - workshop
+      - so_no
+    - field: status
+      label: Status
+    - field: priority
+      label: Priority
+    js_items:
+    - desc: WO Stats Filter
+      file: ./js/filter_wo.js
+    field_layout:
+    - - '[JS:WO Stats Filter]'
+    - - wo_no
+      - status
+      - priority
+  - key: table
+    type: table
+    fields:
+    - wo_no
+    - product_name
+    - planned_qty
+    - completed_qty
+    - status
+    - priority
+    - planned_start
+    - planned_end
+    - workshop
+    js_columns:
+    - title: Completion
+      desc: WO Completion Progress bar
+      file: ./js/col_wo_completion.js
+    - title: Yield
+      desc: WO Yield Rate Tag
+      file: ./js/col_wo_yield.js
+    actions:
+    - filter
+    - refresh
+    - addNew
+    - export
+    recordActions:
+    - edit
+    - delete
+  layout:
+  - - filter
+  - - table
+- page: Inventory
+  icon: databaseoutlined
+  coll: erp_inventory
+  blocks:
+  - key: filter
+    type: filterForm
+    fields:
+    - field: product_name
+      label: Search
+      filterPaths:
+      - txn_no
+      - product_name
+      - product_code
+      - ref_no
+    - field: txn_type
+      label: Type
+    - field: warehouse
+      label: Warehouse
+    js_items:
+    - desc: Inventory Stats Filter
+      file: ./js/filter_inv.js
+    field_layout:
+    - - '[JS:Inventory Stats Filter]'
+    - - product_name
+      - txn_type
+      - warehouse
+  - key: table
+    type: table
+    fields:
+    - txn_no
+    - product_name
+    - product_code
+    - txn_type
+    - qty
+    - warehouse
+    - ref_no
+    - operator
+    js_columns:
+    - title: Direction
+      desc: Inventory Direction Tag — In/Out/Transfer
+      file: ./js/col_inv_direction.js
+    actions:
+    - filter
+    - refresh
+    - addNew
+    - export
+    recordActions:
+    - edit
+    - delete
+  layout:
+  - - filter
+  - - table
+- page: Quality
+  icon: safetycertificateoutlined
+  coll: erp_quality
+  blocks:
+  - key: filter
+    type: filterForm
+    fields:
+    - field: qc_no
+      label: Search
+      filterPaths:
+      - qc_no
+      - product_name
+      - batch_no
+      - ref_no
+    - field: qc_type
+      label: Type
+    - field: result
+      label: Result
+    js_items:
+    - desc: QC Stats Filter
+      file: ./js/filter_qc.js
+    field_layout:
+    - - '[JS:QC Stats Filter]'
+    - - qc_no
+      - qc_type
+      - result
+  - key: table
+    type: table
+    fields:
+    - qc_no
+    - product_name
+    - qc_type
+    - batch_no
+    - sample_qty
+    - pass_qty
+    - fail_qty
+    - result
+    - inspector
+    js_columns:
+    - title: Pass Rate
+      desc: QC Pass Rate Tag
+      file: ./js/col_qc_rate.js
+    actions:
+    - filter
+    - refresh
+    - addNew
+    - export
+    recordActions:
+    - edit
+    - delete
+  layout:
+  - - filter
+  - - table
+- page: Dashboard
+  icon: dashboardoutlined
+  blocks:
+  - key: kpi_sales
+    type: jsBlock
+    desc: Monthly Sales KPI Card
+    file: ./js/kpi_sales.js
+  - key: kpi_purchase
+    type: jsBlock
+    desc: Monthly Purchases KPI Card
+    file: ./js/kpi_purchase.js
+  - key: kpi_production
+    type: jsBlock
+    desc: Monthly Output KPI Card
+    file: ./js/kpi_production.js
+  - key: kpi_quality
+    type: jsBlock
+    desc: Monthly Quality Pass Rate KPI Card
+    file: ./js/kpi_quality.js
+  - key: chart_po_status
+    type: chart
+    chart_config: ./charts/po_status.json
+  - key: chart_funnel
+    type: chart
+    chart_config: ./charts/order_funnel.json
+  - key: chart_sales_trend
+    type: chart
+    chart_config: ./charts/sales_trend.json
+  - key: chart_production
+    type: chart
+    chart_config: ./charts/production_output.json
+  - key: chart_stock
+    type: chart
+    chart_config: ./charts/stock_distribution.json
+  layout:
+  - - kpi_sales
+    - kpi_purchase
+    - kpi_production
+    - kpi_quality
+  - - chart_po_status: 15
+    - chart_funnel: 9
+  - - chart_sales_trend
+  - - chart_production: 14
+    - chart_stock: 10

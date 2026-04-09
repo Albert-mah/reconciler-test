@@ -80,14 +80,18 @@ def export_popup_surface(nb: NocoBase, field_uid: str,
 
 
 def _export_grid(nb: NocoBase, grid: dict, js_dir: Path = None,
-                 prefix: str = "", reset_keys: bool = False) -> dict:
+                 prefix: str = "", reset_keys: bool = False,
+                 used_keys: set = None) -> dict:
     """Export a BlockGridModel and its contents."""
-    global _used_keys
     if not isinstance(grid, dict):
         return {"blocks": [], "layout": []}
 
-    if reset_keys:
-        _used_keys = set()
+    if used_keys is not None:
+        _keys = used_keys
+    elif reset_keys:
+        _keys = set()
+    else:
+        _keys = set()
 
     grid_uid = grid.get("uid", "")
     items = grid.get("subModels", {}).get("items", [])
@@ -100,7 +104,7 @@ def _export_grid(nb: NocoBase, grid: dict, js_dir: Path = None,
     state_blocks: dict[str, Any] = {}
 
     for i, item in enumerate(items):
-        block_spec, block_key, block_state = _export_block(nb, item, js_dir, prefix, i)
+        block_spec, block_key, block_state = _export_block(nb, item, js_dir, prefix, i, _keys)
         if block_spec:
             blocks.append(block_spec)
             block_uid_to_key[item.get("uid", "")] = block_key
@@ -124,11 +128,9 @@ def _export_grid(nb: NocoBase, grid: dict, js_dir: Path = None,
     return result
 
 
-_used_keys: set[str] = set()
-
-
 def _export_block(nb: NocoBase, item: dict, js_dir: Path = None,
-                  prefix: str = "", index: int = 0) -> tuple[dict | None, str, dict]:
+                  prefix: str = "", index: int = 0,
+                  used_keys: set = None) -> tuple[dict | None, str, dict]:
     """Export a single block node."""
     use = item.get("use", "")
     uid = item.get("uid", "")
@@ -170,12 +172,13 @@ def _export_block(nb: NocoBase, item: dict, js_dir: Path = None,
         key = f"{btype}_{index}"
 
     # Deduplicate key within same page
+    _keys = used_keys if used_keys is not None else set()
     base_key = key
     counter = 2
-    while key in _used_keys:
+    while key in _keys:
         key = f"{base_key}_{counter}"
         counter += 1
-    _used_keys.add(key)
+    _keys.add(key)
 
     spec: dict[str, Any] = {"key": key, "type": btype}
     if title:

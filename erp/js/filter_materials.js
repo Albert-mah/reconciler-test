@@ -5,7 +5,7 @@
  * @template filter-stats
  */
 
-const TARGET_BLOCK_UID = '__TABLE_UID__';
+const TARGET_BLOCK_UID = 'coozl7m9ex7';
 
 // ─── CONFIG: AI modifies here ────────────────────────────────
 const COLLECTION = 'erp_materials';

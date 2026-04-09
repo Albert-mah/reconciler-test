@@ -17,11 +17,10 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from nb import NocoBase, dump_yaml
+from nb import NocoBase, dump_yaml, slugify
 from exporter import (
     export_page_surface, export_popup_surface,
-    _export_block, _export_layout, _extract_js_desc, _slugify,
-    _used_keys,
+    _export_block, _export_layout, _extract_js_desc,
 )
 
 
@@ -50,7 +49,7 @@ def sync(mod_dir: str, page_filter: str = None):
         if page_filter and page_filter not in title:
             continue
 
-        page_key = _slugify(title)
+        page_key = slugify(title)
         page_state = state.get("pages", {}).get(page_key, {})
         tab_uid = page_state.get("tab_uid", "")
 
@@ -129,9 +128,8 @@ def _sync_page(nb: NocoBase, tab_uid: str, page_spec: dict,
             _sync_block(nb, item, spec_blocks[spec_idx], blocks_state, mod, js_dir, page_key)
         else:
             # New block (user added manually) — add to spec
-            global _used_keys
-            _used_keys = set(bs.get("key", "") for bs in spec_blocks)
-            new_spec, new_key, new_state = _export_block(nb, item, js_dir, page_key, len(spec_blocks))
+            _discover_keys = set(bs.get("key", "") for bs in spec_blocks)
+            new_spec, new_key, new_state = _export_block(nb, item, js_dir, page_key, len(spec_blocks), _discover_keys)
             if new_spec:
                 spec_blocks.append(new_spec)
                 blocks_state[new_key] = new_state
@@ -220,7 +218,7 @@ def _sync_table_fields(item: dict, spec: dict, block_state: dict,
             # Use existing file path from spec, fallback to block_key-based name
             file_ref = existing_jscol_files.get(col_title, "")
             if not file_ref:
-                safe = _slugify(col_title or desc or f"col_{len(js_columns)}")
+                safe = slugify(col_title or desc or f"col_{len(js_columns)}")
                 file_ref = f"./js/{block_key}_col_{safe}.js"
 
             if code:
@@ -291,7 +289,7 @@ def _sync_form_fields(item: dict, spec: dict, block_state: dict,
 
             # Generate new path only for truly new items
             if not file_ref:
-                js_name = _slugify(desc) if desc else f"js_{len(js_items)}"
+                js_name = slugify(desc) if desc else f"js_{len(js_items)}"
                 file_ref = f"./js/{block_key}_{js_name}.js"
 
             if code:
@@ -379,9 +377,12 @@ def _sync_popup(nb: NocoBase, popup_spec: dict, state: dict,
                 continue
 
             # Sync blocks in this tab
-            for bs in tab_spec.get("blocks", []):
-                # Find matching live block by type + index
-                pass  # TODO: match by state UID
+            # Sync blocks in this tab by matching type + position
+            spec_blocks = tab_spec.get("blocks", [])
+            for bi_idx, bi in enumerate(tab_items):
+                if bi_idx < len(spec_blocks):
+                    _sync_block(nb, bi, spec_blocks[bi_idx], {},
+                                mod, js_dir, f"{target.split('.')[0].lstrip('$')}_popup")
 
             # Sync tab layout
             uid_to_key = {}
@@ -389,7 +390,7 @@ def _sync_popup(nb: NocoBase, popup_spec: dict, state: dict,
                 use = bi.get("use", "").replace("Model", "")
                 uid = bi.get("uid", "")
                 title = bi.get("stepParams", {}).get("cardSettings", {}).get("titleDescription", {}).get("title", "")
-                key = _slugify(title) if title else f"{use.lower()}_{uid[:6]}"
+                key = slugify(title) if title else f"{use.lower()}_{uid[:6]}"
                 uid_to_key[uid] = key
 
             layout = _export_layout(tab_grid, uid_to_key)

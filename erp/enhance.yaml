@@ -295,8 +295,6 @@ popups:
       - inspector
     - '--- Description ---'
     - - remark
-
-# ── Materials Detail Popup ──
 - target: $materials.table.fields.name
   field: name
   mode: embed
@@ -310,21 +308,21 @@ popups:
       resource:
         binding: currentRecord
       fields:
-      - code
-      - name
-      - category
-      - spec
-      - unit
-      - status
       - stock_qty
+      - status
       - min_stock
+      - name
+      - spec
       - max_stock
+      - code
+      - category
       - lead_time
+      - unit
       js_items:
-      - desc: Material KPI Metrics
+      - desc: Material Detail KPI — price/cost/margin/stock metrics
         file: ./js/detail_material_kpi.js
       field_layout:
-      - '[JS:Material KPI Metrics]'
+      - - '[JS:Material Detail KPI — price/cost/margin/stock metrics]'
       - '--- Basic Info ---'
       - - code
         - name
@@ -345,9 +343,9 @@ popups:
       resource:
         binding: currentRecord
       fields:
+      - remark
       - list_price
       - cost_price
-      - remark
       field_layout:
       - '--- Pricing ---'
       - - list_price
@@ -355,15 +353,13 @@ popups:
       - '--- Remark ---'
       - - remark
     layout:
-    - - {col: [detail_main], size: 16}
-      - {col: [detail_aux], size: 8}
+    - - detailsblock_8s31iy: 16
+      - detailsblock_3j6akd: 8
   - title: History
     blocks:
     - key: recordHistory_0
       type: recordHistory
       coll: erp_materials
-
-# ── Customers Detail Popup ──
 - target: $customers.table.fields.name
   field: name
   mode: embed
@@ -377,20 +373,20 @@ popups:
       resource:
         binding: currentRecord
       fields:
-      - code
-      - name
-      - level
-      - industry
       - status
+      - industry
       - contact
       - phone
+      - name
+      - level
       - email
       - address
+      - code
       js_items:
-      - desc: Customer Profile KPI
+      - desc: Customer Profile KPI — level badge + credit + payment terms
         file: ./js/detail_customer_profile.js
       field_layout:
-      - '[JS:Customer Profile KPI]'
+      - - '[JS:Customer Profile KPI — level badge + credit + payment terms]'
       - '--- Basic Info ---'
       - - code
         - name
@@ -410,8 +406,8 @@ popups:
       resource:
         binding: currentRecord
       fields:
-      - payment_terms
       - credit_limit
+      - payment_terms
       - tax_rate
       field_layout:
       - '--- Financial ---'
@@ -419,15 +415,13 @@ popups:
       - - credit_limit
       - - tax_rate
     layout:
-    - - {col: [detail_main], size: 16}
-      - {col: [detail_aux], size: 8}
+    - - detailsblock_y7yfxy: 16
+      - detailsblock_jq12ur: 8
   - title: History
     blocks:
     - key: recordHistory_0
       type: recordHistory
       coll: erp_customers
-
-# ── Sales Detail Popup ──
 - target: $sales.table.fields.so_no
   field: so_no
   mode: embed
@@ -441,22 +435,22 @@ popups:
       resource:
         binding: currentRecord
       fields:
-      - so_no
-      - customer_name
-      - status
-      - priority
-      - sales_rep
-      - total_amount
-      - tax_amount
-      - order_date
       - delivery_date
-      - shipped_date
+      - status
+      - so_no
+      - tax_amount
+      - sales_rep
+      - priority
+      - customer_name
+      - total_amount
       - remark
+      - order_date
+      - shipped_date
       js_items:
-      - desc: Sales Order Overview KPI
+      - desc: Sales Order Overview KPI — amount + status steps + delivery countdown
         file: ./js/detail_so_overview.js
       field_layout:
-      - '[JS:Sales Order Overview KPI]'
+      - - '[JS:Sales Order Overview KPI — amount + status steps + delivery countdown]'
       - '--- Order Info ---'
       - - so_no
         - customer_name
@@ -480,9 +474,9 @@ popups:
       resource:
         binding: currentRecord
       fields:
-      - total_amount
-      - tax_amount
       - remark
+      - tax_amount
+      - total_amount
       field_layout:
       - '--- Amount ---'
       - - total_amount
@@ -490,15 +484,13 @@ popups:
       - '--- Remark ---'
       - - remark
     layout:
-    - - {col: [detail_main], size: 16}
-      - {col: [detail_aux], size: 8}
+    - - detailsblock_ncsfpt: 16
+      - detailsblock_3egtlr: 8
   - title: History
     blocks:
     - key: recordHistory_0
       type: recordHistory
       coll: erp_sales_orders
-
-# ── Production Detail Popup ──
 - target: $production.table.fields.wo_no
   field: wo_no
   mode: embed
@@ -512,25 +504,25 @@ popups:
       resource:
         binding: currentRecord
       fields:
-      - wo_no
-      - product_name
-      - status
-      - priority
-      - workshop
-      - planned_qty
       - completed_qty
-      - defect_qty
-      - planned_start
+      - wo_no
+      - workshop
+      - status
+      - so_no
+      - product_name
+      - priority
+      - actual_end
       - planned_end
       - actual_start
-      - actual_end
-      - so_no
+      - defect_qty
+      - planned_start
+      - planned_qty
       - remark
       js_items:
-      - desc: Work Order Overview KPI
+      - desc: Work Order Overview KPI — progress circle + yield + dates
         file: ./js/detail_wo_overview.js
       field_layout:
-      - '[JS:Work Order Overview KPI]'
+      - - '[JS:Work Order Overview KPI — progress circle + yield + dates]'
       - '--- Work Order ---'
       - - wo_no
         - product_name
@@ -553,7 +545,7 @@ popups:
       recordActions:
       - edit
     layout:
-    - - {col: [detail_main], size: 16}
+    - - detailsblock_y56k6l
   - title: History
     blocks:
     - key: recordHistory_0
