@@ -1,0 +1,12 @@
+{
+  "query": {
+    "mode": "sql",
+    "sql": "SELECT COALESCE(status, 'Unknown') as status, COUNT(*) as count, ROUND(AVG(COALESCE(completion_pct, 0))::numeric, 1) as avg_completion FROM pm_milestones GROUP BY status ORDER BY CASE status WHEN 'Completed' THEN 1 WHEN 'In Progress' THEN 2 WHEN 'Pending' THEN 3 WHEN 'Overdue' THEN 4 ELSE 5 END"
+  },
+  "chart": {
+    "option": {
+      "mode": "custom",
+      "raw": "const data = ctx.data?.objects || []; const statuses = data.map(r => r.status); const counts = data.map(r => Number(r.count)); const completions = data.map(r => Number(r.avg_completion)); return { title: { text: 'Milestones Overview', left: 'center' }, tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } }, legend: { data: ['Count', 'Avg Completion %'], bottom: 0 }, xAxis: { type: 'category', data: statuses, axisLabel: { fontWeight: 'bold' } }, yAxis: [{ type: 'value', name: 'Count', position: 'left' }, { type: 'value', name: 'Completion %', position: 'right', min: 0, max: 100, axisLabel: { formatter: '{value}%' } }], series: [{ name: 'Count', type: 'bar', data: counts, barWidth: '40%', itemStyle: { color: '#3498db' }, label: { show: true, position: 'top' } }, { name: 'Avg Completion %', type: 'line', yAxisIndex: 1, data: completions, smooth: true, itemStyle: { color: '#e67e22' }, lineStyle: { width: 2 }, symbol: 'circle', symbolSize: 8, label: { show: true, formatter: '{c}%' } }] };"
+    }
+  }
+}

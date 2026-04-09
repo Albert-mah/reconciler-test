@@ -1,0 +1,179 @@
+popups:
+- target: $projects.table.actions.addNew
+  auto:
+  - edit
+  - view
+  view_field: code
+  coll: pm_projects
+  blocks:
+  - key: form
+    type: createForm
+    resource:
+      binding: currentCollection
+    fields:
+    - code
+    - name
+    - client
+    - manager
+    - status
+    - budget
+    - start_date
+    - end_date
+    actions:
+    - submit
+    field_layout:
+    - '--- Basic Info ---'
+    - - code
+      - name
+      - status
+    - - client
+      - manager
+    - '--- Budget ---'
+    - - budget
+    - '--- Schedule ---'
+    - - start_date
+      - end_date
+- target: $tasks.table.actions.addNew
+  auto:
+  - edit
+  coll: pm_tasks
+  blocks:
+  - key: form
+    type: createForm
+    resource:
+      binding: currentCollection
+    fields:
+    - title
+    - project_name
+    - assignee
+    - priority
+    - status
+    - due_date
+    - estimated_hours
+    - actual_hours
+    actions:
+    - submit
+    field_layout:
+    - '--- Task Info ---'
+    - - title
+      - project_name
+      - status
+    - - assignee
+      - priority
+    - '--- Schedule ---'
+    - - due_date
+    - '--- Hours ---'
+    - - estimated_hours
+      - actual_hours
+- target: $timesheets.table.actions.addNew
+  auto:
+  - edit
+  coll: pm_timesheets
+  blocks:
+  - key: form
+    type: createForm
+    resource:
+      binding: currentCollection
+    fields:
+    - emp_name
+    - project_name
+    - task_title
+    - date
+    - hours
+    - billable
+    - status
+    actions:
+    - submit
+    field_layout:
+    - '--- Entry ---'
+    - - emp_name
+      - project_name
+      - task_title
+    - - date
+      - hours
+    - '--- Billing ---'
+    - - billable
+      - status
+- target: $milestones.table.actions.addNew
+  auto:
+  - edit
+  coll: pm_milestones
+  blocks:
+  - key: form
+    type: createForm
+    resource:
+      binding: currentCollection
+    fields:
+    - project_name
+    - title
+    - due_date
+    - status
+    - completion_pct
+    actions:
+    - submit
+    field_layout:
+    - '--- Milestone ---'
+    - - project_name
+      - title
+      - status
+    - '--- Schedule ---'
+    - - due_date
+      - completion_pct
+- target: $projects.table.fields.name
+  field: name
+  mode: embed
+  coll: pm_projects
+  tabs:
+  - title: Overview
+    blocks:
+    - key: detail_main
+      type: details
+      coll: pm_projects
+      resource:
+        binding: currentRecord
+      fields:
+      - code
+      - name
+      - client
+      - manager
+      - status
+      - start_date
+      - end_date
+      js_items:
+      - desc: Project Detail KPI
+        file: ./js/detail_project_kpi.js
+      field_layout:
+      - - '[JS:Project Detail KPI]'
+      - '--- Basic Info ---'
+      - - code
+        - name
+        - status
+      - - client
+        - manager
+      - '--- Schedule ---'
+      - - start_date
+        - end_date
+      recordActions:
+      - edit
+    - key: detail_aux
+      type: details
+      coll: pm_projects
+      resource:
+        binding: currentRecord
+      fields:
+      - budget
+      field_layout:
+      - '--- Budget ---'
+      - - budget
+    layout:
+    - - col:
+        - detail_main
+        size: 16
+      - col:
+        - detail_aux
+        size: 8
+  - title: History
+    blocks:
+    - key: recordHistory_0
+      type: recordHistory
+      coll: pm_projects

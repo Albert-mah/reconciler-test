@@ -1,0 +1,374 @@
+module: Project Management
+icon: projectoutlined
+collections:
+  pm_projects:
+    title: Projects
+    fields:
+    - name: code
+      interface: input
+      title: Project Code
+    - name: name
+      interface: input
+      title: Project Name
+    - name: client
+      interface: input
+      title: Client
+    - name: manager
+      interface: input
+      title: Project Manager
+    - name: status
+      interface: select
+      title: Status
+      options:
+      - Planning
+      - Active
+      - On Hold
+      - Completed
+      - Cancelled
+    - name: budget
+      interface: number
+      title: Budget
+    - name: start_date
+      interface: datetime
+      title: Start Date
+    - name: end_date
+      interface: datetime
+      title: End Date
+  pm_tasks:
+    title: Tasks
+    fields:
+    - name: title
+      interface: input
+      title: Task Title
+    - name: project_name
+      interface: input
+      title: Project
+    - name: assignee
+      interface: input
+      title: Assignee
+    - name: priority
+      interface: select
+      title: Priority
+      options:
+      - Critical
+      - High
+      - Medium
+      - Low
+    - name: status
+      interface: select
+      title: Status
+      options:
+      - To Do
+      - In Progress
+      - In Review
+      - Done
+      - Blocked
+    - name: due_date
+      interface: datetime
+      title: Due Date
+    - name: estimated_hours
+      interface: number
+      title: Estimated Hours
+    - name: actual_hours
+      interface: number
+      title: Actual Hours
+  pm_timesheets:
+    title: Timesheets
+    fields:
+    - name: emp_name
+      interface: input
+      title: Employee
+    - name: project_name
+      interface: input
+      title: Project
+    - name: task_title
+      interface: input
+      title: Task
+    - name: date
+      interface: datetime
+      title: Date
+    - name: hours
+      interface: number
+      title: Hours
+    - name: billable
+      interface: select
+      title: Billable
+      options:
+      - 'Yes'
+      - 'No'
+    - name: status
+      interface: select
+      title: Status
+      options:
+      - Draft
+      - Submitted
+      - Approved
+      - Rejected
+  pm_milestones:
+    title: Milestones
+    fields:
+    - name: project_name
+      interface: input
+      title: Project
+    - name: title
+      interface: input
+      title: Milestone Title
+    - name: due_date
+      interface: datetime
+      title: Due Date
+    - name: status
+      interface: select
+      title: Status
+      options:
+      - Pending
+      - In Progress
+      - Completed
+      - Overdue
+    - name: completion_pct
+      interface: integer
+      title: Completion %
+pages:
+- page: Projects
+  icon: projectoutlined
+  coll: pm_projects
+  blocks:
+  - key: filter
+    type: filterForm
+    fields:
+    - field: name
+      label: Search
+      filterPaths:
+      - code
+      - name
+      - client
+      - manager
+    - field: status
+      label: Status
+    js_items:
+    - desc: Project Stats Filter
+      file: ./js/filter_projects.js
+    field_layout:
+    - - '[JS:Project Stats Filter]'
+    - - name
+      - status
+  - key: table
+    type: table
+    fields:
+    - code
+    - name
+    - client
+    - manager
+    - status
+    - budget
+    - start_date
+    - end_date
+    js_columns:
+    - title: Budget Util
+      desc: Budget utilization bar
+      file: ./js/col_budget_util.js
+    - title: Timeline
+      desc: Project timeline countdown
+      file: ./js/col_timeline.js
+    actions:
+    - filter
+    - refresh
+    - addNew
+    - export
+    recordActions:
+    - edit
+    - delete
+  layout:
+  - - filter
+  - - table
+- page: Tasks
+  icon: checkSquareoutlined
+  coll: pm_tasks
+  blocks:
+  - key: filter
+    type: filterForm
+    fields:
+    - field: title
+      label: Search
+      filterPaths:
+      - title
+      - project_name
+      - assignee
+    - field: status
+      label: Status
+    - field: priority
+      label: Priority
+    js_items:
+    - desc: Task Stats Filter
+      file: ./js/filter_tasks.js
+    field_layout:
+    - - '[JS:Task Stats Filter]'
+    - - title
+      - status
+      - priority
+  - key: table
+    type: table
+    fields:
+    - title
+    - project_name
+    - assignee
+    - priority
+    - status
+    - due_date
+    - estimated_hours
+    - actual_hours
+    js_columns:
+    - title: Priority Tag
+      desc: Priority colored tag
+      file: ./js/col_priority_tag.js
+    - title: Hours
+      desc: Estimated vs actual hours comparison
+      file: ./js/col_hours_compare.js
+    actions:
+    - filter
+    - refresh
+    - addNew
+    - export
+    recordActions:
+    - edit
+    - delete
+  layout:
+  - - filter
+  - - table
+- page: Timesheets
+  icon: clockcircleoutlined
+  coll: pm_timesheets
+  blocks:
+  - key: filter
+    type: filterForm
+    fields:
+    - field: emp_name
+      label: Search
+      filterPaths:
+      - emp_name
+      - project_name
+      - task_title
+    - field: billable
+      label: Billable
+    - field: status
+      label: Status
+    js_items:
+    - desc: Timesheet Stats Filter
+      file: ./js/filter_timesheets.js
+    field_layout:
+    - - '[JS:Timesheet Stats Filter]'
+    - - emp_name
+      - billable
+      - status
+  - key: table
+    type: table
+    fields:
+    - emp_name
+    - project_name
+    - task_title
+    - date
+    - hours
+    - billable
+    - status
+    js_columns:
+    - title: Billable
+      desc: Billable indicator tag
+      file: ./js/col_billable_tag.js
+    actions:
+    - filter
+    - refresh
+    - addNew
+    - export
+    recordActions:
+    - edit
+    - delete
+  layout:
+  - - filter
+  - - table
+- page: Milestones
+  icon: flagoutlined
+  coll: pm_milestones
+  blocks:
+  - key: filter
+    type: filterForm
+    fields:
+    - field: title
+      label: Search
+      filterPaths:
+      - project_name
+      - title
+    - field: status
+      label: Status
+    js_items:
+    - desc: Milestone Stats Filter
+      file: ./js/filter_milestones.js
+    field_layout:
+    - - '[JS:Milestone Stats Filter]'
+    - - title
+      - status
+  - key: table
+    type: table
+    fields:
+    - project_name
+    - title
+    - due_date
+    - status
+    - completion_pct
+    js_columns:
+    - title: Progress
+      desc: Milestone completion progress bar
+      file: ./js/col_milestone_progress.js
+    actions:
+    - filter
+    - refresh
+    - addNew
+    - export
+    recordActions:
+    - edit
+    - delete
+  layout:
+  - - filter
+  - - table
+- page: Dashboard
+  icon: dashboardoutlined
+  blocks:
+  - key: kpi_active
+    type: jsBlock
+    desc: Active Projects KPI Card
+    file: ./js/kpi_active_projects.js
+  - key: kpi_tasks
+    type: jsBlock
+    desc: Tasks Due This Week KPI Card
+    file: ./js/kpi_tasks_due.js
+  - key: kpi_hours
+    type: jsBlock
+    desc: Hours Logged This Month KPI Card
+    file: ./js/kpi_hours_logged.js
+  - key: kpi_budget
+    type: jsBlock
+    desc: Budget Utilization KPI Card
+    file: ./js/kpi_budget_util.js
+  - key: chart_project_status
+    type: chart
+    chart_config: ./charts/project_status.json
+  - key: chart_task_priority
+    type: chart
+    chart_config: ./charts/task_priority.json
+  - key: chart_hours_trend
+    type: chart
+    chart_config: ./charts/hours_trend.json
+  - key: chart_milestone
+    type: chart
+    chart_config: ./charts/milestone_completion.json
+  - key: chart_budget
+    type: chart
+    chart_config: ./charts/budget_overview.json
+  layout:
+  - - kpi_active
+    - kpi_tasks
+    - kpi_hours
+    - kpi_budget
+  - - chart_project_status: 15
+    - chart_task_priority: 9
+  - - chart_hours_trend
+  - - chart_milestone: 14
+    - chart_budget: 10

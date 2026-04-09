@@ -1,0 +1,12 @@
+{
+  "query": {
+    "mode": "sql",
+    "sql": "SELECT date::date as day, COALESCE(SUM(hours), 0) as total_hours FROM pm_timesheets WHERE date >= CURRENT_DATE - INTERVAL '30 days' GROUP BY date::date ORDER BY day"
+  },
+  "chart": {
+    "option": {
+      "mode": "custom",
+      "raw": "const data = ctx.data?.objects || []; const days = data.map(r => r.day); const hours = data.map(r => Number(r.total_hours)); return { title: { text: 'Hours Logged (Last 30 Days)', left: 'center' }, tooltip: { trigger: 'axis', formatter: function(params) { return params[0].axisValue + '<br/>Hours: ' + params[0].value; } }, xAxis: { type: 'category', data: days, axisLabel: { rotate: 45 } }, yAxis: { type: 'value', name: 'Hours' }, series: [{ type: 'line', data: hours, smooth: true, areaStyle: { opacity: 0.3 }, lineStyle: { width: 2 }, itemStyle: { color: '#3498db' }, symbol: 'circle', symbolSize: 4 }], grid: { bottom: 80 } };"
+    }
+  }
+}

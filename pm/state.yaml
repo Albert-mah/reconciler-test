@@ -1,0 +1,315 @@
+group_id: 357992224784392
+pages:
+  projects:
+    route_id: 357992224784394
+    page_uid: 7cl6lyn3uby
+    tab_uid: bh9x3mbnroi
+    grid_uid: b48gndyh0h9
+    blocks:
+      filter:
+        uid: svdgrbrxtlq
+        type: filterForm
+        grid_uid: 0bku2y7egxe
+        fields:
+          status:
+            wrapper: cm7ptslso67
+            field: qedh1gl3oe3
+          name:
+            wrapper: 3dg51ipijkg
+            field: xcx2kaf4khp
+        js_items:
+          Project Stats Filter:
+            uid: ay0xii4fst2
+      table:
+        uid: 2t7vj9ur7zl
+        type: table
+        grid_uid: ''
+        fields:
+          status:
+            wrapper: o779pg8fa17
+            field: 83u0fu44qs5
+          start_date:
+            wrapper: vnp7psk32cd
+            field: 0uge6584ylz
+          manager:
+            wrapper: 5hlmhwv5n84
+            field: x9ptgy3b7mx
+          client:
+            wrapper: wgln77rtp16
+            field: ng6fb8wqkut
+          code:
+            wrapper: 72wrxkrc4cz
+            field: ip8kss6bw7a
+          end_date:
+            wrapper: 31j2d6q1r53
+            field: u9zcmeozwg1
+          budget:
+            wrapper: lrhbfqydycj
+            field: als6xbnxw73
+          name:
+            wrapper: aclij2efk74
+            field: 0clqcmtta66
+        actions:
+          filter:
+            uid: 7cywardbycz
+          refresh:
+            uid: wegcgyywpla
+          addNew:
+            uid: qm3rhi5xkm0
+          export:
+            uid: mjfber19p2r
+        record_actions:
+          edit:
+            uid: gbcphzh7h3i
+          delete:
+            uid: 8r79eynrgpd
+        js_columns:
+          Budget Util:
+            uid: epxkog43akc
+          Timeline:
+            uid: lebmqbg8q5y
+  tasks:
+    route_id: 357992226881536
+    page_uid: hme2imfkc8t
+    tab_uid: l07402hcsee
+    grid_uid: 6h9i2p074ik
+    blocks:
+      filter:
+        uid: uy4d7b6acld
+        type: filterForm
+        grid_uid: tq2ue1axowz
+        fields:
+          status:
+            wrapper: 0bhf7d96w60
+            field: q9twndmudb2
+          priority:
+            wrapper: 530env5sw6v
+            field: laexczzaulo
+          title:
+            wrapper: cofa0qg39if
+            field: i5b0xv2x244
+        js_items:
+          Task Stats Filter:
+            uid: oyiuv5em0tc
+      table:
+        uid: hiyjojh1m4v
+        type: table
+        grid_uid: ''
+        fields:
+          actual_hours:
+            wrapper: iezlks45687
+            field: k4c3wp1d08j
+          status:
+            wrapper: xm5s3840f5p
+            field: 7jmv7qng51u
+          priority:
+            wrapper: rpgwis8knnr
+            field: jzehhjywep0
+          estimated_hours:
+            wrapper: q68dxpmj496
+            field: 4wg9g1i3ira
+          due_date:
+            wrapper: c3ax7pbxuo0
+            field: dwsmi3l7cwt
+          project_name:
+            wrapper: yn4h18oq9b4
+            field: 1owg7eidu30
+          assignee:
+            wrapper: seb2gm1q2tn
+            field: 5phunuxq9bx
+          title:
+            wrapper: 7rmkt5b31qu
+            field: u0wprmjtbmj
+        actions:
+          filter:
+            uid: 6kgnb90anbj
+          refresh:
+            uid: cvw3kooa2ly
+          addNew:
+            uid: 1jgbr3lrdnc
+          export:
+            uid: 8h58vlnh4fg
+        record_actions:
+          edit:
+            uid: iacmzge9wi4
+          delete:
+            uid: 53mzlo644os
+        js_columns:
+          Priority Tag:
+            uid: c7yi4t565u9
+          Hours:
+            uid: 0saiezbt7o1
+  timesheets:
+    route_id: 357992228978688
+    page_uid: lcn0cf3dswm
+    tab_uid: uhndzex5vdk
+    grid_uid: bxrf8ork4y9
+    blocks:
+      filter:
+        uid: 4ig0pimhq7x
+        type: filterForm
+        grid_uid: cbdabzwdsnx
+        fields:
+          status:
+            wrapper: h1gv7x8kh67
+            field: j1at8gtyoia
+          billable:
+            wrapper: qtkzav94mjd
+            field: 5n3y5137e4e
+          emp_name:
+            wrapper: vy8ki9127li
+            field: l0eqhk6hy77
+        js_items:
+          Timesheet Stats Filter:
+            uid: sw6un8trapv
+      table:
+        uid: 95cafa3yjax
+        type: table
+        grid_uid: ''
+        fields:
+          status:
+            wrapper: 7lvxfm4nst2
+            field: 37tk61f7mq9
+          date:
+            wrapper: y07syd5ot74
+            field: oj3ui0kg09h
+          billable:
+            wrapper: yz556u3ycrp
+            field: orblnzrz5sn
+          task_title:
+            wrapper: 7yo4t3a0ax5
+            field: e75tv6ki6xi
+          project_name:
+            wrapper: s4q2z2rcsdm
+            field: nmmt2tibluw
+          hours:
+            wrapper: ln1mqkztt0y
+            field: 8kyhii4ottk
+          emp_name:
+            wrapper: d8tmzomudhs
+            field: 3f8ir3m3axo
+        actions:
+          filter:
+            uid: flejumfw33k
+          refresh:
+            uid: zth3qgajk3i
+          addNew:
+            uid: 5i7hnukg003
+          export:
+            uid: q86f6ir1t1e
+        record_actions:
+          edit:
+            uid: qgr1joqwb4g
+          delete:
+            uid: mafqx1lr46y
+        js_columns:
+          Billable:
+            uid: d1amqhyr6hz
+  milestones:
+    route_id: 357992231075840
+    page_uid: 2rsajvijwzd
+    tab_uid: j4cbq4h73br
+    grid_uid: 5aoc39aamdk
+    blocks:
+      filter:
+        uid: x568v3jrfg7
+        type: filterForm
+        grid_uid: dchxpcpzors
+        fields:
+          status:
+            wrapper: a2b2dwcveym
+            field: ljshmsem97s
+          title:
+            wrapper: pz6kuu2vt6v
+            field: 39330h1zftq
+        js_items:
+          Milestone Stats Filter:
+            uid: wrnefx0x6v2
+      table:
+        uid: 4tdaz7xmqqs
+        type: table
+        grid_uid: ''
+        fields:
+          status:
+            wrapper: ypufgyojwhw
+            field: x2hjws639ws
+          completion_pct:
+            wrapper: qrf113iv4wp
+            field: 1cb6m47c1di
+          due_date:
+            wrapper: iap7m7enoxh
+            field: aw232oyaxg0
+          project_name:
+            wrapper: 6qq4yifcrzk
+            field: 39zhts1t4v5
+          title:
+            wrapper: wp6fl3nqizs
+            field: utvcmrrjrle
+        actions:
+          filter:
+            uid: 0gw5ddbv2ig
+          refresh:
+            uid: mn38bvhgsla
+          addNew:
+            uid: jz1l53w0kz7
+          export:
+            uid: vqnd2afh7wm
+        record_actions:
+          edit:
+            uid: hiqxogg3r3j
+          delete:
+            uid: mpj3k45sh9u
+        js_columns:
+          Progress:
+            uid: 8asmqz1r1hd
+  dashboard:
+    route_id: 357992231075843
+    page_uid: g2ydl77bqp2
+    tab_uid: kgy43g2zwsl
+    grid_uid: 9ug9vomvblb
+    blocks:
+      kpi_active:
+        uid: 1jkerzukp4p
+        type: jsBlock
+        grid_uid: ''
+        fields: {}
+      kpi_tasks:
+        uid: m1v1meyukc0
+        type: jsBlock
+        grid_uid: ''
+        fields: {}
+      kpi_hours:
+        uid: fjozb0vjc9m
+        type: jsBlock
+        grid_uid: ''
+        fields: {}
+      kpi_budget:
+        uid: ysohznau035
+        type: jsBlock
+        grid_uid: ''
+        fields: {}
+      chart_project_status:
+        uid: 7nscgqkq7g8
+        type: chart
+        grid_uid: ''
+        fields: {}
+      chart_task_priority:
+        uid: 9s2n3xn80nq
+        type: chart
+        grid_uid: ''
+        fields: {}
+      chart_hours_trend:
+        uid: pprm2jpsvod
+        type: chart
+        grid_uid: ''
+        fields: {}
+      chart_milestone:
+        uid: q9eguokbdwp
+        type: chart
+        grid_uid: ''
+        fields: {}
+      chart_budget:
+        uid: y51703jmiox
+        type: chart
+        grid_uid: ''
+        fields: {}
