@@ -359,14 +359,29 @@ def _to_compose_block(bs: dict, default_coll: str) -> dict | None:
     if btype == "filterForm" and block_coll:
         include_fields = True  # filterForm with known collection can use compose fields
 
-    if fields and include_fields:
-        compose_fields = []
-        for f in fields:
-            fp = f if isinstance(f, str) else f.get("field", f.get("fieldPath", ""))
-            if fp and not fp.startswith("["):
-                compose_fields.append({"fieldPath": fp})
-        if compose_fields:
-            block["fields"] = compose_fields
+    # Also extract fields from field_layout (may reference fields not in fields list)
+    field_layout = bs.get("field_layout", [])
+    layout_fields = set()
+    for row in field_layout:
+        if isinstance(row, list):
+            for item in row:
+                if isinstance(item, str) and not item.startswith("[") and not item.startswith("---"):
+                    layout_fields.add(item)
+                elif isinstance(item, dict):
+                    for k in item.keys():
+                        if not k.startswith("[") and not k.startswith("---"):
+                            layout_fields.add(k)
+
+    all_fields = set()
+    for f in fields:
+        fp = f if isinstance(f, str) else f.get("field", f.get("fieldPath", ""))
+        if fp and not fp.startswith("["):
+            all_fields.add(fp)
+    all_fields.update(layout_fields)
+
+    if all_fields and include_fields:
+        compose_fields = [{"fieldPath": fp} for fp in all_fields]
+        block["fields"] = compose_fields
 
     # Include actions — compose handles standard action types
     actions = list(bs.get("actions", []))
@@ -565,6 +580,27 @@ def _fill_block(nb: NocoBase, block_uid: str, grid_uid: str,
     # compose includes fields but uses DisplayTextFieldModel for all.
     # Fix display model based on collection interface.
     field_states = block_state.get("fields", {})
+
+    # If field_states is empty, read from live block (compose created them but didn't track UIDs)
+    if not field_states and grid_uid and btype in ("table", "filterForm", "createForm", "editForm", "details"):
+        try:
+            live = nb.get(uid=block_uid)
+            live_tree = live.get("tree", {})
+            # For forms/details: grid → items
+            live_grid = live_tree.get("subModels", {}).get("grid", {})
+            if isinstance(live_grid, dict):
+                for di in live_grid.get("subModels", {}).get("items", []):
+                    fp = di.get("stepParams", {}).get("fieldSettings", {}).get("init", {}).get("fieldPath", "")
+                    if fp:
+                        field_states[fp] = {"wrapper": di.get("uid", ""), "field": ""}
+            # For tables: columns
+            for col in live_tree.get("subModels", {}).get("columns", []):
+                fp = col.get("stepParams", {}).get("fieldSettings", {}).get("init", {}).get("fieldPath", "")
+                if fp:
+                    field_states[fp] = {"wrapper": col.get("uid", ""), "field": ""}
+        except Exception:
+            pass
+
     if field_states and coll and btype in ("table", "details"):
         _fix_display_models(nb, block_uid, coll, btype)
     block_state["fields"] = field_states
@@ -725,15 +761,36 @@ def _fill_block(nb: NocoBase, block_uid: str, grid_uid: str,
 
     # ── Field layout ──
     if field_layout and grid_uid:
-        # Build uid map: field names + divider labels + JS items
+        # Read ALL live children to build complete uid map
         layout_uid_map = {}
-        for fp, finfo in field_states.items():
-            layout_uid_map[fp] = finfo["wrapper"]
-        for label, div_uid in divider_uids.items():
-            layout_uid_map[label] = div_uid
-            layout_uid_map[f"divider.{label}"] = div_uid
-        # JS items by their [JS:desc] layout reference
-        layout_uid_map.update(js_item_uids)
+        try:
+            live_grid = nb.get(uid=grid_uid)
+            live_items = live_grid.get("tree", {}).get("subModels", {}).get("items", [])
+            for di in (live_items if isinstance(live_items, list) else []):
+                di_uid = di.get("uid", "")
+                fp = di.get("stepParams", {}).get("fieldSettings", {}).get("init", {}).get("fieldPath", "")
+                label = di.get("stepParams", {}).get("markdownItemSetting", {}).get("title", {}).get("label", "")
+                if fp:
+                    layout_uid_map[fp] = di_uid
+                elif label:
+                    layout_uid_map[label] = di_uid
+                    layout_uid_map[f"divider.{label}"] = di_uid
+                elif "JSItem" in di.get("use", ""):
+                    # Match by desc from code
+                    code = di.get("stepParams", {}).get("jsSettings", {}).get("runJs", {}).get("code", "")
+                    for line in code.split("\n"):
+                        if line.strip().startswith("*") and len(line.strip()) > 3:
+                            desc = line.strip().lstrip("* ").strip()
+                            layout_uid_map[f"[JS:{desc}]"] = di_uid
+                            break
+                    layout_uid_map["_js_"] = di_uid
+        except Exception:
+            # Fallback to tracked states
+            for fp, finfo in field_states.items():
+                layout_uid_map[fp] = finfo.get("wrapper", finfo.get("uid", ""))
+            for label, div_uid in divider_uids.items():
+                layout_uid_map[label] = div_uid
+            layout_uid_map.update(js_item_uids)
 
         if layout_uid_map:
             apply_layout(nb, grid_uid, field_layout, layout_uid_map)
