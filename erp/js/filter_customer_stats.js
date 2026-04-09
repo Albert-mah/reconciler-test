@@ -71,10 +71,10 @@ function StatsFilter() {
   }, []);
 
   if (loading) {
-    return ctx.render(<Spin size="small" />);
+    return (<Spin size="small" />);
   }
 
-  return ctx.render(
+  return (
     <Space wrap size={[8, 8]}>
       {LEVEL_STATS.map((stat) => (
         <Badge key={stat.key} count={counts[stat.key] ?? 0} overflowCount={9999} offset={[6, 0]}>
