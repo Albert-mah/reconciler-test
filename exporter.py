@@ -43,13 +43,19 @@ def export_page_surface(nb: NocoBase, tab_uid: str,
 
 def export_all_popups(nb: NocoBase, popup_refs: list[dict],
                       js_dir: Path = None, popups_dir: Path = None,
-                      prefix: str = "popup", depth: int = 0) -> list[dict]:
+                      prefix: str = "popup", depth: int = 0,
+                      parent_path: str = "",
+                      max_depth: int = 8) -> list[dict]:
     """Recursively export all popups to individual files.
 
     Traverses popup tree: page → detail popup → nested table → addNew popup → ...
     Stops when hitting an already-exported UID (prevents circular refs).
 
-    Each popup is saved as popups/<path>.yaml
+    File naming uses dot-separated paths:
+      popups/name.yaml                      # L0
+      popups/name.quotation_no.yaml         # L1
+      popups/name.quotation_no.addnew.yaml  # L2
+
     Returns list of all exported popup specs.
     """
     global _exported_popup_uids
@@ -57,12 +63,10 @@ def export_all_popups(nb: NocoBase, popup_refs: list[dict],
         _exported_popup_uids = set()
 
     all_exported = []
-    max_depth = 5  # safety limit
 
     for p in popup_refs:
         field_uid = p.get("field_uid", "")
         field_name = p.get("field", "")
-        popup_page_uid = p.get("popup_page_uid", "")
 
         # Skip already exported (prevents circular refs)
         if field_uid in _exported_popup_uids:
@@ -70,6 +74,7 @@ def export_all_popups(nb: NocoBase, popup_refs: list[dict],
         _exported_popup_uids.add(field_uid)
 
         if depth >= max_depth:
+            print(f"    ! max depth {max_depth} reached for {field_name}")
             continue
 
         # Export this popup
@@ -82,30 +87,43 @@ def export_all_popups(nb: NocoBase, popup_refs: list[dict],
         for tab in popup_data.get("tabs", []):
             tab.pop("_state", None)
 
-        popup_spec = {"field": field_name, "field_uid": field_uid, **popup_data}
+        popup_spec = {"field": field_name, "field_uid": field_uid}
+        # Preserve block_key if present
+        if p.get("block_key"):
+            popup_spec["block_key"] = p["block_key"]
+        popup_spec.update(popup_data)
         all_exported.append(popup_spec)
 
-        # Save to file
+        # Save to file — dot-separated path for nested popups
+        # Include block_key to disambiguate (e.g., name.details_0.edit vs name.attachments.edit)
         if popups_dir:
             popups_dir.mkdir(parents=True, exist_ok=True)
-            # Generate path: depth0 = name.yaml, depth1 = name.quotation_no.yaml
-            fname = f"{prefix}_{field_name}.yaml" if depth > 0 else f"{field_name}.yaml"
+            block_key = p.get("block_key", "")
+            name_part = f"{block_key}.{field_name}" if block_key else field_name
+            dot_path = f"{parent_path}.{name_part}" if parent_path else name_part
+            fname = f"{dot_path}.yaml"
             from nb import dump_yaml
             (popups_dir / fname).write_text(dump_yaml(popup_spec))
 
-        # Recursively find popups INSIDE this popup's blocks
+        # Recursively find popups INSIDE this popup's blocks + tabs
         nested_refs = []
+        # From block-level _popups
         for tab in popup_data.get("tabs", []):
             for block in tab.get("blocks", []):
                 nested_refs.extend(block.pop("_popups", []))
+            # Also from tab-level popups (column click + action popups)
+            nested_refs.extend(tab.get("popups", []))
         if not popup_data.get("tabs"):
             for block in popup_data.get("blocks", []):
                 nested_refs.extend(block.pop("_popups", []))
+            nested_refs.extend(popup_data.get("popups", []))
 
         if nested_refs:
+            child_path = f"{parent_path}.{field_name}" if parent_path else field_name
             nested = export_all_popups(
                 nb, nested_refs, js_dir, popups_dir,
-                prefix=f"{prefix}_{field_name}", depth=depth + 1)
+                prefix=f"{prefix}_{field_name}", depth=depth + 1,
+                parent_path=child_path, max_depth=max_depth)
             all_exported.extend(nested)
 
     return all_exported
@@ -314,14 +332,26 @@ def _export_block(nb: NocoBase, item: dict, js_dir: Path = None,
             spec["recordActions"] = rec_actions
 
         # Collect popups from actions (addNew, edit, record actions)
-        _collect_action_popups(subs.get("actions", []), popup_refs)
+        _collect_action_popups(subs.get("actions", []), popup_refs, key)
         for col in subs.get("columns", []):
             if "TableActionsColumn" in col.get("use", ""):
-                _collect_action_popups(col.get("subModels", {}).get("actions", []), popup_refs)
+                _collect_action_popups(col.get("subModels", {}).get("actions", []), popup_refs, key)
 
     elif btype in ("filterForm", "createForm", "editForm", "details"):
         grid = subs.get("grid", {})
         if isinstance(grid, dict):
+            # Check for ReferenceFormGridModel (引用字段模式)
+            if "ReferenceFormGrid" in grid.get("use", ""):
+                grid_ref = grid.get("stepParams", {}).get("referenceSettings", {}).get("useTemplate", {})
+                if grid_ref:
+                    spec["field_template"] = {
+                        "templateUid": grid_ref.get("templateUid", ""),
+                        "templateName": grid_ref.get("templateName", ""),
+                        "targetUid": grid_ref.get("targetUid", ""),
+                        "mode": grid_ref.get("mode", "reference"),
+                    }
+                    # ReferenceFormGrid has no local fields — skip field extraction
+
             fields, js_items, layout, field_popups = _export_form_contents(
                 grid, js_dir, prefix, key)
 
@@ -388,8 +418,12 @@ def _export_block(nb: NocoBase, item: dict, js_dir: Path = None,
         if rec_actions:
             spec["recordActions"] = rec_actions
 
-    # ── Event Flows + Linkage Rules (forms/details) ──
-    if btype in ("createForm", "editForm", "details"):
+        # Collect popups from actions (edit actions may have custom popup)
+        _collect_action_popups(subs.get("actions", []), popup_refs, key)
+        _collect_action_popups(subs.get("recordActions", []), popup_refs, key)
+
+    # ── Event Flows + Linkage Rules (all block types) ──
+    if btype in ("createForm", "editForm", "details", "table", "list", "gridCard", "filterForm"):
         # Check block-level eventSettings
         event_settings = sp.get("eventSettings", {})
 
@@ -417,17 +451,18 @@ def _export_block(nb: NocoBase, item: dict, js_dir: Path = None,
                 for step_key, step_def in steps.items():
                     if not isinstance(step_def, dict):
                         continue
-                    code = step_def.get("runJs", {}).get("code", "")
+                    code = step_def.get("runJs", {}).get("code", "") or step_def.get("defaultParams", {}).get("code", "")
                     if code and js_dir:
                         fname = f"{prefix}_{key}_event_{flow_key}_{step_key}.js"
                         (js_dir / fname).write_text(code)
-                        spec.setdefault("event_flows", []).append({
+                        ef_entry: dict = {
                             "event": flow_def.get("on", "formValuesChange"),
                             "flow_key": flow_key,
                             "step_key": step_key,
                             "desc": step_def.get("title", flow_key),
                             "file": f"./js/{fname}",
-                        })
+                        }
+                        spec.setdefault("event_flows", []).append(ef_entry)
 
     elif btype == "list":
         # List block — extract ListItem children (fields, JS items, actions)
@@ -449,6 +484,8 @@ def _export_block(nb: NocoBase, item: dict, js_dir: Path = None,
             li_actions = _export_actions(list_item.get("subModels", {}).get("actions", []))
             if li_actions:
                 spec["item_actions"] = li_actions
+            # Collect popup refs from list item actions
+            _collect_action_popups(list_item.get("subModels", {}).get("actions", []), popup_refs, key)
 
         # Block-level actions
         actions = _export_actions(subs.get("actions", []))
@@ -487,6 +524,12 @@ def _export_block(nb: NocoBase, item: dict, js_dir: Path = None,
     elif btype == "comments":
         # Comments block — preserve association binding
         # Actions
+        actions = _export_actions(subs.get("actions", []))
+        if actions:
+            spec["actions"] = actions
+
+    elif btype == "recordHistory":
+        # RecordHistory block — export actions (filter, refresh, expand, collapse)
         actions = _export_actions(subs.get("actions", []))
         if actions:
             spec["actions"] = actions
@@ -606,6 +649,17 @@ def _export_form_contents(grid: dict, js_dir: Path = None,
                 fields.append(fp)
                 uid_to_name[di_uid] = fp
 
+                # Check if this field item has a click-to-open popup
+                field_sub = di.get("subModels", {}).get("field", {})
+                if isinstance(field_sub, dict):
+                    popup_page = field_sub.get("subModels", {}).get("page", {})
+                    if popup_page and popup_page.get("uid"):
+                        popup_refs.append({
+                            "field": fp,
+                            "field_uid": field_sub.get("uid", di_uid),
+                            "popup_page_uid": popup_page.get("uid", ""),
+                        })
+
     # Extract layout from gridSettings
     layout = _extract_layout(grid, uid_to_name)
 
@@ -702,7 +756,7 @@ ACTION_MAP = {
 }
 
 
-def _collect_action_popups(actions, popup_refs: list):
+def _collect_action_popups(actions, popup_refs: list, block_key: str = ""):
     """Scan actions for ChildPage popups (addNew, edit, view, etc.)."""
     if not isinstance(actions, list):
         return
@@ -710,11 +764,14 @@ def _collect_action_popups(actions, popup_refs: list):
         popup_page = act.get("subModels", {}).get("page", {})
         if popup_page and popup_page.get("uid"):
             act_use = act.get("use", "").replace("Model", "")
-            popup_refs.append({
+            ref: dict = {
                 "field": act_use.lower().replace("action", ""),
                 "field_uid": act.get("uid", ""),
                 "popup_page_uid": popup_page.get("uid", ""),
-            })
+            }
+            if block_key:
+                ref["block_key"] = block_key
+            popup_refs.append(ref)
 
 
 def _export_actions(actions) -> list[str]:

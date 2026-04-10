@@ -88,7 +88,7 @@ class RefResolver:
             return val
         if isinstance(val, dict):
             for key in ("popup_grid", "uid", "field", "wrapper", "popup_page", "popup_tab"):
-                if key in val:
+                if val.get(key):
                     return val[key]
             raise KeyError(f"Ref '{ref}' resolved to dict but no UID key found: {list(val.keys())}")
 

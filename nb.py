@@ -323,14 +323,48 @@ class NocoBase:
                      title: str, **opts):
         type_map = {"input": "string", "textarea": "text", "integer": "bigInt",
                     "number": "double", "select": "string", "multipleSelect": "array",
-                    "checkbox": "boolean", "datetime": "date"}
-        body: dict[str, Any] = {
-            "name": name, "type": type_map.get(interface, "string"),
-            "interface": interface,
-            "uiSchema": {"title": title, "x-component": "Input"},
-        }
+                    "checkbox": "boolean", "datetime": "date", "date": "dateOnly",
+                    "time": "time", "email": "string", "phone": "string",
+                    "url": "string", "percent": "float", "sequence": "string",
+                    "attachment": "belongsToMany"}
+
+        # Relation fields
+        if interface == "m2o" and opts.get("target"):
+            target = opts["target"]
+            fk = opts.get("foreignKey", f"{name}_id")
+            body: dict[str, Any] = {
+                "name": name, "type": "belongsTo", "interface": "m2o",
+                "target": target, "foreignKey": fk,
+                "targetKey": "id", "onDelete": "SET NULL",
+                "uiSchema": {"type": "object", "title": title,
+                             "x-component": "AssociationField",
+                             "x-component-props": {"multiple": False}},
+            }
+        elif interface == "o2m" and opts.get("target"):
+            target = opts["target"]
+            fk = opts.get("foreignKey", f"{coll.split('.')[-1]}_id")
+            body = {
+                "name": name, "type": "hasMany", "interface": "o2m",
+                "target": target, "foreignKey": fk,
+                "uiSchema": {"title": title, "x-component": "AssociationField",
+                             "x-component-props": {"multiple": True}},
+            }
+        else:
+            body = {
+                "name": name, "type": type_map.get(interface, "string"),
+                "interface": interface,
+                "uiSchema": {"title": title, "x-component": "Input"},
+            }
+
         if "options" in opts:
-            body["uiSchema"]["enum"] = [{"value": o, "label": o} for o in opts["options"]]
+            enum = []
+            for o in opts["options"]:
+                if isinstance(o, dict):
+                    enum.append(o)  # already {value, label} format
+                else:
+                    enum.append({"value": o, "label": str(o)})
+            body["uiSchema"]["enum"] = enum
+
         return self.s.post(f"{self.base}/api/collections/{coll}/fields:create",
                            json=body, timeout=self._timeout).json().get("data")
 

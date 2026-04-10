@@ -6,11 +6,13 @@ pages:
     type: filterForm
     fields:
     - name
+    - name
     js_items:
     - desc: Pipeline Stats Filter Block
       file: ./js/opp_filterForm_0_pipeline_stats_filter_block.js
     field_layout:
     - - '[JS:Pipeline Stats Filter Block]'
+    - - name
     - - name
     coll: nb_crm_opportunities
   - key: table
@@ -18,14 +20,14 @@ pages:
     coll: nb_crm_opportunities
     fields:
     - name
-    - amount
     - currency
+    - amount
     - stage
     - lead_source
-    - contact
+    - win_probability
     - customer
     - expected_close_date
-    - win_probability
+    - contact
     actions:
     - filter
     - refresh

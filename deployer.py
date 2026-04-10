@@ -59,6 +59,34 @@ def deploy(mod_dir: str, force: bool = False):
     for name, coll_def in structure.get("collections", {}).items():
         _ensure_collection(nb, name, coll_def)
 
+    # Validate titleField on all referenced collections
+    all_colls = set()
+    for ps in structure.get("pages", []):
+        c = ps.get("coll", "")
+        if c:
+            all_colls.add(c)
+        for bs in ps.get("blocks", []):
+            c = bs.get("coll", "")
+            if c:
+                all_colls.add(c)
+    for c in all_colls:
+        try:
+            r = nb.s.get(f"{nb.base}/api/collections:list",
+                         params={"filter": json.dumps({"name": c})}, timeout=30)
+            data = r.json().get("data", [])
+            if data and not data[0].get("titleField"):
+                raise ValueError(
+                    f"Collection '{c}' has no titleField set. "
+                    f"Relation fields (m2o) will fail to render.\n"
+                    f"Fix: add titleField in collections definition, or run:\n"
+                    f"  curl -X POST {nb.base}/api/collections:update?filterByTk={c} "
+                    f"-H 'Content-Type: application/json' -d '{{\"titleField\":\"name\"}}'"
+                )
+        except ValueError:
+            raise
+        except Exception:
+            pass
+
     # Group
     module_name = structure.get("module", "Untitled")
     icon = structure.get("icon", "appstoreoutlined")
@@ -111,11 +139,34 @@ def deploy(mod_dir: str, force: bool = False):
             print(f"  ! popup {target_ref}: {e}")
             continue
 
-        _deploy_popup(nb, target_uid, target_ref, popup_spec, state, mod, force)
+        # Extract popup_path from target ref for nested popup file resolution
+        # e.g., "$page.table.fields.name" → "name"
+        ref_parts = target_ref.split(".")
+        pp = ref_parts[-1] if ref_parts else ""
+        _deploy_popup(nb, target_uid, target_ref, popup_spec, state, mod, force,
+                      popup_path=pp)
 
     # Save state
     state_file.write_text(dump_yaml(state))
     print(f"\n  State saved. Done.")
+
+    # ── Next steps hint ──
+    has_enhance = (mod / "enhance.yaml").exists()
+    has_popups = (mod / "popups").is_dir() and any((mod / "popups").glob("*.yaml"))
+    has_js = (mod / "js").is_dir() and any((mod / "js").glob("*.js"))
+    pages_count = len(structure.get("pages", []))
+    hints = []
+    if not has_enhance:
+        hints.append("Write enhance.yaml with addNew popups (auto: [edit] to derive edit popup)")
+    if not has_popups:
+        hints.append("Write popups/*.yaml for name-click detail popups (details + sub-tables + tabs)")
+    if has_popups and not has_js:
+        hints.append("Add JS files in js/ for KPI cards, custom renders, event flows")
+    if not hints:
+        hints.append("Run: python sync.py " + mod_dir + " to capture any manual UI adjustments")
+    print(f"\n  ── Next steps ──")
+    for h in hints:
+        print(f"  → {h}")
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -137,6 +188,57 @@ def deploy_surface(nb: NocoBase, tab_uid: str, spec: dict,
 
     existing = existing_state or {}
     blocks_state = dict(existing)  # preserve existing UIDs
+
+    # Pre-process: reorder table fields — popup-enabled fields first
+    popup_fields = set()
+    for tab in spec.get("tabs", [spec]):
+        for p in tab.get("popups", []):
+            pf = p.get("field", "")
+            if pf and pf not in ("addnew", "edit", "view", "delete"):
+                popup_fields.add(pf)
+    if mod:
+        popups_dir_check = mod / "popups"
+        if popups_dir_check.is_dir():
+            for pf in popups_dir_check.glob("*.yaml"):
+                stem = pf.stem
+                if "." not in stem and stem not in ("addnew", "edit", "view"):
+                    popup_fields.add(stem)
+        enhance_file_check = mod / "enhance.yaml"
+        if enhance_file_check.exists():
+            try:
+                eh = yaml.safe_load(enhance_file_check.read_text()) or {}
+                for ps in eh.get("popups", []):
+                    target = ps.get("target", "")
+                    if ".fields." in target:
+                        popup_fields.add(target.split(".fields.")[-1])
+            except Exception:
+                pass
+    if popup_fields:
+        for bs in blocks_spec:
+            if bs.get("type") != "table":
+                continue
+            fields = bs.get("fields", [])
+            if not fields:
+                continue
+            front = [f for f in fields if (f if isinstance(f, str) else f.get("field", f.get("fieldPath", ""))) in popup_fields]
+            rest = [f for f in fields if (f if isinstance(f, str) else f.get("field", f.get("fieldPath", ""))) not in popup_fields]
+            if front:
+                bs["fields"] = front + rest
+
+    # Pre-process: filterForm — put search field (with filterPaths) first
+    for bs in blocks_spec:
+        if bs.get("type") != "filterForm":
+            continue
+        key = bs.get("key", "")
+        if key in existing:
+            continue  # only on first create
+        fields = bs.get("fields", [])
+        if not fields:
+            continue
+        search = [f for f in fields if isinstance(f, dict) and f.get("filterPaths")]
+        rest = [f for f in fields if not (isinstance(f, dict) and f.get("filterPaths"))]
+        if search:
+            bs["fields"] = search + rest
 
     # Check if all blocks already exist in state
     all_exist = all(
@@ -198,11 +300,15 @@ def deploy_surface(nb: NocoBase, tab_uid: str, spec: dict,
                             except Exception as e:
                                 print(f"      ! field {fp}: {e}")
 
+                # Reorder table columns to match spec field order
+                if btype == "table" and spec_fields:
+                    _reorder_table_columns(nb, block_uid, spec_fields)
+
                 _fill_block(nb, block_uid, block_grid, bs, coll, mod, blocks_state[key], blocks_state, grid_uid)
         else:
             print(f"    = {len(existing)} blocks exist (skip)")
 
-        # Apply layout
+        # Always apply layout if spec defines it (auto-correct drift)
         layout_spec = spec.get("layout")
         if layout_spec and grid_uid:
             uid_map = {k: v["uid"] for k, v in blocks_state.items() if "uid" in v}
@@ -281,6 +387,13 @@ def deploy_surface(nb: NocoBase, tab_uid: str, spec: dict,
             return blocks_state
 
     # Step 3: Add legacy blocks (not compose-supported)
+    # Check if there are any legacy blocks to create
+    legacy_needed = any(
+        bs.get("key", "") not in blocks_state
+        for bs in blocks_spec
+        if not _to_compose_block(bs, coll)
+    )
+
     # Find grid_uid — try multiple paths (page tab, popup tab, or direct node)
     grid_uid = ""
     for getter in [
@@ -307,6 +420,23 @@ def deploy_surface(nb: NocoBase, tab_uid: str, spec: dict,
         except Exception as e:
             continue
 
+    # If no grid_uid found but legacy blocks needed, create ChildPage via compose
+    if not grid_uid and legacy_needed:
+        try:
+            nb.compose(tab_uid, [], mode="replace")
+            # Re-read to get the newly created grid
+            data = nb.get(uid=tab_uid)
+            tree = data.get("tree", {})
+            popup = tree.get("subModels", {}).get("page", {})
+            if popup:
+                tabs = popup.get("subModels", {}).get("tabs", [])
+                if isinstance(tabs, list) and tabs:
+                    g = tabs[0].get("subModels", {}).get("grid", {})
+                    if isinstance(g, dict) and g.get("uid"):
+                        grid_uid = g["uid"]
+        except Exception:
+            pass
+
     if grid_uid:
         for bs in blocks_spec:
             key = bs.get("key", "")
@@ -324,6 +454,23 @@ def deploy_surface(nb: NocoBase, tab_uid: str, spec: dict,
         layout = parse_layout_spec(layout_spec, list(uid_map.keys()))
         apply_layout(nb, grid_uid, layout, uid_map)
         print(f"    layout: {describe_layout(layout)}")
+
+    # Step 4.5: Reorder table columns to match spec field order
+    for bs in blocks_spec:
+        btype = bs.get("type", "")
+        key = bs.get("key", "")
+        if btype != "table" or key not in blocks_state:
+            continue
+        block_uid = blocks_state[key].get("uid", "")
+        if not block_uid:
+            continue
+        spec_fields = []
+        for f in bs.get("fields", []):
+            fp = f if isinstance(f, str) else f.get("field", f.get("fieldPath", ""))
+            if fp and not fp.startswith("["):
+                spec_fields.append(fp)
+        if spec_fields:
+            _reorder_table_columns(nb, block_uid, spec_fields)
 
     # Step 5: Deploy nested popups from spec blocks + popups/ dir
     if mod:
@@ -408,27 +555,77 @@ def _deploy_nested_popups(nb: NocoBase, blocks_spec: list, blocks_state: dict,
                     pass
 
 
+def _reorder_table_columns(nb: NocoBase, block_uid: str, spec_fields: list[str]):
+    """Reorder table columns to match spec field order via moveNode.
+
+    Popup-enabled fields come first (after the actions column).
+    Uses flowSurfaces:moveNode for reliable reordering.
+    """
+    try:
+        data = nb.get(uid=block_uid)
+        tree = data.get("tree", {})
+        cols = tree.get("subModels", {}).get("columns", [])
+        if not isinstance(cols, list) or len(cols) < 2:
+            return
+
+        # Build fieldPath → uid map + find actions column
+        col_uid_map: dict[str, str] = {}
+        actions_uid = ""
+        for c in cols:
+            fp = c.get("stepParams", {}).get("fieldSettings", {}).get("init", {}).get("fieldPath", "")
+            if fp:
+                col_uid_map[fp] = c.get("uid", "")
+            elif "TableActionsColumn" in c.get("use", ""):
+                actions_uid = c.get("uid", "")
+
+        # Current order (from live system)
+        current_order = [
+            c.get("stepParams", {}).get("fieldSettings", {}).get("init", {}).get("fieldPath", "")
+            for c in cols if c.get("stepParams", {}).get("fieldSettings", {}).get("init", {}).get("fieldPath")
+        ]
+
+        # Desired order from spec
+        desired = [fp for fp in spec_fields if fp in col_uid_map]
+        if desired == current_order:
+            return  # already correct
+
+        # Move columns into desired order using moveNode
+        # Strategy: move each column after the previous one (or after actions column for first)
+        prev_uid = actions_uid  # anchor: first field goes after actions column
+        for fp in desired:
+            col_uid = col_uid_map[fp]
+            if prev_uid:
+                nb.move_node(col_uid, prev_uid, "after")
+            prev_uid = col_uid
+    except Exception:
+        pass
+
+
 def _find_nested_popup_target(block: dict, field_name: str) -> str | None:
     """Find the UID of a field or action that should have a popup."""
+    fn_lower = field_name.lower()
+
     # Check columns for field name
     for col in block.get("subModels", {}).get("columns", []):
         fp = col.get("stepParams", {}).get("fieldSettings", {}).get("init", {}).get("fieldPath", "")
-        if fp == field_name:
+        if fp.lower() == fn_lower:
             field = col.get("subModels", {}).get("field", {})
             return field.get("uid", col.get("uid", "")) if isinstance(field, dict) else col.get("uid", "")
 
-    # Check actions
-    for act in block.get("subModels", {}).get("actions", []):
-        act_type = act.get("use", "").replace("Model", "").replace("Action", "").lower()
-        if act_type == field_name or field_name in act_type:
-            return act.get("uid", "")
+    # Check actions + recordActions (details blocks use recordActions for edit/view)
+    for akey in ("actions", "recordActions"):
+        for act in (block.get("subModels", {}).get(akey, [])
+                     if isinstance(block.get("subModels", {}).get(akey), list) else []):
+            act_type = act.get("use", "").replace("Model", "").replace("Action", "").lower()
+            if act_type == fn_lower or fn_lower in act_type:
+                return act.get("uid", "")
 
     # Check record actions (inside TableActionsColumn)
     for col in block.get("subModels", {}).get("columns", []):
         if "TableActionsColumn" in col.get("use", ""):
             for act in col.get("subModels", {}).get("actions", []):
                 act_type = act.get("use", "").replace("Model", "").replace("Action", "").lower()
-                if act_type == field_name or field_name in act_type:
+                if act_type == fn_lower or fn_lower in act_type:
                     return act.get("uid", "")
 
     return None
@@ -460,11 +657,7 @@ def _to_compose_block(bs: dict, default_coll: str) -> dict | None:
     if btype not in COMPOSE_TYPES:
         return None
 
-    # Skip association-bound blocks (compose doesn't handle associationName)
     res_binding = bs.get("resource_binding", {})
-    if res_binding.get("associationName"):
-        return None
-
     block: dict[str, Any] = {"key": key, "type": btype}
 
     # Resource
@@ -472,6 +665,14 @@ def _to_compose_block(bs: dict, default_coll: str) -> dict | None:
     block_coll = bs.get("coll", default_coll)
     if resource:
         block["resource"] = resource
+    elif res_binding.get("associationName"):
+        block["resource"] = {
+            "collectionName": block_coll,
+            "dataSourceKey": "main",
+            "associationName": res_binding["associationName"],
+        }
+        if res_binding.get("sourceId"):
+            block["resource"]["sourceId"] = res_binding["sourceId"]
     elif res_binding.get("filterByTk"):
         block["resource"] = {"binding": "currentRecord"}
     elif block_coll and btype not in ("filterForm", "jsBlock", "chart", "markdown"):
@@ -485,6 +686,8 @@ def _to_compose_block(bs: dict, default_coll: str) -> dict | None:
         include_fields = True  # filterForm with known collection can use compose fields
 
     # Also extract fields from field_layout (may reference fields not in fields list)
+    # Skip layout directives: col (vertical group), size (width), [JS:xxx] (JS items), --- (divider)
+    _LAYOUT_KEYS = {"col", "size"}
     field_layout = bs.get("field_layout", [])
     layout_fields = set()
     for row in field_layout:
@@ -494,35 +697,37 @@ def _to_compose_block(bs: dict, default_coll: str) -> dict | None:
                     layout_fields.add(item)
                 elif isinstance(item, dict):
                     for k in item.keys():
-                        if not k.startswith("[") and not k.startswith("---"):
-                            layout_fields.add(k)
+                        if k in _LAYOUT_KEYS or k.startswith("[") or k.startswith("---"):
+                            continue
+                        layout_fields.add(k)
 
+    _SYSTEM_FIELDS = {"id", "createdAt", "updatedAt", "createdBy", "updatedBy", "createdById", "updatedById"}
     all_fields = set()
     for f in fields:
         fp = f if isinstance(f, str) else f.get("field", f.get("fieldPath", ""))
-        if fp and not fp.startswith("["):
+        if fp and not fp.startswith("[") and fp not in _SYSTEM_FIELDS:
             all_fields.add(fp)
-    all_fields.update(layout_fields)
+    all_fields.update(layout_fields - _SYSTEM_FIELDS)
 
     if all_fields and include_fields:
         compose_fields = [{"fieldPath": fp} for fp in all_fields]
         block["fields"] = compose_fields
 
     # Include actions — compose handles standard action types
+    # Exclude edit/view — compose auto-creates empty popup stubs for these.
+    # Instead, create them via _fill_block (save_model) so NocoBase
+    # generates the popup form at runtime.
+    _POPUP_ACTIONS = {"edit", "view", "duplicate"}
     actions = list(bs.get("actions", []))
     record_actions = list(bs.get("recordActions", []))
 
-    # Auto-fix: edit/delete on details → recordActions
-    if btype == "details":
-        for a in list(actions):
-            if a in ("edit", "delete", "duplicate", "view"):
-                record_actions.append(a)
-                actions.remove(a)
+    compose_actions = [a for a in actions if a not in _POPUP_ACTIONS]
+    compose_rec_actions = [a for a in record_actions if a not in _POPUP_ACTIONS]
 
-    if actions:
-        block["actions"] = [{"type": a} if isinstance(a, str) else a for a in actions]
-    if record_actions:
-        block["recordActions"] = [{"type": a} if isinstance(a, str) else a for a in record_actions]
+    if compose_actions:
+        block["actions"] = [{"type": a} if isinstance(a, str) else a for a in compose_actions]
+    if compose_rec_actions:
+        block["recordActions"] = [{"type": a} if isinstance(a, str) else a for a in compose_rec_actions]
 
     return block
 
@@ -819,6 +1024,45 @@ def _fill_block(nb: NocoBase, block_uid: str, grid_uid: str,
         _fix_display_models(nb, block_uid, coll, btype)
     block_state["fields"] = field_states
 
+    # ── Field Template (ReferenceFormGridModel) ──
+    # If spec has field_template, replace the grid with ReferenceFormGridModel
+    field_tpl = bs.get("field_template")
+    if field_tpl and btype in ("createForm", "editForm", "details"):
+        tpl_uid = field_tpl.get("templateUid", "")
+        if tpl_uid:
+            # Read live grid if grid_uid not available
+            actual_grid_uid = grid_uid
+            try:
+                live = nb.get(uid=block_uid)
+                live_grid = live.get("tree", {}).get("subModels", {}).get("grid", {})
+                if isinstance(live_grid, dict):
+                    actual_grid_uid = live_grid.get("uid", actual_grid_uid)
+                if "ReferenceFormGrid" not in (live_grid.get("use", "") if isinstance(live_grid, dict) else ""):
+                    # Replace grid: destroy current FormGridModel, create ReferenceFormGridModel
+                    if actual_grid_uid:
+                        nb.s.post(f"{nb.base}/api/flowModels:destroy",
+                                  params={"filterByTk": actual_grid_uid}, timeout=30)
+                    new_grid_uid = uid()
+                    nb.save_model({
+                        "uid": new_grid_uid, "use": "ReferenceFormGridModel",
+                        "parentId": block_uid, "subKey": "grid", "subType": "object",
+                        "sortIndex": 0, "flowRegistry": {},
+                        "stepParams": {
+                            "referenceSettings": {
+                                "useTemplate": {
+                                    "templateUid": tpl_uid,
+                                    "templateName": field_tpl.get("templateName", ""),
+                                    "targetUid": field_tpl.get("targetUid", ""),
+                                    "mode": field_tpl.get("mode", "reference"),
+                                }
+                            }
+                        },
+                    })
+                    block_state["grid_uid"] = new_grid_uid
+                    print(f"      + field_template: \"{field_tpl.get('templateName', '')}\"")
+            except Exception as e:
+                print(f"      ! field_template: {e}")
+
     # ── Actions ──
     # compose now includes actions — UIDs already in block_state
     pass
@@ -861,10 +1105,66 @@ def _fill_block(nb: NocoBase, block_uid: str, grid_uid: str,
                         "dataSourceKey": "main", "sql": clean, "bind": {},
                     }, timeout=30)
 
-    # ── Actions ──
-    # compose now includes actions — UIDs already in block_state
-    # Only add actions that compose didn't handle (unsupported types)
-    pass
+    # ── Actions (popup-type: edit/view/duplicate) ──
+    # These are excluded from compose to avoid empty popup stubs.
+    # Create as plain action buttons — NocoBase auto-generates popup at runtime.
+    _POPUP_ACTION_MAP = {
+        "edit": "EditActionModel",
+        "view": "ViewActionModel",
+        "duplicate": "DuplicateActionModel",
+    }
+    all_actions = list(bs.get("actions", []))
+    all_rec_actions = list(bs.get("recordActions", []))
+
+    for atype in all_actions + all_rec_actions:
+        if isinstance(atype, dict):
+            atype = atype.get("type", "")
+        amodel = _POPUP_ACTION_MAP.get(atype)
+        if not amodel:
+            continue
+        # Check if compose already created it
+        a_key = atype
+        existing_actions = block_state.get("actions", {})
+        existing_rec = block_state.get("record_actions", {})
+        if a_key in existing_actions or a_key in existing_rec:
+            continue
+        # Determine correct subKey from spec position
+        desired_sub_key = "recordActions" if atype in all_rec_actions else "actions"
+
+        # Check live block for existing action
+        try:
+            live = nb.get(uid=block_uid)
+            live_subs = live.get("tree", {}).get("subModels", {})
+            found_uid = ""
+            found_sub_key = ""
+            for ak in ("actions", "recordActions"):
+                for la in (live_subs.get(ak, []) if isinstance(live_subs.get(ak), list) else []):
+                    if amodel.replace("Model", "") in la.get("use", ""):
+                        found_uid = la.get("uid", "")
+                        found_sub_key = ak
+                        break
+                if found_uid:
+                    break
+            if found_uid:
+                # Fix subKey if mismatched (e.g., was recordActions, should be actions)
+                if found_sub_key != desired_sub_key:
+                    nb.save_model({"uid": found_uid, "subKey": desired_sub_key})
+                # Track in block_state so refs can resolve
+                state_key = "record_actions" if desired_sub_key == "recordActions" else "actions"
+                block_state.setdefault(state_key, {})[atype] = {"uid": found_uid}
+                continue
+        except Exception:
+            pass
+        # Create via save_model (no popup stub)
+        new_uid = uid()
+        nb.save_model({
+            "uid": new_uid, "use": amodel,
+            "parentId": block_uid, "subKey": desired_sub_key, "subType": "array",
+            "sortIndex": 0, "stepParams": {}, "flowRegistry": {},
+        })
+        # Track in block_state
+        state_key = "record_actions" if desired_sub_key == "recordActions" else "actions"
+        block_state.setdefault(state_key, {})[atype] = {"uid": new_uid}
 
     # ── JS Items (inside detail/form grid) ──
     js_items = bs.get("js_items", [])
@@ -1031,7 +1331,7 @@ def _fill_block(nb: NocoBase, block_uid: str, grid_uid: str,
 
     # ── Event Flows (formValuesChange JS) ──
     event_flows = bs.get("event_flows", [])
-    if event_flows and btype in ("createForm", "editForm"):
+    if event_flows:
         flow_registry = {}
         for ef in event_flows:
             ef_file = ef.get("file", "")
@@ -1045,8 +1345,11 @@ def _fill_block(nb: NocoBase, block_uid: str, grid_uid: str,
             step_key = ef.get("step_key", "runJs")
             event_name = ef.get("event", "formValuesChange")
 
+            # on can be string ("formValuesChange") or dict ({"eventName": "beforeRender", ...})
+            on_value = event_name if isinstance(event_name, dict) else event_name
             flow_registry[flow_key] = {
-                "on": event_name,
+                "key": flow_key,
+                "on": on_value,
                 "title": ef.get("desc", flow_key),
                 "steps": {
                     step_key: {
@@ -1060,16 +1363,13 @@ def _fill_block(nb: NocoBase, block_uid: str, grid_uid: str,
 
         if flow_registry:
             try:
-                nb.save_model({
-                    "uid": block_uid,
-                    "use": bs.get("type", "CreateFormModel").replace("create", "Create").replace("edit", "Edit") + "Model"
-                          if not bs.get("type", "").endswith("Model") else bs["type"],
-                    "flowRegistry": flow_registry,
-                })
+                nb.save_model({"uid": block_uid, "flowRegistry": flow_registry})
             except Exception as e:
-                # Fallback: update via raw API
-                nb.s.post(f"{nb.base}/api/flowModels:update?filterByTk={block_uid}",
-                          json={"options": {"flowRegistry": flow_registry}}, timeout=30)
+                try:
+                    nb.s.post(f"{nb.base}/api/flowModels:update?filterByTk={block_uid}",
+                              json={"options": {"flowRegistry": flow_registry}}, timeout=30)
+                except Exception:
+                    pass
 
     # ── Linkage Rules ──
     linkage_rules = bs.get("linkage_rules")
@@ -1107,6 +1407,38 @@ def _configure_filter(nb: NocoBase, bs: dict, block_uid: str,
         ├── FilterFormBlock → FilterFormGridModel (NOT here)
         └── TableBlock / ReferenceBlock
     """
+    # Validate: multiple text input fields should use filterPaths, not separate inputs
+    fields_spec = bs.get("fields", [])
+    text_fields = []
+    for f in fields_spec:
+        fp = f if isinstance(f, str) else f.get("field", f.get("name", ""))
+        if not fp:
+            continue
+        # Check field interface from collection metadata
+        meta = nb.field_meta(coll) if coll else {}
+        iface = meta.get(fp, {}).get("interface", "input")
+        if iface in ("input", "textarea", "email", "phone", "url"):
+            has_paths = isinstance(f, dict) and f.get("filterPaths")
+            if not has_paths:
+                text_fields.append(fp)
+    if len(text_fields) > 1:
+        raise ValueError(
+            f"filterForm has {len(text_fields)} text inputs: {text_fields}. "
+            f"Use ONE input with filterPaths to search multiple fields:\n"
+            f"  fields:\n"
+            f"  - field: {text_fields[0]}\n"
+            f"    label: Search\n"
+            f"    filterPaths: {text_fields}"
+        )
+
+    # Max 3 filter fields total (1 search + 2 select/date)
+    total = len(fields_spec)
+    if total > 3:
+        raise ValueError(
+            f"filterForm has {total} fields (max 3: 1 search + 2 select/date).\n"
+            f"  Reduce to: 1 search input with filterPaths + up to 2 select/date fields."
+        )
+
     # Find target table/reference block UIDs
     target_uids = []
     if all_blocks_state:
@@ -1297,6 +1629,8 @@ def _create_legacy_block(nb: NocoBase, grid_uid: str, bs: dict,
         "table": "TableBlockModel",
         "details": "DetailsBlockModel",
         "gridCard": "GridCardBlockModel",
+        "createForm": "CreateFormModel",
+        "editForm": "EditFormModel",
     }
     model_use = use_map.get(btype)
     if not model_use:
@@ -1318,15 +1652,203 @@ def _create_legacy_block(nb: NocoBase, grid_uid: str, bs: dict,
                 "sortIndex": 0, "stepParams": {}, "flowRegistry": {},
             })
 
+        # ── RecordHistory: add actions (filter, refresh, expand, collapse) ──
+        if btype == "recordHistory":
+            rh_action_map = {
+                "filter": "FilterActionModel",
+                "refresh": "RefreshActionModel",
+                "historyExpand": "RecordHistoryExpandActionModel",
+                "historyCollapse": "RecordHistoryCollapseActionModel",
+            }
+            for a in bs.get("actions", []):
+                atype = a if isinstance(a, str) else a.get("type", "")
+                amodel = rh_action_map.get(atype)
+                if amodel:
+                    nb.save_model({
+                        "uid": uid(), "use": amodel,
+                        "parentId": block_uid, "subKey": "actions", "subType": "array",
+                        "sortIndex": 0, "stepParams": {}, "flowRegistry": {},
+                    })
+
         # ── List/GridCard: add ListItem + fields + JS items + actions ──
         if btype in ("list", "gridCard"):
             _fill_list_block(nb, block_uid, bs, coll, mod)
+
+        # ── Table: add columns + actions ──
+        if btype == "table":
+            _fill_table_block(nb, block_uid, bs, coll, mod)
+
+        # ── Form: add fields + actions via addField ──
+        if btype in ("createForm", "editForm"):
+            _fill_form_block(nb, block_uid, bs, coll, mod)
 
         print(f"    + {btype}:\"{title}\" (legacy)")
         return block_uid
     except Exception as e:
         print(f"    ! {btype}: {e}")
         return None
+
+
+def _fill_table_block(nb: NocoBase, block_uid: str, bs: dict,
+                      coll: str, mod: Path = None):
+    """Fill a legacy TableBlock with columns + actions.
+
+    Table structure:
+      TableBlockModel
+        ├── TableActionsColumnModel (subKey=columns)
+        │   └── EditActionModel, DeleteActionModel, ... (subKey=actions)
+        ├── TableColumnModel (subKey=columns, per field)
+        │   └── DisplayFieldModel (subKey=field)
+        ├── JSColumnModel (subKey=columns, per JS col)
+        ├── FilterActionModel (subKey=actions)
+        ├── RefreshActionModel
+        └── AddNewActionModel
+    """
+    # Columns from fields
+    fields = bs.get("fields", [])
+    for i, fp in enumerate(fields):
+        if isinstance(fp, dict):
+            fp = fp.get("field", fp.get("name", ""))
+        if not fp:
+            continue
+        col_uid_val = uid()
+        field_uid_val = uid()
+        nb.save_model({
+            "uid": col_uid_val, "use": "TableColumnModel",
+            "parentId": block_uid, "subKey": "columns", "subType": "array",
+            "sortIndex": i, "flowRegistry": {},
+            "stepParams": {"fieldSettings": {"init": {
+                "dataSourceKey": "main", "collectionName": coll, "fieldPath": fp,
+            }}},
+        })
+        nb.save_model({
+            "uid": field_uid_val, "use": "DisplayTextFieldModel",
+            "parentId": col_uid_val, "subKey": "field", "subType": "object",
+            "sortIndex": 0, "stepParams": {}, "flowRegistry": {},
+        })
+
+    # JS Columns
+    js_cols = bs.get("js_columns", [])
+    for jc in js_cols:
+        jc_title = jc.get("title", "")
+        jc_file = jc.get("file", "")
+        code = ""
+        if jc_file and mod:
+            p = mod / jc_file
+            if p.exists():
+                code = p.read_text()
+        jc_uid = uid()
+        nb.save_model({
+            "uid": jc_uid, "use": "JSColumnModel",
+            "parentId": block_uid, "subKey": "columns", "subType": "array",
+            "sortIndex": len(fields) + js_cols.index(jc), "flowRegistry": {},
+            "stepParams": {
+                "jsSettings": {"runJs": {"code": code, "version": "v1"}} if code else {},
+                "tableColumnSettings": {"title": {"title": jc_title}} if jc_title else {},
+            },
+        })
+
+    # Record actions column
+    rec_actions = bs.get("recordActions", [])
+    if rec_actions:
+        rac_uid = uid()
+        nb.save_model({
+            "uid": rac_uid, "use": "TableActionsColumnModel",
+            "parentId": block_uid, "subKey": "columns", "subType": "array",
+            "sortIndex": 999, "stepParams": {}, "flowRegistry": {},
+        })
+        action_map = {
+            "edit": "EditActionModel", "delete": "DeleteActionModel",
+            "view": "ViewActionModel", "duplicate": "DuplicateActionModel",
+        }
+        for a in rec_actions:
+            atype = a if isinstance(a, str) else a.get("type", "")
+            amodel = action_map.get(atype)
+            if amodel:
+                nb.save_model({
+                    "uid": uid(), "use": amodel,
+                    "parentId": rac_uid, "subKey": "actions", "subType": "array",
+                    "sortIndex": 0, "stepParams": {}, "flowRegistry": {},
+                })
+
+    # Block-level actions
+    block_actions = bs.get("actions", [])
+    block_action_map = {
+        "filter": "FilterActionModel", "refresh": "RefreshActionModel",
+        "addNew": "AddNewActionModel", "export": "ExportActionModel",
+        "import": "ImportActionModel",
+    }
+    for a in block_actions:
+        atype = a if isinstance(a, str) else a.get("type", "")
+        amodel = block_action_map.get(atype)
+        if amodel:
+            nb.save_model({
+                "uid": uid(), "use": amodel,
+                "parentId": block_uid, "subKey": "actions", "subType": "array",
+                "sortIndex": 0, "stepParams": {}, "flowRegistry": {},
+            })
+
+    if fields or js_cols:
+        print(f"      table content: {len(fields)}f + {len(js_cols)}js + {len(rec_actions)}rec + {len(block_actions)}act")
+
+
+def _fill_form_block(nb: NocoBase, block_uid: str, bs: dict,
+                     coll: str, mod: Path = None):
+    """Fill a legacy-created Form (createForm/editForm) with fields + actions.
+
+    Uses addField API to add each field, then fills JS items, layout, and actions.
+    """
+    fields = bs.get("fields", [])
+    blocks_state_entry: dict = {"uid": block_uid, "type": bs.get("type", ""), "fields": {}}
+
+    # Add fields via addField
+    for fp in fields:
+        if isinstance(fp, dict):
+            fp = fp.get("field", fp.get("name", ""))
+        if not fp or fp.startswith("["):
+            continue
+        try:
+            result = nb.add_field(block_uid, fp)
+            blocks_state_entry["fields"][fp] = {
+                "wrapper": result.get("wrapperUid", result.get("uid", "")),
+                "field": result.get("fieldUid", ""),
+            }
+        except Exception as e:
+            print(f"      ! field {fp}: {e}")
+
+    # Actions (submit, etc.)
+    action_map = {
+        "submit": "SubmitActionModel",
+        "reset": "ResetActionModel",
+    }
+    for a in bs.get("actions", []):
+        atype = a if isinstance(a, str) else a.get("type", "")
+        amodel = action_map.get(atype)
+        if amodel:
+            nb.save_model({
+                "uid": uid(), "use": amodel,
+                "parentId": block_uid, "subKey": "actions", "subType": "array",
+                "sortIndex": 0, "stepParams": {}, "flowRegistry": {},
+            })
+
+    # Fill JS items, layout, display model fixes via _fill_block
+    block_grid = ""
+    try:
+        data = nb.get(uid=block_uid)
+        tree = data.get("tree", {})
+        grid = tree.get("subModels", {}).get("grid", {})
+        if isinstance(grid, dict):
+            block_grid = grid.get("uid", "")
+    except Exception:
+        pass
+
+    if block_grid:
+        _fill_block(nb, block_uid, block_grid, bs, coll, mod,
+                     blocks_state_entry, {}, "")
+
+    n_fields = len([f for f in fields if isinstance(f, str) and not f.startswith("[")])
+    n_actions = len(bs.get("actions", []))
+    print(f"      form content: {n_fields}f + {n_actions}act")
 
 
 def _fill_list_block(nb: NocoBase, block_uid: str, bs: dict,
@@ -1443,7 +1965,8 @@ def _fill_list_block(nb: NocoBase, block_uid: str, bs: dict,
 # ══════════════════════════════════════════════════════════════════
 
 def _deploy_popup(nb: NocoBase, target_uid: str, target_ref: str,
-                  popup_spec: dict, state: dict, mod: Path, force: bool):
+                  popup_spec: dict, state: dict, mod: Path, force: bool,
+                  popup_path: str = ""):
     """Deploy a popup (= sub-page with tabs)."""
     mode = popup_spec.get("mode", "drawer")
     coll = popup_spec.get("coll", "")
@@ -1465,16 +1988,79 @@ def _deploy_popup(nb: NocoBase, target_uid: str, target_ref: str,
                     break
             if has_content:
                 if force:
-                    # Force: re-apply display model fixes, JS code updates
                     print(f"  ~ popup [{target_ref}] (update in-place)")
-                    # Re-fix display models for popup detail blocks
-                    for t in (tabs_existing if isinstance(tabs_existing, list) else [tabs_existing]):
+                    all_tabs = tabs_existing if isinstance(tabs_existing, list) else [tabs_existing]
+                    all_tab_specs = tabs_spec or [popup_spec]
+                    for ti, t in enumerate(all_tabs):
                         g = t.get("subModels", {}).get("grid", {})
-                        for item in (g.get("subModels", {}).get("items", []) if isinstance(g, dict) else []):
-                            if "DetailsBlock" in item.get("use", ""):
-                                block_uid = item.get("uid", "")
-                                if block_uid and coll:
-                                    _fix_display_models(nb, block_uid, coll, "details")
+                        live_items = g.get("subModels", {}).get("items", []) if isinstance(g, dict) else []
+                        tab_bs_list = all_tab_specs[ti].get("blocks", []) if ti < len(all_tab_specs) else []
+                        for item in live_items:
+                            item_use = item.get("use", "")
+                            item_uid = item.get("uid", "")
+                            item_title = item.get("stepParams", {}).get("cardSettings", {}).get("titleDescription", {}).get("title", "")
+                            item_coll = item.get("stepParams", {}).get("resourceSettings", {}).get("init", {}).get("collectionName", "") or coll
+
+                            if "DetailsBlock" in item_use and item_uid and item_coll:
+                                _fix_display_models(nb, item_uid, item_coll, "details")
+
+                            # Match live block to spec block for updates
+                            matched_bs = None
+                            for tbs in tab_bs_list:
+                                tbs_title = tbs.get("title", "")
+                                tbs_type = tbs.get("type", "")
+                                if item_use.lower().startswith(tbs_type.lower().replace("form", "")):
+                                    if tbs_title == item_title or (not tbs_title and not item_title):
+                                        matched_bs = tbs
+                                        break
+                            if not matched_bs:
+                                continue
+
+                            # Reorder table columns
+                            if "TableBlock" in item_use and item_uid:
+                                sf = [f if isinstance(f, str) else f.get("field", "") for f in matched_bs.get("fields", []) if (f if isinstance(f, str) else f.get("field", ""))]
+                                if sf:
+                                    _reorder_table_columns(nb, item_uid, sf)
+
+                            # Deploy event flows
+                            event_flows = matched_bs.get("event_flows", [])
+                            if event_flows and item_uid and mod:
+                                flow_registry = {}
+                                for ef in event_flows:
+                                    ef_file = ef.get("file", "")
+                                    if not ef_file:
+                                        continue
+                                    p = mod / ef_file
+                                    if not p.exists():
+                                        continue
+                                    code = p.read_text()
+                                    flow_key = ef.get("flow_key", f"custom_{len(flow_registry)}")
+                                    step_key = ef.get("step_key", "runJs")
+                                    event_name = ef.get("event", "formValuesChange")
+                                    on_value = event_name if isinstance(event_name, dict) else event_name
+                                    flow_registry[flow_key] = {
+                                        "key": flow_key,
+                                        "on": on_value,
+                                        "title": ef.get("desc", flow_key),
+                                        "steps": {
+                                            step_key: {
+                                                "key": step_key,
+                                                "use": "runjs",
+                                                "sort": 1,
+                                                "flowKey": flow_key,
+                                                "runJs": {"code": code},
+                                            }
+                                        }
+                                    }
+                                if flow_registry:
+                                    try:
+                                        nb.save_model({"uid": item_uid, "flowRegistry": flow_registry})
+                                    except Exception:
+                                        nb.s.post(f"{nb.base}/api/flowModels:update?filterByTk={item_uid}",
+                                                  json={"options": {"flowRegistry": flow_registry}}, timeout=30)
+                    # Still process nested popups (may be missing)
+                    if tabs_spec:
+                        _deploy_nested_popups_in_tabbed(nb, target_uid, tabs_spec, mod, force, popup_path)
                 else:
                     print(f"  = popup [{target_ref}] (exists, skip)")
                 return
@@ -1499,7 +2085,7 @@ def _deploy_popup(nb: NocoBase, target_uid: str, target_ref: str,
     })
 
     if tabs_spec:
-        _deploy_tabbed_popup(nb, target_uid, target_ref, tabs_spec, coll, mod, force)
+        _deploy_tabbed_popup(nb, target_uid, target_ref, tabs_spec, coll, mod, force, popup_path)
     else:
         # Simple popup (single set of blocks)
         blocks = popup_spec.get("blocks", [])
@@ -1515,7 +2101,8 @@ def _deploy_simple_popup(nb: NocoBase, target_uid: str, target_ref: str,
 
 
 def _deploy_tabbed_popup(nb: NocoBase, target_uid: str, target_ref: str,
-                         tabs_spec: list, coll: str, mod: Path, force: bool):
+                         tabs_spec: list, coll: str, mod: Path, force: bool,
+                         popup_path: str = ""):
     """Deploy a multi-tab popup."""
     print(f"  + popup [{target_ref}]: {len(tabs_spec)} tabs")
 
@@ -1545,7 +2132,7 @@ def _deploy_tabbed_popup(nb: NocoBase, target_uid: str, target_ref: str,
             try:
                 popup_uid = popup_page.get("uid", "")
                 result = nb.add_popup_tab(popup_uid, tab_title)
-                tab_uid = result.get("tabUid", result.get("uid", ""))
+                tab_uid = result.get("popupTabUid", result.get("tabUid", result.get("uid", "")))
             except Exception as e:
                 print(f"    ! tab '{tab_title}': {e}")
                 continue
@@ -1553,7 +2140,20 @@ def _deploy_tabbed_popup(nb: NocoBase, target_uid: str, target_ref: str,
         tab_blocks = deploy_surface(nb, tab_uid, tab_spec, mod)
         print(f"    tab '{tab_title}': {len(tab_blocks)} blocks")
 
-    # Deploy nested popups from ALL tabs (popups are at tab level, not block level)
+    # Deploy nested popups
+    _deploy_nested_popups_in_tabbed(nb, target_uid, tabs_spec, mod, force, popup_path)
+
+
+def _deploy_nested_popups_in_tabbed(nb: NocoBase, target_uid: str,
+                                     tabs_spec: list, mod: Path, force: bool,
+                                     popup_path: str = ""):
+    """Deploy nested popups from tab specs into live popup blocks.
+
+    popup_path tracks the dot-separated nesting path for loading popup files:
+      "" → popups/<field>.yaml
+      "name" → popups/name.<field>.yaml
+      "name.quotation_no" → popups/name.quotation_no.<field>.yaml
+    """
     try:
         data = nb.get(uid=target_uid)
         popup_page = data.get("tree", {}).get("subModels", {}).get("page", {})
@@ -1562,7 +2162,7 @@ def _deploy_tabbed_popup(nb: NocoBase, target_uid: str, target_ref: str,
         live_tabs = popup_page.get("subModels", {}).get("tabs", [])
         if not isinstance(live_tabs, list):
             return
-    except Exception as e:
+    except Exception:
         return
 
     for tab_idx, tab_spec in enumerate(tabs_spec):
@@ -1581,13 +2181,57 @@ def _deploy_tabbed_popup(nb: NocoBase, target_uid: str, target_ref: str,
             if not np_field:
                 continue
 
-            # Search ALL live blocks in this tab for the field
-            for live_item in (live_items if isinstance(live_items, list) else []):
+            # Auto-load popup content from popups/ directory
+            # Try dot-separated path first (name.quotation_no.yaml),
+            # then plain field name (quotation_no.yaml)
+            if not np.get("blocks") and not np.get("tabs") and mod:
+                np_bk = np.get("block_key", "")
+                name_part = f"{np_bk}.{np_field}" if np_bk else np_field
+                dot_path = f"{popup_path}.{name_part}" if popup_path else name_part
+                dot_path_no_bk = f"{popup_path}.{np_field}" if popup_path else np_field
+                candidates = [
+                    mod / "popups" / f"{dot_path}.yaml",
+                    mod / "popups" / f"{dot_path_no_bk}.yaml",
+                    mod / "popups" / f"{np_field}.yaml",
+                ]
+                for popup_file in candidates:
+                    if popup_file.exists():
+                        try:
+                            pf_spec = yaml.safe_load(popup_file.read_text()) or {}
+                            for k in ("blocks", "tabs", "layout"):
+                                if pf_spec.get(k):
+                                    np[k] = pf_spec[k]
+                            for k in ("mode", "coll"):
+                                if pf_spec.get(k) and not np.get(k):
+                                    np[k] = pf_spec[k]
+                        except Exception:
+                            pass
+                        break
+
+            # Search live blocks for the field/action target
+            # If block_key is specified, only search that specific block
+            np_block_key = np.get("block_key", "")
+            search_items = live_items if isinstance(live_items, list) else []
+            if np_block_key and search_items:
+                # Match by block title or type to find the right block
+                matched = []
+                for li in search_items:
+                    li_title = li.get("stepParams", {}).get("cardSettings", {}).get("titleDescription", {}).get("title", "")
+                    li_type = li.get("use", "").replace("BlockModel", "").replace("Model", "").lower()
+                    li_key = slugify(li_title) if li_title else f"{li_type}_{search_items.index(li)}"
+                    if li_key == np_block_key:
+                        matched = [li]
+                        break
+                if matched:
+                    search_items = matched
+
+            for live_item in search_items:
                 np_target = _find_nested_popup_target(live_item, np_field)
                 if np_target:
+                    child_path = f"{popup_path}.{np_field}" if popup_path else np_field
                     print(f"      nested popup: {np_field}")
                     _deploy_popup(nb, np_target, f"nested.{np_field}",
-                                  np, {}, mod, force)
+                                  np, {}, mod, force, popup_path=child_path)
                     break
 
 
@@ -1596,7 +2240,12 @@ def _deploy_tabbed_popup(nb: NocoBase, target_uid: str, target_ref: str,
 # ══════════════════════════════════════════════════════════════════
 
 def _expand_popups(popups: list[dict]) -> list[dict]:
-    """Expand auto-derived popups."""
+    """Expand auto-derived popups from addNew form.
+
+    auto options:
+      - edit: derive editForm from addNew (same fields/layout)
+      - detail: derive details popup for first table field click (name/title)
+    """
     import copy
     result = []
     for ps in popups:
@@ -1616,24 +2265,47 @@ def _expand_popups(popups: list[dict]) -> list[dict]:
 
         src_block = ps.get("blocks", [{}])[0]
         coll = ps.get("coll", "")
-        view_field = ps.get("view_field")
+        view_field = ps.get("view_field", "name")
 
         if "edit" in auto:
-            edit_block = copy.deepcopy(src_block)
-            edit_block["type"] = "editForm"
-            edit_block["resource"] = {"binding": "currentRecord"}
+            # Don't create blocks — NocoBase auto-generates editForm at runtime
             result.append({
                 "target": f"{base_ref}.record_actions.edit",
-                "blocks": [edit_block],
                 "coll": coll,
             })
 
+        if "detail" in auto:
+            # Auto-generate detail popup from addNew form fields
+            detail_block = copy.deepcopy(src_block)
+            detail_block["key"] = "details_0"
+            detail_block["type"] = "details"
+            detail_block.pop("resource", None)
+            detail_block["resource_binding"] = {
+                "filterByTk": "{{ctx.view.inputArgs.filterByTk}}"
+            }
+            detail_block["coll"] = coll
+            detail_block.pop("actions", None)
+            detail_block["actions"] = ["edit"]
+            # Add createdAt to fields if not present
+            detail_fields = detail_block.get("fields", [])
+            if "createdAt" not in detail_fields:
+                detail_fields.append("createdAt")
+            detail_block["fields"] = detail_fields
+
+            result.append({
+                "target": f"{base_ref}.fields.{view_field}",
+                "mode": "drawer",
+                "coll": coll,
+                "blocks": [detail_block],
+            })
+
+        # Legacy: "view" still supported
         if "view" in auto and view_field:
             view_block = copy.deepcopy(src_block)
             view_block["type"] = "details"
             view_block["resource"] = {"binding": "currentRecord"}
             view_block.pop("actions", None)
-            view_block["recordActions"] = ["edit"]
+            view_block["actions"] = ["edit"]
             result.append({
                 "target": f"{base_ref}.fields.{view_field}",
                 "mode": "drawer",
@@ -1655,15 +2327,35 @@ def _ensure_collection(nb: NocoBase, name: str, coll_def: dict):
         nb.create_collection(name, coll_def.get("title", name))
         print(f"  + collection: {name}")
 
+    # Set titleField — first 'name' or 'title' field found
+    fields = coll_def.get("fields", [])
+    title_field = None
+    for fdef in fields:
+        fn = fdef.get("name", "") if isinstance(fdef, dict) else fdef
+        if fn in ("name", "title"):
+            title_field = fn
+            break
+    if not title_field and fields:
+        fn0 = fields[0].get("name", "") if isinstance(fields[0], dict) else fields[0]
+        if fn0 not in ("id",):
+            title_field = fn0
+    if title_field:
+        nb.s.post(f"{nb.base}/api/collections:update",
+                  params={"filterByTk": name},
+                  json={"titleField": title_field}, timeout=30)
+
     meta = nb.field_meta(name)
     for fdef in coll_def.get("fields", []):
         fname = fdef["name"]
         if fname in meta or fname in ("id", "createdAt", "updatedAt"):
             continue
         try:
+            extra = {}
+            for k in ("options", "target", "foreignKey"):
+                if k in fdef:
+                    extra[k] = fdef[k]
             nb.create_field(name, fname, fdef.get("interface", "input"),
-                            fdef.get("title", fname),
-                            **({k: fdef[k] for k in ["options"] if k in fdef}))
+                            fdef.get("title", fname), **extra)
             print(f"    + {name}.{fname}")
         except Exception as e:
             print(f"    ! {name}.{fname}: {e}")
