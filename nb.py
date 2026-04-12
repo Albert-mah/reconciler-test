@@ -27,13 +27,60 @@ class NocoBase:
         self._login()
 
     def _login(self):
-        account = os.environ.get("NB_USER", "admin@nocobase.com")
-        password = os.environ.get("NB_PASSWORD", "admin123")
+        # Priority: env token → MCP config token → signIn
+        token = os.environ.get("NOCOBASE_API_TOKEN") or os.environ.get("NB_TOKEN", "")
+        if not token:
+            token = self._find_mcp_token()
+        if token:
+            self.s.headers["Authorization"] = f"Bearer {token}"
+            return
+        account = os.environ.get("NB_USER", "")
+        password = os.environ.get("NB_PASSWORD", "")
+        if not account or not password:
+            raise RuntimeError(
+                "No NocoBase credentials found. Set one of:\n"
+                "  1. NOCOBASE_API_TOKEN env var (API key)\n"
+                "  2. NB_USER + NB_PASSWORD env vars\n"
+                "  3. Configure NocoBase MCP server (claude mcp add nocobase ...)\n"
+                f"  Target: {self.base}"
+            )
         r = self.s.post(f"{self.base}/api/auth:signIn",
                         json={"account": account, "password": password},
                         timeout=self._timeout)
         r.raise_for_status()
         self.s.headers["Authorization"] = f"Bearer {r.json()['data']['token']}"
+
+    def _find_mcp_token(self) -> str:
+        """Try to extract NocoBase token from Claude/Kimi MCP config."""
+        import json
+        from pathlib import Path
+        home = Path.home()
+        for cfg_path in [
+            home / ".claude" / "settings.json",     # Claude Code global
+            home / ".claude" / "settings.local.json",
+            Path(".mcp.json"),                        # project-level
+            home / ".kimi" / "mcp.json",             # Kimi
+        ]:
+            try:
+                cfg = json.loads(cfg_path.read_text())
+                servers = cfg.get("mcpServers", cfg)  # settings.json wraps in mcpServers
+                for name, sv in servers.items():
+                    if "nocobase" not in name.lower():
+                        continue
+                    # Check --header "Authorization: Bearer xxx"
+                    for h in sv.get("headers", []):
+                        if isinstance(h, str) and "bearer" in h.lower():
+                            return h.split("Bearer ")[-1].strip()
+                    # Check env var reference
+                    url = sv.get("url", "")
+                    if url:
+                        # Extract base URL if we don't have one
+                        base = url.replace("/api/mcp", "").rstrip("/")
+                        if base and "NB_URL" not in os.environ:
+                            self.base = base
+            except Exception:
+                continue
+        return ""
 
     def _call(self, action: str, body: dict = None, method: str = "POST") -> dict:
         """Call flowSurfaces:<action>."""
