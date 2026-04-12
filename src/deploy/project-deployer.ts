@@ -108,6 +108,16 @@ export async function deployProject(
       log(`    ✗ Page '${p.title}' has ${blocks.length} blocks but no layout`);
       hasError = true;
     }
+    // Multi-tab: every tab must have a title
+    const tabs = p.layout.tabs;
+    if (tabs && tabs.length > 1) {
+      for (let ti = 0; ti < tabs.length; ti++) {
+        if (!tabs[ti].title) {
+          log(`    ✗ Page '${p.title}' tab ${ti} has no title`);
+          hasError = true;
+        }
+      }
+    }
   }
   if (hasError) { log('\n  Validation failed'); process.exit(1); }
   log('  ✓ Validation passed');
@@ -348,13 +358,23 @@ async function deployOnePage(
       });
     } catch { /* skip */ }
 
-    // Rename first tab if it's Untitled
+    // Rename first tab via both flowModel + route
     const firstTabTitle = tabs[0].title || '';
     if (firstTabTitle) {
       try {
         await nb.updateModel(pageState.tab_uid, {
           pageTabSettings: { title: { title: firstTabTitle } },
         });
+        // Also update route title — find tab route by schemaUid
+        const allRoutes = await nb.http.get(`${nb.baseUrl}/api/desktopRoutes:list`, { params: { pageSize: 500 } });
+        const tabRoute = (allRoutes.data.data || []).find(
+          (r: any) => r.schemaUid === pageState.tab_uid && r.type === 'tabs',
+        );
+        if (tabRoute) {
+          await nb.http.put(`${nb.baseUrl}/api/desktopRoutes:update?filterByTk=${tabRoute.id}`, {
+            title: firstTabTitle,
+          });
+        }
       } catch { /* skip */ }
     }
 
@@ -391,6 +411,15 @@ async function deployOnePage(
             const r = result as Record<string, unknown>;
             const tabUid = (r.tabSchemaUid || r.tabUid || r.uid || '') as string;
             tabState = { tab_uid: tabUid, blocks: {} };
+            // Also update route title
+            const tabRouteId = r.tabRouteId as number;
+            if (tabRouteId) {
+              try {
+                await nb.http.put(`${nb.baseUrl}/api/desktopRoutes:update?filterByTk=${tabRouteId}`, {
+                  title: tabTitle,
+                });
+              } catch { /* skip */ }
+            }
             log(`    + tab: ${tabTitle}`);
           } catch (e) {
             log(`    ! tab ${tabTitle}: ${e instanceof Error ? e.message : e}`);
