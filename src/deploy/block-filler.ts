@@ -90,14 +90,21 @@ export async function fillBlock(
               },
             };
 
-            // Step 2: Compose a default details block into the field
-            // This creates a ChildPage under field.subModels.page
+            // Step 2: Compose a details block with fields into the field's popup
             // NocoBase reads popupSettings.uid → finds field → uses field.subModels.page
             try {
+              // Get collection fields for a useful default detail view
+              const meta = await nb.collections.fieldMeta(popupColl);
+              const defaultFields = Object.keys(meta)
+                .filter(k => !['id', 'createdById', 'updatedById'].includes(k))
+                .slice(0, 10)
+                .map(k => ({ fieldPath: k }));
+
               await nb.surfaces.compose(fieldUid, [{
                 key: 'details',
                 type: 'details',
                 resource: { collectionName: popupColl, dataSourceKey: 'main', binding: 'currentRecord' },
+                fields: defaultFields,
               }], 'replace');
             } catch { /* popup might already have content */ }
           }
