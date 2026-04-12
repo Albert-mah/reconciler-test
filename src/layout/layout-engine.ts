@@ -43,21 +43,25 @@ export function parseLayoutSpec(
     const colSizes: number[] = [];
 
     for (const cell of row) {
-      let key: string;
-      let size: number | undefined;
-
       if (typeof cell === 'string') {
-        key = cell;
+        cols.push([cell]);
+        colSizes.push(Math.floor(24 / row.length));
       } else if (typeof cell === 'object' && cell) {
-        const entries = Object.entries(cell);
-        if (entries.length) {
-          [key, size] = entries[0] as [string, number];
-        } else continue;
-      } else continue;
-
-      // Key is a placeholder — will be replaced with UID by applyLayout
-      cols.push([key]);
-      colSizes.push(size ?? Math.floor(24 / row.length));
+        const obj = cell as Record<string, unknown>;
+        if (Array.isArray(obj.col)) {
+          // Stacked column: {col: [block1, block2, ...], size: N}
+          cols.push(obj.col as string[]);
+          colSizes.push((obj.size as number) || 24);
+        } else {
+          // Simple: {blockKey: size}
+          const entries = Object.entries(obj).filter(([k]) => k !== 'col' && k !== 'size');
+          if (entries.length) {
+            const [key, size] = entries[0] as [string, number];
+            cols.push([key]);
+            colSizes.push(size ?? Math.floor(24 / row.length));
+          }
+        }
+      }
     }
 
     if (cols.length) {
