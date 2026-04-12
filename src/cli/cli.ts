@@ -32,7 +32,7 @@ async function main() {
 
   if (!command) {
     console.log('Usage: cli.ts <command> [options]');
-    console.log('Commands: deploy, deploy-project, scaffold, verify-sql, export, export-project, sync');
+    console.log('Commands: deploy, deploy-project, scaffold, verify-sql, export, export-project, sync, graph');
     process.exit(1);
   }
 
@@ -54,6 +54,9 @@ async function main() {
       break;
     case 'export-project':
       await cmdExportProject(args.slice(1));
+      break;
+    case 'graph':
+      await cmdGraph(args.slice(1));
       break;
     case 'sync':
       await cmdSync(args.slice(1));
@@ -264,6 +267,43 @@ async function cmdDeployProject(args: string[]) {
   const pageIdx = args.indexOf('--page');
   const page = pageIdx >= 0 ? args[pageIdx + 1] : undefined;
   await deployProject(dir, { force, planOnly, group, page });
+}
+
+async function cmdGraph(args: string[]) {
+  const dir = args[0];
+  if (!dir) { console.error('Usage: cli.ts graph <project-dir>'); process.exit(1); }
+
+  const { buildGraph } = await import('../graph/graph-builder');
+  const { saveYaml } = await import('../utils/yaml');
+
+  const graph = buildGraph(dir);
+  const stats = graph.stats();
+  console.log('Graph:', stats);
+
+  // Generate _refs.yaml for each page
+  const nodes = (graph as any).nodes as Map<string, any>;
+  let refsCount = 0;
+  for (const [id, n] of nodes) {
+    if (n.type !== 'page') continue;
+    const refs = graph.pageRefs(id);
+    const pageDir = path.join(dir, n.meta?.dir || `pages/${n.name}`);
+    if (fs.existsSync(pageDir)) {
+      saveYaml(path.join(pageDir, '_refs.yaml'), {
+        _generated: true,
+        _readonly: 'This file is auto-generated. Edits will be overwritten.',
+        ...refs,
+      });
+      refsCount++;
+    }
+  }
+  console.log(`Generated ${refsCount} _refs.yaml files`);
+
+  // Save full graph
+  saveYaml(path.join(dir, '_graph.yaml'), {
+    stats,
+    ...graph.toJSON(),
+  });
+  console.log(`Saved _graph.yaml`);
 }
 
 function cmdScaffold(args: string[]) {

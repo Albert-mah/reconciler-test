@@ -205,10 +205,18 @@ export class ProjectGraph {
     // Popup chain
     const chain = this.popupChain(pageId);
 
+    // Deduplicate popup chain by collection name
+    const seenChain = new Set<string>();
+    const dedupedChain = chain.filter(c => {
+      if (seenChain.has(c.collection)) return false;
+      seenChain.add(c.collection);
+      return true;
+    });
+
     return {
       collections: [...collections],
       components: [...new Set(components)],
-      popup_chain: chain.map(c => ({
+      popup_chain: dedupedChain.map(c => ({
         collection: c.collection,
         depth: c.depth,
         path: c.path.join(' → '),

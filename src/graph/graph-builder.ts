@@ -107,7 +107,11 @@ function scanPagesDir(graph: ProjectGraph, dir: string, root: string, parentGrou
         if (fs.existsSync(tabLayout)) {
           scanLayout(graph, pageId, tabLayout, root);
         }
+        // Scan tab popups
+        scanPopupsDir(graph, pageId, path.join(fullPath, td, 'popups'));
       }
+      // Scan page-level popups
+      scanPopupsDir(graph, pageId, path.join(fullPath, 'popups'));
     } else {
       // It's a group — recurse
       scanPagesDir(graph, fullPath, root, entry);
@@ -118,74 +122,131 @@ function scanPagesDir(graph: ProjectGraph, dir: string, root: string, parentGrou
 function scanLayout(graph: ProjectGraph, pageId: string, layoutFile: string, root: string): void {
   const layout = loadYaml<Record<string, unknown>>(layoutFile);
   const blocks = (layout.blocks || []) as Record<string, unknown>[];
+  scanBlocks(graph, pageId, blocks, 0);
+}
 
+function scanBlocks(
+  graph: ProjectGraph,
+  parentId: string,
+  blocks: Record<string, unknown>[],
+  depth: number,
+): void {
   for (const block of blocks) {
     const blockKey = block.key as string || block.type as string;
-    const blockId = `${pageId}/${blockKey}`;
-    graph.addNode({
-      id: blockId,
-      type: 'block',
-      name: `${blockKey} (${block.type})`,
-      meta: { type: block.type, coll: block.coll },
-    });
-    graph.addEdge({ from: pageId, to: blockId, type: 'contains' });
+    const blockId = `${parentId}/${blockKey}`;
+
+    // Avoid duplicate nodes
+    if (!graph.getNode(blockId)) {
+      graph.addNode({
+        id: blockId,
+        type: 'block',
+        name: `${blockKey} (${block.type})`,
+        meta: { type: block.type, coll: block.coll, depth },
+      });
+      graph.addEdge({ from: parentId, to: blockId, type: 'contains' });
+    }
 
     // Block → collection
     if (block.coll) {
-      graph.addEdge({ from: blockId, to: `collection:${block.coll}`, type: 'belongsTo' });
+      const collId = `collection:${block.coll}`;
+      if (graph.getNode(collId)) {
+        graph.addEdge({ from: blockId, to: collId, type: 'belongsTo' });
+      }
     }
 
-    // Scan fields for clickToOpen popups
+    // Scan fields for clickToOpen popups → recursive
     const fields = (block.fields || []) as unknown[];
     for (const f of fields) {
       if (typeof f !== 'object') continue;
       const fo = f as Record<string, unknown>;
-      if (!fo.clickToOpen) continue;
 
-      const popup = fo.popup as Record<string, unknown>;
-      const ps = fo.popupSettings as Record<string, unknown>;
-      const popupColl = popup?.collectionName || ps?.collectionName;
+      if (fo.clickToOpen) {
+        const popup = fo.popup as Record<string, unknown>;
+        const ps = fo.popupSettings as Record<string, unknown>;
 
-      if (popupColl) {
-        // Page → popupTo → collection
-        graph.addEdge({
-          from: pageId,
-          to: `collection:${popupColl}`,
-          type: 'popupTo',
-          meta: { field: fo.field, depth: 0 },
-        });
-      }
+        // popupTo edge: which collection does this popup show?
+        const popupColl = (popup as Record<string, unknown>)?.blocks
+          ? findCollInBlocks((popup as Record<string, unknown>).blocks as Record<string, unknown>[])
+          : (ps?.collectionName || popup?.collectionName) as string;
 
-      // Template reference
-      const templateName = popup?._template as string;
-      if (templateName) {
-        // Find component by name
-        const compNode = [...(graph as any).nodes.values()].find(
-          (n: GraphNode) => n.type === 'component' && n.name === templateName,
-        );
-        if (compNode) {
-          graph.addEdge({ from: blockId, to: compNode.id, type: 'usesComponent' });
+        if (popupColl) {
+          const pageId = parentId.split('/').slice(0, 1).join('/');
+          graph.addEdge({
+            from: pageId || parentId,
+            to: `collection:${popupColl}`,
+            type: 'popupTo',
+            meta: { field: fo.field, depth },
+          });
         }
-      }
-    }
 
-    // Scan actions for popup refs
-    for (const actionKey of ['actions', 'recordActions'] as const) {
-      const actions = (block[actionKey] || []) as unknown[];
-      for (const a of actions) {
-        if (typeof a !== 'object') continue;
-        const ao = a as Record<string, unknown>;
-        if (ao.type === 'ai' && ao.employee) {
-          // AI button → no graph edge needed
+        // Template/component reference
+        const templateName = (popup as Record<string, unknown>)?._template as string;
+        if (templateName) {
+          const nodes = (graph as any).nodes as Map<string, GraphNode>;
+          for (const [, n] of nodes) {
+            if (n.type === 'component' && n.name === templateName) {
+              graph.addEdge({ from: blockId, to: n.id, type: 'usesComponent' });
+              break;
+            }
+          }
+        }
+
+        // Recurse into popup content blocks
+        if (popup && depth < 5) {
+          const popupBlocks = (popup as Record<string, unknown>).blocks as Record<string, unknown>[];
+          const popupTabs = (popup as Record<string, unknown>).tabs as Record<string, unknown>[];
+          if (popupBlocks?.length) {
+            scanBlocks(graph, blockId, popupBlocks, depth + 1);
+          }
+          if (popupTabs?.length) {
+            for (const tab of popupTabs) {
+              const tabBlocks = (tab.blocks || []) as Record<string, unknown>[];
+              if (tabBlocks.length) {
+                scanBlocks(graph, blockId, tabBlocks, depth + 1);
+              }
+            }
+          }
         }
       }
     }
 
     // Chart/KPI → collection (dataSource)
-    if (block.type === 'chart' || block.type === 'jsBlock') {
-      if (block.coll) {
-        graph.addEdge({ from: blockId, to: `collection:${block.coll}`, type: 'dataSource' });
-      }
+    if ((block.type === 'chart' || block.type === 'jsBlock') && block.coll) {
+      graph.addEdge({ from: blockId, to: `collection:${block.coll}`, type: 'dataSource' });
     }
+  }
+}
+
+/** Find first collection name in a list of blocks. */
+function findCollInBlocks(blocks: Record<string, unknown>[]): string | undefined {
+  for (const b of blocks) {
+    if (b.coll) return b.coll as string;
+  }
+  return undefined;
+}
+
+// Also scan popups/ directory for popup files
+function scanPopupsDir(graph: ProjectGraph, pageId: string, popupsDir: string): void {
+  if (!fs.existsSync(popupsDir)) return;
+  for (const f of fs.readdirSync(popupsDir).filter(f => f.endsWith('.yaml'))) {
+    try {
+      const ps = loadYaml<Record<string, unknown>>(path.join(popupsDir, f));
+      const blocks = (ps.blocks || []) as Record<string, unknown>[];
+      const tabs = (ps.tabs || []) as Record<string, unknown>[];
+
+      const allBlocks = [...blocks];
+      for (const tab of tabs) {
+        allBlocks.push(...((tab.blocks || []) as Record<string, unknown>[]));
+      }
+
+      for (const b of allBlocks) {
+        if (b.coll) {
+          const collId = `collection:${b.coll}`;
+          if (graph.getNode(collId)) {
+            graph.addEdge({ from: pageId, to: collId, type: 'popupTo', meta: { file: f } });
+          }
+        }
+      }
+    } catch { /* skip */ }
   }
 }
