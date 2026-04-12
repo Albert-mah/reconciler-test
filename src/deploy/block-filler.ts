@@ -75,9 +75,12 @@ export async function fillBlock(
           // Set popupSettings if specified
           const ps = (f as unknown as Record<string, unknown>).popupSettings as Record<string, unknown>;
           if (ps) {
+            const popupColl = (ps.collectionName || coll) as string;
+
+            // Step 1: Set popupSettings to enable click-to-open
             update.popupSettings = {
               openView: {
-                collectionName: (ps.collectionName || coll) as string,
+                collectionName: popupColl,
                 dataSourceKey: 'main',
                 mode: ps.mode || 'drawer',
                 size: ps.size || 'medium',
@@ -86,6 +89,24 @@ export async function fillBlock(
                 filterByTk: ps.filterByTk || '{{ ctx.record.id }}',
               },
             };
+
+            // Step 2: Compose a default details block into the popup
+            try {
+              await nb.surfaces.compose(fieldUid, [{
+                key: 'details',
+                type: 'details',
+                resource: { collectionName: popupColl, dataSourceKey: 'main', binding: 'currentRecord' },
+              }], 'replace');
+
+              // Update popupSettings.uid to point to the ChildPage (not the field)
+              const refreshed = await nb.get({ uid: fieldUid });
+              const childPage = refreshed.tree.subModels?.page;
+              if (childPage && !Array.isArray(childPage)) {
+                (update.popupSettings as Record<string, unknown>).openView =
+                  { ...(update.popupSettings as Record<string, unknown>).openView as Record<string, unknown>,
+                    uid: (childPage as { uid: string }).uid };
+              }
+            } catch { /* popup might already have content */ }
           }
           await nb.updateModel(fieldUid, update);
           log(`      ~ clickToOpen: ${fp}`);
