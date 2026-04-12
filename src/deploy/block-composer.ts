@@ -14,7 +14,9 @@ const LEGACY_TYPES = new Set(['comments', 'recordHistory', 'reference']);
 
 const COMPOSE_ACTIONS = new Set([
   'filter', 'refresh', 'addNew', 'delete', 'bulkDelete',
-  'submit', 'reset', 'edit', 'view',
+  'submit', 'reset',
+  // edit/view NOT here — only created if spec explicitly declares them,
+  // handled by block-filler via save_model (not compose)
 ]);
 
 const SYSTEM_FIELDS = new Set([
@@ -89,19 +91,7 @@ export function toComposeBlock(
     return COMPOSE_ACTIONS.has(t);
   });
 
-  // Details blocks: edit/view must be in recordActions (compose API requirement)
-  if (btype === 'details') {
-    const moveToRecord = ['edit', 'view'];
-    const toMove = actions.filter(a => {
-      const t = typeof a === 'string' ? a : (a as Record<string, unknown>).type as string;
-      return moveToRecord.includes(t);
-    });
-    const remaining = actions.filter(a => !toMove.includes(a));
-    if (toMove.length) recordActions.push(...toMove);
-    if (remaining.length > 0) {
-      block.actions = remaining.map(a => typeof a === 'string' ? { type: a } : a);
-    }
-  } else if (actions.length > 0) {
+  if (actions.length > 0) {
     block.actions = actions.map(a => typeof a === 'string' ? { type: a } : a);
   }
   if (recordActions.length > 0) {
