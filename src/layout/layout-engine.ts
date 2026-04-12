@@ -1,0 +1,124 @@
+/**
+ * Layout DSL parser + applier.
+ *
+ * Converts YAML layout spec → gridSettings.rows/sizes format.
+ */
+import type { NocoBaseClient } from '../client';
+import type { LayoutRow } from '../types/spec';
+
+export interface GridLayout {
+  rows: Record<string, string[][]>;
+  sizes: Record<string, number[]>;
+}
+
+/**
+ * Parse YAML layout spec into grid rows + sizes.
+ *
+ * Input format:
+ *   - - filterForm          → single row, full width
+ *   - - table               → single row, full width
+ *   - - kpi1: 6             → row with 4 items at 6/24 each
+ *     - kpi2: 6
+ *     - kpi3: 6
+ *     - kpi4: 6
+ */
+export function parseLayoutSpec(
+  layoutSpec: LayoutRow[],
+  blockKeys: string[],
+): GridLayout {
+  const rows: Record<string, string[][]> = {};
+  const sizes: Record<string, number[]> = {};
+  let ri = 0;
+
+  for (const row of layoutSpec) {
+    if (!Array.isArray(row)) continue;
+    const rk = `row${ri}`;
+    const cols: string[][] = [];
+    const colSizes: number[] = [];
+
+    for (const cell of row) {
+      let key: string;
+      let size: number | undefined;
+
+      if (typeof cell === 'string') {
+        key = cell;
+      } else if (typeof cell === 'object' && cell) {
+        const entries = Object.entries(cell);
+        if (entries.length) {
+          [key, size] = entries[0] as [string, number];
+        } else continue;
+      } else continue;
+
+      // Key is a placeholder — will be replaced with UID by applyLayout
+      cols.push([key]);
+      colSizes.push(size ?? Math.floor(24 / row.length));
+    }
+
+    if (cols.length) {
+      rows[rk] = cols;
+      sizes[rk] = colSizes;
+      ri++;
+    }
+  }
+
+  return { rows, sizes };
+}
+
+/**
+ * Apply layout to a grid, replacing block keys with actual UIDs.
+ */
+export async function applyLayout(
+  nb: NocoBaseClient,
+  gridUid: string,
+  layout: GridLayout,
+  uidMap: Record<string, string>,
+): Promise<void> {
+  const resolvedRows: Record<string, string[][]> = {};
+  const resolvedSizes: Record<string, number[]> = {};
+
+  for (const [rk, cols] of Object.entries(layout.rows)) {
+    const resolvedCols: string[][] = [];
+    const rSizes: number[] = [];
+    const rowSizes = layout.sizes[rk] || [];
+
+    for (let i = 0; i < cols.length; i++) {
+      const colKeys = cols[i];
+      const resolvedCol: string[] = [];
+      for (const key of colKeys) {
+        const uid = uidMap[key];
+        if (uid) resolvedCol.push(uid);
+      }
+      if (resolvedCol.length) {
+        resolvedCols.push(resolvedCol);
+        rSizes.push(rowSizes[i] ?? 24);
+      }
+    }
+
+    if (resolvedCols.length) {
+      resolvedRows[rk] = resolvedCols;
+      resolvedSizes[rk] = rSizes;
+    }
+  }
+
+  if (Object.keys(resolvedRows).length) {
+    try {
+      await nb.surfaces.setLayout(gridUid, resolvedRows, resolvedSizes);
+    } catch { /* best effort */ }
+
+    // Sync items order to match rows order via moveNode
+    // gridSettings.rows defines layout, but subModels.items order affects rendering
+    try {
+      const allUidsInOrder: string[] = [];
+      for (const cols of Object.values(resolvedRows)) {
+        for (const col of cols) {
+          for (const uid of col) allUidsInOrder.push(uid);
+        }
+      }
+      if (allUidsInOrder.length > 1) {
+        for (let i = 1; i < allUidsInOrder.length; i++) {
+          await nb.surfaces.moveNode(allUidsInOrder[i], allUidsInOrder[i - 1], 'after');
+        }
+      }
+    } catch { /* best effort */ }
+  }
+}

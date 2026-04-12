@@ -1,0 +1,54 @@
+/**
+ * JS code manipulation utilities for jsBlock/jsColumn/jsItem.
+ */
+
+/**
+ * Ensure JS code has a standard header comment.
+ */
+export function ensureJsHeader(
+  code: string,
+  opts: { desc?: string; jsType?: string; coll?: string; fields?: string[] } = {},
+): string {
+  if (code.trim().startsWith('/**')) return code;
+
+  const lines = ['/**'];
+  if (opts.desc) lines.push(` * ${opts.desc}`);
+  lines.push(' *');
+  if (opts.jsType) lines.push(` * @type ${opts.jsType}`);
+  if (opts.coll) lines.push(` * @collection ${opts.coll}`);
+  if (opts.fields?.length) lines.push(` * @fields ${opts.fields.slice(0, 10).join(', ')}`);
+  lines.push(' */');
+  lines.push('');
+
+  return lines.join('\n') + code;
+}
+
+/**
+ * Replace TARGET_BLOCK_UID and __TABLE_UID__ in JS code with actual UID.
+ */
+export function replaceJsUids(
+  code: string,
+  blocksState: Record<string, { type?: string; uid?: string }>,
+): string {
+  // Find first table block UID
+  const tableUid = Object.values(blocksState).find(b => b.type === 'table')?.uid;
+  if (!tableUid) return code;
+
+  // Replace TARGET_BLOCK_UID = 'old_uid'
+  code = code.replace(
+    /(TARGET_BLOCK_UID\s*=\s*['"])[a-z0-9_]{11,}(['"])/g,
+    `$1${tableUid}$2`,
+  );
+  // Replace __TABLE_UID__ placeholder
+  code = code.replaceAll('__TABLE_UID__', tableUid);
+
+  return code;
+}
+
+/**
+ * Extract description from JS code header comment.
+ */
+export function extractJsDesc(code: string): string {
+  const match = code.match(/\/\*\*\s*\n\s*\*\s*(.+)/);
+  return match?.[1]?.trim() || '';
+}

@@ -1,0 +1,11 @@
+export { validate, type ValidationResult } from './validator';
+export { toComposeBlock, COMPOSE_TYPES, LEGACY_TYPES, COMPOSE_ACTIONS } from './block-composer';
+export { expandPopups } from './popup-expander';
+export { verifySql } from './sql-verifier';
+export { reorderTableColumns } from './column-reorder';
+export { ensureCollection, ensureAllCollections } from './collection-deployer';
+export { postVerify, type PostVerifyResult } from './post-verify';
+export { fixDisplayModels, DISPLAY_MODEL_MAP } from './display-model-fixer';
+export { fillBlock } from './block-filler';
+export { deploySurface } from './surface-deployer';
+export { deployPopup } from './popup-deployer';

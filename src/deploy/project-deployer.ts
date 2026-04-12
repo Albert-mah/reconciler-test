@@ -1,0 +1,479 @@
+/**
+ * Project-level deployer — deploy from directory structure.
+ *
+ * Reads:
+ *   routes.yaml           → menu tree
+ *   collections/*.yaml    → data models
+ *   pages/<group>/<page>/ → page.yaml + layout.yaml + popups/ + js/ + charts/
+ *
+ * Deploy flow:
+ *   1. Validate all pages
+ *   2. Ensure collections
+ *   3. Create routes (groups + pages)
+ *   4. Deploy each page surface (blocks + layout)
+ *   5. Deploy popups
+ *   6. Post-verify
+ */
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { NocoBaseClient } from '../client';
+import type { ModuleState, PageState, BlockState } from '../types/state';
+import type { StructureSpec, PageSpec, BlockSpec, PopupSpec, CollectionDef, EnhanceSpec } from '../types/spec';
+import { loadYaml, saveYaml } from '../utils/yaml';
+import { slugify } from '../utils/slugify';
+import { ensureCollection } from './collection-deployer';
+import { deploySurface } from './surface-deployer';
+import { deployPopup } from './popup-deployer';
+import { expandPopups } from './popup-expander';
+import { reorderTableColumns } from './column-reorder';
+import { postVerify } from './post-verify';
+import { verifySql } from './sql-verifier';
+import { RefResolver } from '../refs';
+
+interface RouteEntry {
+  title: string;
+  type: 'group' | 'flowPage';
+  icon?: string;
+  children?: RouteEntry[];
+}
+
+interface PageInfo {
+  title: string;
+  icon: string;
+  slug: string;
+  dir: string;          // absolute path to page directory
+  layout: PageSpec;      // parsed layout.yaml (blocks + layout)
+  popups: PopupSpec[];   // parsed popups/*.yaml
+  pageMeta: Record<string, unknown>;
+}
+
+export async function deployProject(
+  projectDir: string,
+  opts: { force?: boolean; planOnly?: boolean; group?: string; page?: string } = {},
+  log: (msg: string) => void = console.log,
+): Promise<void> {
+  const root = path.resolve(projectDir);
+
+  // ── 1. Read project structure ──
+  const routesFile = path.join(root, 'routes.yaml');
+  if (!fs.existsSync(routesFile)) throw new Error(`routes.yaml not found in ${root}`);
+  const routes = loadYaml<RouteEntry[]>(routesFile);
+
+  // Read collections
+  const collDefs: Record<string, CollectionDef> = {};
+  const collDir = path.join(root, 'collections');
+  if (fs.existsSync(collDir)) {
+    for (const f of fs.readdirSync(collDir).filter(f => f.endsWith('.yaml'))) {
+      const coll = loadYaml<Record<string, unknown>>(path.join(collDir, f));
+      const name = (coll.name as string) || f.replace('.yaml', '');
+      collDefs[name] = {
+        title: (coll.title as string) || name,
+        fields: (coll.fields as CollectionDef['fields']) || [],
+      };
+    }
+  }
+
+  // Discover all pages from directory tree
+  const pagesDir = path.join(root, 'pages');
+  let pages = discoverPages(pagesDir, routes, opts.group);
+
+  // Filter to single page if specified
+  if (opts.page) {
+    pages = pages.filter(p =>
+      p.title === opts.page || p.slug === slugify(opts.page!)
+    );
+    if (!pages.length) {
+      log(`  Page '${opts.page}' not found`);
+      process.exit(1);
+    }
+    log(`  Deploying single page: ${pages[0].title}`);
+  }
+
+  // ── 2. Plan ──
+  log('\n  ── Plan ──');
+  log(`  Collections: ${Object.keys(collDefs).length}`);
+  log(`  Pages: ${pages.length}`);
+  for (const p of pages) {
+    const blockCount = p.layout.blocks?.length || 0;
+    const popupCount = p.popups.length;
+    log(`    ${p.title}: ${blockCount} blocks, ${popupCount} popups`);
+  }
+
+  // Validation
+  let hasError = false;
+  for (const p of pages) {
+    const blocks = p.layout.blocks || [];
+    if (blocks.length > 2 && !p.layout.layout) {
+      log(`    ✗ Page '${p.title}' has ${blocks.length} blocks but no layout`);
+      hasError = true;
+    }
+  }
+  if (hasError) { log('\n  Validation failed'); process.exit(1); }
+  log('  ✓ Validation passed');
+  if (opts.planOnly) return;
+
+  // ── 3. Connect + deploy ──
+  const nb = await NocoBaseClient.create();
+  log(`\n  Connected to ${nb.baseUrl}`);
+
+  // State
+  const stateFile = path.join(root, 'state.yaml');
+  const state: ModuleState = fs.existsSync(stateFile)
+    ? loadYaml<ModuleState>(stateFile)
+    : { pages: {} };
+
+  // Collections (skip if deploying single page — safety)
+  if (!opts.page) {
+    for (const [name, def] of Object.entries(collDefs)) {
+      await ensureCollection(nb, name, def, log);
+    }
+  }
+
+  // Routes + pages (skip duplicate groups)
+  const deployedGroups = new Set<string>();
+  for (const routeEntry of routes) {
+    if (routeEntry.type === 'group') {
+      if (opts.group && routeEntry.title !== opts.group) continue;
+      if (deployedGroups.has(routeEntry.title)) continue;
+      deployedGroups.add(routeEntry.title);
+      await deployGroup(nb, routeEntry, pages, state, root, opts.force || false, log);
+    } else if (routeEntry.type === 'flowPage' && !opts.group) {
+      const pageInfo = pages.find(p => p.title === routeEntry.title);
+      if (pageInfo) {
+        await deployOnePage(nb, pageInfo, state, null, opts.force || false, log);
+      }
+    }
+  }
+
+  // Final column reorder
+  for (const p of pages) {
+    const pageKey = slugify(p.title);
+    const pageState = state.pages[pageKey];
+    for (const bs of p.layout.blocks || []) {
+      if (bs.type !== 'table') continue;
+      const blockUid = pageState?.blocks?.[bs.key]?.uid;
+      const specFields = (bs.fields || []).map(f => typeof f === 'string' ? f : f.field || '').filter(Boolean);
+      if (blockUid && specFields.length) await reorderTableColumns(nb, blockUid, specFields);
+    }
+  }
+
+  // Save state
+  saveYaml(stateFile, state);
+  log('\n  State saved. Done.');
+
+  // Post-verify — replace $SELF in popup targets before verification
+  const allPopups = pages.flatMap(p =>
+    p.popups.map(ps => ({
+      ...ps,
+      target: ps.target.replace('$SELF', `$${slugify(p.title)}`),
+    })),
+  );
+  const structure: StructureSpec = { module: path.basename(root), collections: collDefs, pages: pages.map(p => p.layout) };
+  const enhance: EnhanceSpec = { popups: allPopups };
+  const resolver = new RefResolver(state);
+  const pv = await postVerify(nb, structure, enhance, state, allPopups, ref => resolver.resolveUid(ref));
+  if (pv.errors.length) {
+    log('\n  ── Post-deploy errors ──');
+    for (const e of pv.errors) log(`  ✗ ${e}`);
+  }
+  if (pv.warnings.length) {
+    log('\n  ── Hints ──');
+    for (const w of pv.warnings) log(`  💡 ${w}`);
+  }
+
+  // SQL verify
+  // Build a virtual structure for sql-verifier
+  const sqlResult = await verifySqlFromPages(nb, pages);
+  log(`\n  ── SQL Verification: ${sqlResult.passed} passed, ${sqlResult.failed} failed ──`);
+  for (const r of sqlResult.results) {
+    if (!r.ok) log(`  ✗ ${r.label}: ${r.error}`);
+  }
+}
+
+async function deployGroup(
+  nb: NocoBaseClient,
+  routeEntry: RouteEntry,
+  pages: PageInfo[],
+  state: ModuleState,
+  root: string,
+  force: boolean,
+  log: (msg: string) => void,
+): Promise<void> {
+  // Find or create group
+  if (!state.group_id) {
+    const result = await nb.createGroup(routeEntry.title, routeEntry.icon || 'appstoreoutlined');
+    state.group_id = result.routeId;
+    log(`  + group: ${routeEntry.title}`);
+    nb.routes.clearCache();
+  } else {
+    log(`  = group: ${routeEntry.title}`);
+  }
+
+  for (const child of routeEntry.children || []) {
+    if (child.type === 'flowPage') {
+      const pageInfo = pages.find(p => p.title === child.title);
+      if (pageInfo) {
+        await deployOnePage(nb, pageInfo, state, state.group_id!, force, log);
+      }
+    } else if (child.type === 'group') {
+      // Sub-group — create sub-group route under parent group
+      const subGroupKey = `_subgroup_${slugify(child.title)}`;
+      let subGroupId = (state as unknown as Record<string, unknown>)[subGroupKey] as number | undefined;
+      if (!subGroupId) {
+        const result = await nb.createGroup(child.title, child.icon || 'folderoutlined', state.group_id!);
+        subGroupId = result.routeId;
+        (state as unknown as Record<string, unknown>)[subGroupKey] = subGroupId;
+        log(`  + sub-group: ${child.title}`);
+      } else {
+        log(`  = sub-group: ${child.title}`);
+      }
+      for (const sc of child.children || []) {
+        const pageInfo = pages.find(p => p.title === sc.title);
+        if (pageInfo) {
+          await deployOnePage(nb, pageInfo, state, subGroupId, force, log);
+        }
+      }
+    }
+  }
+}
+
+async function deployOnePage(
+  nb: NocoBaseClient,
+  pageInfo: PageInfo,
+  state: ModuleState,
+  parentRouteId: number | null,
+  force: boolean,
+  log: (msg: string) => void,
+): Promise<void> {
+  const pageKey = slugify(pageInfo.title);
+  let pageState = state.pages[pageKey];
+
+  if (!pageState?.tab_uid) {
+    const result = await nb.createPage(pageInfo.title, parentRouteId ?? undefined, pageInfo.icon);
+    pageState = {
+      route_id: result.routeId,
+      page_uid: result.pageUid,
+      tab_uid: result.tabSchemaUid,
+      grid_uid: result.gridUid,
+      blocks: {},
+    };
+    log(`  + page: ${pageInfo.title}`);
+  } else {
+    log(`  = page: ${pageInfo.title}`);
+  }
+
+  // Deploy surface (blocks + layout)
+  const blocksState = await deploySurface(
+    nb, pageState.tab_uid, pageInfo.layout, pageInfo.dir, force, pageState.blocks, log,
+  );
+  pageState.blocks = blocksState;
+  state.pages[pageKey] = pageState;
+
+  // Deploy popups
+  if (pageInfo.popups.length) {
+    const resolver = new RefResolver(state);
+    const expanded = expandPopups(pageInfo.popups);
+    for (const ps of expanded) {
+      let targetUid: string;
+      // Replace $SELF with actual page key
+      const targetRef = ps.target.replace('$SELF', `$${pageKey}`);
+      try {
+        targetUid = resolver.resolveUid(targetRef);
+      } catch (e) {
+        log(`  ! popup ${targetRef}: ${e instanceof Error ? e.message : e}`);
+        continue;
+      }
+      const pp = targetRef.split('.').pop() || '';
+      await deployPopup(nb, targetUid, targetRef, ps, pageInfo.dir, force, pp, log);
+    }
+  }
+}
+
+// ── Helpers ──
+
+function discoverPages(
+  pagesDir: string,
+  routes: RouteEntry[],
+  filterGroup?: string,
+): PageInfo[] {
+  const pages: PageInfo[] = [];
+  if (!fs.existsSync(pagesDir)) return pages;
+
+  for (const routeEntry of routes) {
+    if (routeEntry.type === 'group') {
+      if (filterGroup && routeEntry.title !== filterGroup) continue;
+      const groupSlug = slugify(routeEntry.title);
+      const groupDir = path.join(pagesDir, groupSlug);
+      if (!fs.existsSync(groupDir)) continue;
+
+      for (const child of routeEntry.children || []) {
+        if (child.type === 'flowPage') {
+          const p = readPageDir(path.join(groupDir, slugify(child.title)), child.title, child.icon);
+          if (p) pages.push(p);
+        } else if (child.type === 'group') {
+          const subDir = path.join(groupDir, slugify(child.title));
+          for (const sc of child.children || []) {
+            if (sc.type === 'flowPage') {
+              const p = readPageDir(path.join(subDir, slugify(sc.title)), sc.title, sc.icon);
+              if (p) pages.push(p);
+            }
+          }
+        }
+      }
+    } else if (routeEntry.type === 'flowPage' && !filterGroup) {
+      const p = readPageDir(path.join(pagesDir, slugify(routeEntry.title)), routeEntry.title, routeEntry.icon);
+      if (p) pages.push(p);
+    }
+  }
+
+  return pages;
+}
+
+function readPageDir(pageDir: string, title: string, icon?: string): PageInfo | null {
+  if (!fs.existsSync(pageDir)) return null;
+
+  const pageMeta = fs.existsSync(path.join(pageDir, 'page.yaml'))
+    ? loadYaml<Record<string, unknown>>(path.join(pageDir, 'page.yaml'))
+    : {};
+
+  const layoutFile = path.join(pageDir, 'layout.yaml');
+
+  // Check for multi-tab page (has tab_* subdirs but no layout.yaml)
+  const tabDirs = fs.existsSync(pageDir)
+    ? fs.readdirSync(pageDir).filter(d => d.startsWith('tab_') && fs.statSync(path.join(pageDir, d)).isDirectory()).sort()
+    : [];
+
+  let layout: PageSpec;
+
+  if (fs.existsSync(layoutFile)) {
+    // Single tab page
+    const layoutRaw = loadYaml<Record<string, unknown>>(layoutFile);
+    layout = {
+      page: title,
+      icon: icon || (pageMeta.icon as string) || 'fileoutlined',
+      coll: layoutRaw.coll as string || '',
+      blocks: (layoutRaw.blocks || []) as BlockSpec[],
+      layout: layoutRaw.layout as PageSpec['layout'],
+    };
+  } else if (tabDirs.length) {
+    // Multi-tab page — first tab becomes the main layout, others become tabs
+    const tabs: { title: string; blocks: BlockSpec[]; layout?: PageSpec['layout'] }[] = [];
+    for (const td of tabDirs) {
+      const tabLayout = path.join(pageDir, td, 'layout.yaml');
+      if (!fs.existsSync(tabLayout)) continue;
+      const tabRaw = loadYaml<Record<string, unknown>>(tabLayout);
+      const tabTitle = td.replace('tab_', '').replace(/_/g, ' ');
+      tabs.push({
+        title: tabTitle,
+        blocks: (tabRaw.blocks || []) as BlockSpec[],
+        layout: tabRaw.layout as PageSpec['layout'],
+      });
+    }
+    if (!tabs.length) return null;
+
+    // Use first tab as main page blocks
+    layout = {
+      page: title,
+      icon: icon || (pageMeta.icon as string) || 'fileoutlined',
+      blocks: tabs[0].blocks,
+      layout: tabs[0].layout,
+      tabs: tabs.length > 1 ? tabs.map(t => ({
+        title: t.title,
+        blocks: t.blocks,
+      })) : undefined,
+    };
+  } else {
+    return null;
+  }
+
+  // Read popups (from page dir and all tab dirs)
+  const popups: PopupSpec[] = [];
+  const popupDirs = [path.join(pageDir, 'popups')];
+  for (const td of tabDirs) {
+    popupDirs.push(path.join(pageDir, td, 'popups'));
+  }
+  for (const popupsDir of popupDirs) {
+    if (!fs.existsSync(popupsDir)) continue;
+    for (const f of fs.readdirSync(popupsDir).filter(f => f.endsWith('.yaml')).sort()) {
+      try {
+        const ps = loadYaml<PopupSpec>(path.join(popupsDir, f));
+        if (ps.target) popups.push(ps);
+      } catch { /* skip */ }
+    }
+  }
+
+  return {
+    title,
+    icon: icon || (pageMeta.icon as string) || 'fileoutlined',
+    slug: slugify(title),
+    dir: pageDir,
+    layout,
+    popups,
+    pageMeta,
+  };
+}
+
+async function verifySqlFromPages(
+  nb: NocoBaseClient,
+  pages: PageInfo[],
+): Promise<{ passed: number; failed: number; results: { label: string; ok: boolean; rows?: number; error?: string }[] }> {
+  const results: { label: string; ok: boolean; rows?: number; error?: string }[] = [];
+
+  for (const p of pages) {
+    for (const bs of p.layout.blocks || []) {
+      // Chart SQL
+      if (bs.chart_config) {
+        const cfgPath = path.join(p.dir, bs.chart_config);
+        if (fs.existsSync(cfgPath) && (bs.chart_config.endsWith('.yaml') || bs.chart_config.endsWith('.yml'))) {
+          try {
+            const spec = loadYaml<Record<string, string>>(cfgPath);
+            const sqlFile = spec.sql_file || '';
+            const sql = (sqlFile && fs.existsSync(path.join(p.dir, sqlFile)))
+              ? fs.readFileSync(path.join(p.dir, sqlFile), 'utf8')
+              : spec.sql || '';
+            if (sql) {
+              const clean = sql.replace(/\{%.*?%\}/gs, '').split('\n').filter((l: string) => !l.includes('{{')).join('\n').trim();
+              try {
+                const uid = `_v_${slugify(p.title)}_${bs.key}`;
+                const resp = await nb.http.post(`${nb.baseUrl}/api/flowSql:run`, {
+                  type: 'selectRows', uid, dataSourceKey: 'main', sql: clean, bind: {},
+                });
+                if (resp.status >= 400 || resp.data?.errors?.length) {
+                  results.push({ label: `${p.title}/${bs.chart_config}`, ok: false, error: resp.data?.errors?.[0]?.message });
+                } else {
+                  results.push({ label: `${p.title}/${bs.chart_config}`, ok: true, rows: resp.data?.data?.length });
+                }
+              } catch (e) { results.push({ label: `${p.title}/${bs.chart_config}`, ok: false, error: String(e) }); }
+            }
+          } catch { /* skip */ }
+        }
+      }
+      // KPI JS
+      if (bs.type === 'jsBlock' && bs.file) {
+        const jsPath = path.join(p.dir, bs.file);
+        if (fs.existsSync(jsPath)) {
+          const code = fs.readFileSync(jsPath, 'utf8');
+          const m = code.match(/sql:\s*`([^`]+)`/);
+          if (m) {
+            try {
+              const uid = `_v_${slugify(p.title)}_${bs.key}`;
+              const resp = await nb.http.post(`${nb.baseUrl}/api/flowSql:run`, {
+                type: 'selectRows', uid, dataSourceKey: 'main', sql: m[1].trim(), bind: {},
+              });
+              if (resp.status >= 400) {
+                results.push({ label: `${p.title}/${bs.file}`, ok: false, error: resp.data?.errors?.[0]?.message });
+              } else {
+                results.push({ label: `${p.title}/${bs.file}`, ok: true, rows: resp.data?.data?.length });
+              }
+            } catch (e) { results.push({ label: `${p.title}/${bs.file}`, ok: false, error: String(e) }); }
+          }
+        }
+      }
+    }
+  }
+
+  const passed = results.filter(r => r.ok).length;
+  const failed = results.filter(r => !r.ok).length;
+  return { passed, failed, results };
+}
+
