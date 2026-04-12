@@ -274,8 +274,24 @@ async function deployOnePage(
     );
     pageState.blocks = firstBlocks;
 
-    // Create + deploy additional tabs
+    // Create + deploy additional tabs — check existing first
     if (!pageState.tab_states) pageState.tab_states = {};
+
+    // Read existing tabs from live page
+    let existingLiveTabs: { uid: string; title: string }[] = [];
+    try {
+      const pageData = await nb.get({ uid: pageState.page_uid! });
+      const rawTabs = pageData.tree.subModels?.tabs;
+      const tabArr = (Array.isArray(rawTabs) ? rawTabs : rawTabs ? [rawTabs] : []) as unknown as Record<string, unknown>[];
+      existingLiveTabs = tabArr.map((t, i) => ({
+        uid: t.uid as string || '',
+        title: ((t.stepParams as Record<string, unknown>)?.pageTabSettings as Record<string, unknown>)
+          ?.title as Record<string, unknown>
+          ? (((t.stepParams as Record<string, unknown>)?.pageTabSettings as Record<string, unknown>)?.title as Record<string, unknown>)?.title as string || `Tab${i}`
+          : (t.props as Record<string, unknown>)?.title as string || `Tab${i}`,
+      }));
+    } catch { /* skip */ }
+
     for (let ti = 1; ti < tabs.length; ti++) {
       const tabTitle = tabs[ti].title || `Tab${ti}`;
       const tabSlug = slugify(tabTitle);
@@ -283,15 +299,22 @@ async function deployOnePage(
 
       let tabState = (pageState.tab_states as Record<string, { tab_uid: string; blocks: Record<string, BlockState> }>)[tabSlug];
       if (!tabState?.tab_uid) {
-        try {
-          const result = await nb.surfaces.addTab(pageState.page_uid!, tabTitle);
-          const r = result as Record<string, unknown>;
-          const tabUid = (r.tabSchemaUid || r.tabUid || r.uid || '') as string;
-          tabState = { tab_uid: tabUid, blocks: {} };
-          log(`    + tab: ${tabTitle}`);
-        } catch (e) {
-          log(`    ! tab ${tabTitle}: ${e instanceof Error ? e.message : e}`);
-          continue;
+        // Check if a live tab with matching title/slug exists
+        const existingTab = existingLiveTabs.find((t, i) => i > 0 && (slugify(t.title) === tabSlug || t.title === tabTitle));
+        if (existingTab) {
+          tabState = { tab_uid: existingTab.uid, blocks: {} };
+          log(`    = tab: ${tabTitle} (found existing)`);
+        } else {
+          try {
+            const result = await nb.surfaces.addTab(pageState.page_uid!, tabTitle);
+            const r = result as Record<string, unknown>;
+            const tabUid = (r.tabSchemaUid || r.tabUid || r.uid || '') as string;
+            tabState = { tab_uid: tabUid, blocks: {} };
+            log(`    + tab: ${tabTitle}`);
+          } catch (e) {
+            log(`    ! tab ${tabTitle}: ${e instanceof Error ? e.message : e}`);
+            continue;
+          }
         }
       } else {
         log(`    = tab: ${tabTitle}`);
