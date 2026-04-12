@@ -344,6 +344,73 @@ async function exportSingleTab(
     }
   }
 
+  // Enrich filterForm fields with filterManager data (filterPaths, label)
+  // filterManager lives on the PAGE-LEVEL grid, not filterForm's own grid
+  try {
+    const pgResp = await nb.http.get(`${nb.baseUrl}/api/flowModels:get`, {
+      params: { filterByTk: gridNode.uid },
+    });
+    const filterManager = pgResp.data?.data?.filterManager as { filterId: string; targetId: string; filterPaths: string[] }[] || [];
+    if (filterManager.length) {
+      const filterPathsMap = new Map<string, string[]>();
+      for (const entry of filterManager) {
+        if (entry.filterId && entry.filterPaths?.length) {
+          filterPathsMap.set(entry.filterId, entry.filterPaths);
+        }
+      }
+
+      for (const b of blocks) {
+        const br = b as Record<string, unknown>;
+        if (br.type !== 'filterForm') continue;
+        const fields = br.fields as unknown[];
+        if (!Array.isArray(fields)) continue;
+
+        // Find filterForm grid items to map fieldPath → UID
+        const ffBlock = items.find(it => it.uid === blockUidToKey.entries().next().value?.[0]);
+        // Actually find the filterForm block in the raw items
+        for (const rawItem of items) {
+          if (rawItem.use !== 'FilterFormBlockModel') continue;
+          const ffGrid = rawItem.subModels?.grid;
+          const ffItems = (ffGrid && !Array.isArray(ffGrid))
+            ? ((ffGrid as FlowModelNode).subModels?.items || []) as FlowModelNode[]
+            : [];
+
+          const enriched: unknown[] = [];
+          for (const f of fields) {
+            const fpName = typeof f === 'string' ? f : (f as Record<string, unknown>).field as string || (f as Record<string, unknown>).name as string || '';
+            if (!fpName || (typeof f === 'object' && (f as Record<string, unknown>).type === 'custom')) {
+              enriched.push(f);
+              continue;
+            }
+            // Find UID of this field in filterForm grid
+            const ffItem = ffItems.find(gi => {
+              const giFp = ((gi.stepParams as Record<string, unknown>)?.fieldSettings as Record<string, unknown>)
+                ?.init as Record<string, unknown>;
+              return (giFp?.fieldPath as string) === fpName;
+            });
+            const filterPaths = ffItem ? filterPathsMap.get(ffItem.uid) : undefined;
+            const label = ffItem
+              ? ((ffItem.stepParams as Record<string, unknown>)?.filterFormItemSettings as Record<string, unknown>)
+                  ?.label as Record<string, unknown>
+              : undefined;
+            const labelText = label?.label as string || '';
+
+            if (filterPaths || labelText) {
+              const entry: Record<string, unknown> = { field: fpName };
+              if (labelText) entry.label = labelText;
+              if (filterPaths) entry.filterPaths = filterPaths;
+              enriched.push(entry);
+            } else {
+              enriched.push(f);
+            }
+          }
+          br.fields = enriched;
+          break;
+        }
+      }
+    }
+  } catch { /* filterManager read failed — fields stay plain */ }
+
   // Infer coll for filterForm from sibling table/reference/form blocks
   const pageColl = blocks.find(b => {
     const br = b as Record<string, unknown>;
