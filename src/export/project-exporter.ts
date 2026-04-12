@@ -267,7 +267,7 @@ async function exportSingleTab(
       const exported = exportBlock(targetTree as any, jsDir, prefix, bi, usedKeysRef);
       if (exported) {
         const resolvedSpec = { ...exported.spec } as Record<string, unknown>;
-        resolvedSpec.key = b.key; // preserve original key
+        resolvedSpec.key = targetType; // use actual type as key (table, createForm, etc.)
         resolvedSpec.type = targetType;
         if (targetColl?.collectionName) resolvedSpec.coll = targetColl.collectionName;
         delete resolvedSpec._popups;
@@ -434,7 +434,7 @@ async function exportGridBlocks(
       const resolved = exportBlock(targetData.tree as any, jsDir, prefix, bi, usedKeysRef);
       if (resolved) {
         const rspec = { ...resolved.spec } as Record<string, unknown>;
-        rspec.key = b.key;
+        rspec.key = targetType;  // use actual type as key (table, createForm, etc.)
         rspec.type = targetType;
         if (targetColl?.collectionName) rspec.coll = targetColl.collectionName;
         delete rspec._popups;

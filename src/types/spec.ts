@@ -137,6 +137,7 @@ export interface TabSpec {
   title?: string;
   coll?: string;
   blocks?: BlockSpec[];
+  layout?: LayoutRow[];
   popups?: PopupSpec[];
 }
 

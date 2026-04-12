@@ -262,20 +262,65 @@ async function deployOnePage(
     log(`  = page: ${pageInfo.title}`);
   }
 
-  // Deploy surface (blocks + layout)
-  const blocksState = await deploySurface(
-    nb, pageState.tab_uid, pageInfo.layout, pageInfo.dir, force, pageState.blocks, log,
-  );
-  pageState.blocks = blocksState;
+  // Deploy surface — handle multi-tab pages
+  const tabs = pageInfo.layout.tabs;
+  if (tabs && tabs.length > 1) {
+    // Multi-tab: deploy first tab to main tabSchemaUid
+    const firstTabDir = path.join(pageInfo.dir, `tab_${slugify(tabs[0].title || 'tab0')}`);
+    const firstTabSpec = { ...pageInfo.layout, blocks: tabs[0].blocks || [] };
+    const firstBlocks = await deploySurface(
+      nb, pageState.tab_uid, firstTabSpec, fs.existsSync(firstTabDir) ? firstTabDir : pageInfo.dir,
+      force, pageState.blocks, log,
+    );
+    pageState.blocks = firstBlocks;
+
+    // Create + deploy additional tabs
+    if (!pageState.tab_states) pageState.tab_states = {};
+    for (let ti = 1; ti < tabs.length; ti++) {
+      const tabTitle = tabs[ti].title || `Tab${ti}`;
+      const tabSlug = slugify(tabTitle);
+      const tabDir = path.join(pageInfo.dir, `tab_${tabSlug}`);
+
+      let tabState = (pageState.tab_states as Record<string, { tab_uid: string; blocks: Record<string, BlockState> }>)[tabSlug];
+      if (!tabState?.tab_uid) {
+        try {
+          const result = await nb.surfaces.addTab(pageState.page_uid!, tabTitle);
+          const r = result as Record<string, unknown>;
+          const tabUid = (r.tabSchemaUid || r.tabUid || r.uid || '') as string;
+          tabState = { tab_uid: tabUid, blocks: {} };
+          log(`    + tab: ${tabTitle}`);
+        } catch (e) {
+          log(`    ! tab ${tabTitle}: ${e instanceof Error ? e.message : e}`);
+          continue;
+        }
+      } else {
+        log(`    = tab: ${tabTitle}`);
+      }
+
+      const tabSpec = { blocks: tabs[ti].blocks, layout: tabs[ti].layout };
+      const tabBlocks = await deploySurface(
+        nb, tabState.tab_uid, tabSpec as any,
+        fs.existsSync(tabDir) ? tabDir : pageInfo.dir,
+        force, tabState.blocks, log,
+      );
+      tabState.blocks = tabBlocks;
+      (pageState.tab_states as Record<string, unknown>)[tabSlug] = tabState;
+    }
+  } else {
+    // Single tab
+    const blocksState = await deploySurface(
+      nb, pageState.tab_uid, pageInfo.layout, pageInfo.dir, force, pageState.blocks, log,
+    );
+    pageState.blocks = blocksState;
+  }
   state.pages[pageKey] = pageState;
 
-  // Deploy popups
+  // Deploy popups — search both page-level blocks and tab blocks
   if (pageInfo.popups.length) {
     const resolver = new RefResolver(state);
     const expanded = expandPopups(pageInfo.popups);
     for (const ps of expanded) {
       let targetUid: string;
-      // Replace $SELF with actual page key
       const targetRef = ps.target.replace('$SELF', `$${pageKey}`);
       try {
         targetUid = resolver.resolveUid(targetRef);

@@ -48,8 +48,23 @@ export class RefResolver {
       const rest = path.slice(dotIdx + 1);
 
       if (!rest.startsWith('blocks.')) {
+        // Search in page-level blocks
         const withBlocks = `${pageName}.blocks.${rest}`;
         if (this.index.has(withBlocks)) return this.index.get(withBlocks);
+
+        // Search in tab_states blocks (multi-tab pages)
+        for (const key of this.index.keys()) {
+          if (key.startsWith(`${pageName}.tab_states.`) && key.includes('.blocks.')) {
+            // e.g., opportunities.tab_states.table.blocks.table.actions.addNew.uid
+            // Check if the tail matches: blocks.{rest}
+            const blocksIdx = key.indexOf('.blocks.');
+            const tail = key.slice(blocksIdx + 8); // after ".blocks."
+            if (tail === rest || tail.startsWith(rest + '.')) {
+              const tabPath = `${key.slice(0, blocksIdx + 8)}${rest}`;
+              if (this.index.has(tabPath)) return this.index.get(tabPath);
+            }
+          }
+        }
 
         // Fuzzy: "table" matches "table_0", "table_1", etc.
         const restDot = rest.indexOf('.');
