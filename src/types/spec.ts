@@ -22,6 +22,7 @@ export interface FieldRef {
   label?: string;
   filterPaths?: string[];
   fieldPath?: string;
+  clickToOpen?: boolean;
 }
 
 export type FieldSpec = string | FieldRef;

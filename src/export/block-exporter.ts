@@ -250,7 +250,19 @@ function exportTableContents(
         });
       }
     } else if (fieldPath) {
-      fields.push(fieldPath);
+      // Check if field has clickToOpen (default detail popup on click)
+      const fieldModel = col.subModels?.field;
+      const clickToOpen = fieldModel && !Array.isArray(fieldModel)
+        ? ((fieldModel as FlowModelNode).stepParams as Record<string, unknown>)
+          ?.displayFieldSettings as Record<string, unknown>
+        : null;
+      const isClickable = (clickToOpen?.clickToOpen as Record<string, unknown>)?.clickToOpen === true;
+
+      if (isClickable) {
+        fields.push({ field: fieldPath, clickToOpen: true });
+      } else {
+        fields.push(fieldPath);
+      }
     }
 
     // Check for popup on column's display field (col → field → page)

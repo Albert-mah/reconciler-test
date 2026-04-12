@@ -57,6 +57,28 @@ export async function fillBlock(
   }
   blockState.fields = fieldStates;
 
+  // ── clickToOpen on table fields (default detail popup) ──
+  if (btype === 'table') {
+    for (const f of bs.fields || []) {
+      if (typeof f === 'object' && f.clickToOpen) {
+        const fp = f.field || f.fieldPath || '';
+        const wrapperUid = fieldStates[fp]?.wrapper;
+        if (wrapperUid) {
+          try {
+            // Find the field model under the column wrapper
+            const colData = await nb.get({ uid: wrapperUid });
+            const fieldSub = colData.tree.subModels?.field;
+            if (fieldSub && !Array.isArray(fieldSub)) {
+              await nb.updateModel((fieldSub as { uid: string }).uid, {
+                displayFieldSettings: { clickToOpen: { clickToOpen: true } },
+              });
+            }
+          } catch { /* skip */ }
+        }
+      }
+    }
+  }
+
   // ── FilterForm configuration (connect filter to table) ──
   if (btype === 'filterForm' && pageGridUid) {
     await configureFilter(nb, bs, blockUid, blockState, coll, allBlocksState, pageGridUid, log);
