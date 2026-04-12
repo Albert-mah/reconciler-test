@@ -9,6 +9,7 @@ import type { NocoBaseClient } from '../client';
 import type { BlockSpec } from '../types/spec';
 import type { BlockState } from '../types/state';
 import { fixDisplayModels } from './display-model-fixer';
+import { toComposeBlock } from './block-composer';
 import { ensureJsHeader, replaceJsUids } from '../utils/js-utils';
 import { generateUid } from '../utils/uid';
 import { loadYaml } from '../utils/yaml';
@@ -36,6 +37,7 @@ export async function fillBlock(
   allBlocksState: Record<string, BlockState> = {},
   pageGridUid = '',
   log: (msg: string) => void = console.log,
+  popupContext: { depth: number; maxDepth: number; seenColls: Set<string> } = { depth: 0, maxDepth: 3, seenColls: new Set() },
 ): Promise<void> {
   const btype = bs.type;
   const coll = bs.coll || defaultColl;
@@ -72,68 +74,73 @@ export async function fillBlock(
           const update: Record<string, unknown> = {
             displayFieldSettings: { clickToOpen: { clickToOpen: true } },
           };
-          // Set popupSettings if specified
+          // Set popupSettings + create popup content (copy mode)
           const ps = (f as unknown as Record<string, unknown>).popupSettings as Record<string, unknown>;
           if (ps) {
             const popupColl = (ps.collectionName || coll) as string;
+            const isCircular = popupContext.seenColls.has(popupColl);
+            const atMaxDepth = popupContext.depth >= popupContext.maxDepth;
 
-            if (ps.popupTemplateUid) {
-              // Template mode: look up template's targetUid for popupSettings.uid
-              let targetUid = fieldUid;
-              try {
-                const tplResp = await nb.http.get(`${nb.baseUrl}/api/flowModelTemplates:list`, {
-                  params: { filter: { uid: ps.popupTemplateUid }, pageSize: 1 },
-                });
-                const tplData = tplResp.data?.data?.[0];
-                if (tplData?.targetUid) targetUid = tplData.targetUid;
-              } catch { /* use fieldUid as fallback */ }
-
-              update.popupSettings = {
-                openView: {
-                  collectionName: popupColl,
-                  dataSourceKey: 'main',
-                  mode: ps.mode || 'drawer',
-                  size: ps.size || 'medium',
-                  pageModelClass: 'ChildPageModel',
-                  uid: targetUid,
-                  popupTemplateUid: ps.popupTemplateUid,
-                  filterByTk: ps.filterByTk || '{{ ctx.record.id }}',
-                },
-              };
-              // Register template usage
-              try {
-                await nb.http.post(`${nb.baseUrl}/api/flowModelTemplateUsages:create`, {
-                  values: { uid: generateUid(), templateUid: ps.popupTemplateUid, modelUid: fieldUid },
-                });
-              } catch { /* might already exist */ }
-              log(`      ~ clickToOpen: ${fp} (template: ${ps.popupTemplateUid})`);
-            } else {
-              // No template: compose default details block
-              update.popupSettings = {
-                openView: {
-                  collectionName: popupColl,
-                  dataSourceKey: 'main',
-                  mode: ps.mode || 'drawer',
-                  size: ps.size || 'medium',
-                  pageModelClass: 'ChildPageModel',
-                  uid: fieldUid,
-                  filterByTk: ps.filterByTk || '{{ ctx.record.id }}',
-                },
-              };
+            if (isCircular || atMaxDepth) {
+              // Circular reference or max depth → simple details (no recursion)
+              log(`      ~ clickToOpen: ${fp} (depth=${popupContext.depth}, ${isCircular ? 'circular: ' + popupColl : 'max depth'})`);
               try {
                 const meta = await nb.collections.fieldMeta(popupColl);
                 const defaultFields = Object.keys(meta)
                   .filter(k => !['id', 'createdById', 'updatedById'].includes(k))
-                  .slice(0, 10)
+                  .slice(0, 8)
                   .map(k => ({ fieldPath: k }));
                 await nb.surfaces.compose(fieldUid, [{
-                  key: 'details',
-                  type: 'details',
+                  key: 'details', type: 'details',
                   resource: { collectionName: popupColl, dataSourceKey: 'main', binding: 'currentRecord' },
                   fields: defaultFields,
                 }], 'replace');
               } catch { /* skip */ }
-              log(`      ~ clickToOpen: ${fp} (default details)`);
+              update.popupSettings = {
+                openView: {
+                  collectionName: popupColl, dataSourceKey: 'main',
+                  mode: ps.mode || 'drawer', size: ps.size || 'medium',
+                  pageModelClass: 'ChildPageModel', uid: fieldUid,
+                  filterByTk: ps.filterByTk || '{{ ctx.record.id }}',
+                },
+              };
+            } else {
+              // Copy mode: read template content → compose into field's ChildPage
+              const tplContent = await loadTemplateContent(nb, modDir, ps.popupTemplateUid as string, popupColl);
+              if (tplContent.length) {
+                try {
+                  const composeBlocks = tplContent
+                    .map(b => toComposeBlock(b as any, popupColl))
+                    .filter(Boolean) as Record<string, unknown>[];
+                  if (composeBlocks.length) {
+                    await nb.surfaces.compose(fieldUid, composeBlocks, 'replace');
+                  }
+                } catch { /* skip */ }
+                log(`      ~ clickToOpen: ${fp} (copy: ${tplContent.length} blocks, depth=${popupContext.depth})`);
+              } else {
+                // No template content: compose default details
+                try {
+                  const meta = await nb.collections.fieldMeta(popupColl);
+                  const defaultFields = Object.keys(meta)
+                    .filter(k => !['id', 'createdById', 'updatedById'].includes(k))
+                    .slice(0, 10)
+                    .map(k => ({ fieldPath: k }));
+                  await nb.surfaces.compose(fieldUid, [{
+                    key: 'details', type: 'details',
+                    resource: { collectionName: popupColl, dataSourceKey: 'main', binding: 'currentRecord' },
+                    fields: defaultFields,
+                  }], 'replace');
+                } catch { /* skip */ }
+                log(`      ~ clickToOpen: ${fp} (default details)`);
+              }
+              update.popupSettings = {
+                openView: {
+                  collectionName: popupColl, dataSourceKey: 'main',
+                  mode: ps.mode || 'drawer', size: ps.size || 'medium',
+                  pageModelClass: 'ChildPageModel', uid: fieldUid,
+                  filterByTk: ps.filterByTk || '{{ ctx.record.id }}',
+                },
+              };
             }
           }
           await nb.updateModel(fieldUid, update);
@@ -474,6 +481,82 @@ async function applyFieldLayout(
       await nb.surfaces.setLayout(gridUid, rows, sizes);
     }
   } catch { /* best-effort */ }
+}
+
+/**
+ * Load template content blocks from local templates/ dir or live API.
+ */
+async function loadTemplateContent(
+  nb: NocoBaseClient,
+  modDir: string,
+  popupTemplateUid: string | undefined,
+  collectionName: string,
+): Promise<Record<string, unknown>[]> {
+  if (!popupTemplateUid) return [];
+
+  // Try local templates/_index.yaml first
+  const mod = path.resolve(modDir);
+  // Walk up to find templates/ (might be in project root, not page dir)
+  for (let dir = mod; dir !== path.dirname(dir); dir = path.dirname(dir)) {
+    const indexFile = path.join(dir, 'templates', '_index.yaml');
+    if (fs.existsSync(indexFile)) {
+      try {
+        const index = loadYaml<Record<string, unknown>[]>(indexFile);
+        const entry = index.find(t => t.uid === popupTemplateUid);
+        if (entry?.file) {
+          const tplFile = path.join(dir, 'templates', entry.file as string);
+          if (fs.existsSync(tplFile)) {
+            const tplSpec = loadYaml<Record<string, unknown>>(tplFile);
+            const content = tplSpec.content as Record<string, unknown>;
+            if (content?.blocks) return content.blocks as Record<string, unknown>[];
+            if (content?.tabs) {
+              // Multi-tab: return first tab's blocks
+              const tabs = content.tabs as Record<string, unknown>[];
+              return (tabs[0]?.blocks || []) as Record<string, unknown>[];
+            }
+          }
+        }
+      } catch { /* skip */ }
+      break;
+    }
+  }
+
+  // Fallback: read from live API
+  try {
+    const tplResp = await nb.http.get(`${nb.baseUrl}/api/flowModelTemplates:list`, {
+      params: { filter: { uid: popupTemplateUid }, pageSize: 1 },
+    });
+    const tplData = tplResp.data?.data?.[0];
+    if (tplData?.targetUid) {
+      const d = await nb.get({ uid: tplData.targetUid });
+      const page = d.tree.subModels?.page;
+      if (page && !Array.isArray(page)) {
+        const tabs = (page as unknown as Record<string, unknown>).subModels as Record<string, unknown>;
+        const tabList = tabs?.tabs;
+        const tabArr = (Array.isArray(tabList) ? tabList : tabList ? [tabList] : []) as Record<string, unknown>[];
+        if (tabArr.length) {
+          const grid = (tabArr[0].subModels as Record<string, unknown>)?.grid as Record<string, unknown>;
+          const items = (grid?.subModels as Record<string, unknown>)?.items;
+          if (Array.isArray(items)) {
+            // Convert live items to compose-compatible spec
+            return items.map(item => {
+              const use = (item as Record<string, unknown>).use as string || '';
+              const sp = (item as Record<string, unknown>).stepParams as Record<string, unknown> || {};
+              const resColl = ((sp.resourceSettings as Record<string, unknown>)?.init as Record<string, unknown>)?.collectionName as string;
+              return {
+                key: 'details',
+                type: use.includes('Edit') ? 'editForm' : use.includes('Create') ? 'createForm' : 'details',
+                coll: resColl || collectionName,
+                resource_binding: { filterByTk: '{{ctx.view.inputArgs.filterByTk}}' },
+              };
+            });
+          }
+        }
+      }
+    }
+  } catch { /* skip */ }
+
+  return [];
 }
 
 /**
