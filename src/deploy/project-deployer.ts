@@ -189,11 +189,20 @@ export async function deployProject(
   }
 
   // SQL verify
-  // Build a virtual structure for sql-verifier
   const sqlResult = await verifySqlFromPages(nb, pages);
   log(`\n  ── SQL Verification: ${sqlResult.passed} passed, ${sqlResult.failed} failed ──`);
   for (const r of sqlResult.results) {
     if (!r.ok) log(`  ✗ ${r.label}: ${r.error}`);
+  }
+
+  // Auto-sync: re-export from live system to keep local files in sync
+  log('\n  Syncing back from live system...');
+  try {
+    const { exportProject } = await import('../export/project-exporter');
+    await exportProject(nb, { outDir: root, group: opts.group });
+    log('  ✓ Synced');
+  } catch (e) {
+    log(`  ! Sync failed: ${e instanceof Error ? e.message.slice(0, 80) : e}`);
   }
 }
 
