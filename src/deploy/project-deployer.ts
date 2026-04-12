@@ -277,6 +277,13 @@ async function deployOnePage(
     // Create + deploy additional tabs — check existing first
     if (!pageState.tab_states) pageState.tab_states = {};
 
+    // Enable tabs on the page (must update route, not flowModel)
+    try {
+      await nb.http.put(`${nb.baseUrl}/api/desktopRoutes:update?filterByTk=${pageState.route_id}`, {
+        enableTabs: true,
+      });
+    } catch { /* skip */ }
+
     // Read existing tabs from live page
     let existingLiveTabs: { uid: string; title: string }[] = [];
     try {
