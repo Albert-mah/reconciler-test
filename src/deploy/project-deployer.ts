@@ -25,6 +25,7 @@ import { ensureCollection } from './collection-deployer';
 import { deploySurface } from './surface-deployer';
 import { deployPopup } from './popup-deployer';
 import { expandPopups } from './popup-expander';
+import { deployTemplates, type TemplateUidMap } from './template-deployer';
 import { reorderTableColumns } from './column-reorder';
 import { postVerify } from './post-verify';
 import { verifySql } from './sql-verifier';
@@ -127,6 +128,12 @@ export async function deployProject(
     for (const [name, def] of Object.entries(collDefs)) {
       await ensureCollection(nb, name, def, log);
     }
+  }
+
+  // Deploy templates (before pages, so popupTemplateUid can be mapped)
+  let templateUidMap: TemplateUidMap = new Map();
+  if (!opts.page) {
+    templateUidMap = await deployTemplates(nb, root, log);
   }
 
   // Routes + pages (skip duplicate groups)
