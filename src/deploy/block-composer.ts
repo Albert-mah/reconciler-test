@@ -25,9 +25,9 @@ const COMPOSE_ACTIONS = new Set([
   // handled by block-filler via save_model (not compose)
 ]);
 
-const SYSTEM_FIELDS = new Set([
-  'id', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy', 'createdById', 'updatedById',
-]);
+// Don't filter system fields — if spec declares them, compose should include them.
+// Original build mode adds them automatically, but copy mode needs explicit fields.
+const SYSTEM_FIELDS = new Set<string>();
 
 const LAYOUT_KEYS = new Set(['col', 'size']);
 

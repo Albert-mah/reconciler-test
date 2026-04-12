@@ -455,7 +455,17 @@ function exportFormContents(
     } else if (gi.use?.includes('DividerItem') || gi.use?.includes('MarkdownItem')) {
       const label = ((sp.markdownItemSetting as Record<string, unknown>)
         ?.title as Record<string, unknown>)?.label as string || '';
-      uidToName.set(gi.uid, label ? `--- ${label} ---` : '---');
+      const mdContent = ((sp.markdownBlockSettings as Record<string, unknown>)
+        ?.editMarkdown as Record<string, unknown>)?.content as string || '';
+
+      if (mdContent) {
+        // MarkdownItem with template content (e.g. {{ ctx.popup.record.name }})
+        const mdKey = `_md_${fields.length}`;
+        fields.push({ type: 'markdown', key: mdKey, content: mdContent });
+        uidToName.set(gi.uid, `[MD:${mdKey}]`);
+      } else {
+        uidToName.set(gi.uid, label ? `--- ${label} ---` : '---');
+      }
 
     } else {
       const fpInit = (sp.fieldSettings as Record<string, unknown>)?.init as Record<string, unknown>;

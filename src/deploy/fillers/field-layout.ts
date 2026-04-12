@@ -24,13 +24,22 @@ export async function applyFieldLayout(
     const itemArr = (Array.isArray(items) ? items : []) as { uid: string; use?: string; stepParams?: Record<string, unknown> }[];
     if (!itemArr.length) return;
 
-    // Build desc → uid map from spec js_items (stable, no regex)
+    // Build desc → uid maps from spec (stable, no regex)
     const jsDescToUid = new Map<string, string>();
     const jsItems = bs?.js_items || [];
     const liveJsItems = itemArr.filter(d => d.use?.includes('JSItem'));
     for (let i = 0; i < jsItems.length && i < liveJsItems.length; i++) {
       const desc = jsItems[i].desc || jsItems[i].key;
       if (desc) jsDescToUid.set(`[JS:${desc}]`, liveJsItems[i].uid);
+    }
+
+    // Map markdown items by key from fields spec
+    const mdKeyToUid = new Map<string, string>();
+    const liveMarkdowns = itemArr.filter(d => d.use?.includes('MarkdownItem'));
+    const specMdFields = (bs?.fields || []).filter(f => typeof f === 'object' && (f as unknown as Record<string, unknown>).type === 'markdown');
+    for (let i = 0; i < specMdFields.length && i < liveMarkdowns.length; i++) {
+      const key = (specMdFields[i] as unknown as Record<string, unknown>).key as string;
+      if (key) mdKeyToUid.set(`[MD:${key}]`, liveMarkdowns[i].uid);
     }
 
     // Build uid map: fieldPath/label/[JS:desc] → uid
@@ -44,8 +53,9 @@ export async function applyFieldLayout(
       if (fieldPath) uidMap.set(fieldPath, d.uid);
       else if (label) uidMap.set(label, d.uid);
     }
-    // Merge JS desc mappings
+    // Merge JS + markdown mappings
     for (const [k, v] of jsDescToUid) uidMap.set(k, v);
+    for (const [k, v] of mdKeyToUid) uidMap.set(k, v);
 
     const rows: Record<string, string[][]> = {};
     const sizes: Record<string, number[]> = {};

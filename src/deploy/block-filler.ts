@@ -272,7 +272,7 @@ export async function fillBlock(
   await deployJsColumns(nb, blockUid, bs, coll, mod, blockState, allBlocksState, log);
 
   // ── Dividers (in field_layout) ──
-  await deployDividers(nb, gridUid, bs.field_layout || [], log);
+  await deployDividers(nb, gridUid, bs, blockState, log);
 
   // ── Event flows ──
   await deployEventFlows(nb, blockUid, bs, mod, log);
