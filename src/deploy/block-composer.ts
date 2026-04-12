@@ -96,8 +96,7 @@ export function toComposeBlock(
   // Skip fields for forms with templateRef — they'll use ReferenceFormGridModel instead
   const hasTemplateRef = !!bs.templateRef?.targetUid;
   const includeFields = !hasTemplateRef && (
-    ['table', 'createForm', 'editForm', 'details'].includes(btype)
-    || (btype === 'filterForm' && !!blockColl)
+    ['table', 'createForm', 'editForm', 'details', 'filterForm'].includes(btype)
   );
 
   const layoutRows = (bs.field_layout || []).filter((r): r is LayoutRow => Array.isArray(r));
