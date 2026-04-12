@@ -46,6 +46,14 @@ export function toComposeBlock(
 
   if (!COMPOSE_TYPES.has(btype)) return null;
 
+  // Popup association blocks (sourceId with template var) can't use compose binding
+  // — must be created via models.save with full resourceSettings
+  const earlyBinding = (bs.resource_binding || {}) as Record<string, unknown>;
+  const earlySrcId = earlyBinding.sourceId as string;
+  if (earlySrcId && earlySrcId.includes('{{') && earlyBinding.associationName) {
+    return null; // → handled by save_model in surface-deployer
+  }
+
   const resBinding = bs.resource_binding || {};
   const block: Record<string, unknown> = { key, type: btype };
 

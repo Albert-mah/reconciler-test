@@ -179,15 +179,86 @@ export async function deploySurface(
         }
       }
 
-      // ── Step 2: Fill each NEW block with content ──
+      // ── Step 2: Fill each NEW composable block with content ──
       for (const bs of blocksSpec) {
         const key = bs.key || bs.type;
-        if (key in existing && !force) continue;
+        if (key in existing) continue;
         if (!blocksState[key]) continue;
         await fillBlock(nb, blocksState[key].uid, blocksState[key].grid_uid || '', bs, coll, modDir, blocksState[key], blocksState, gridUid, log);
       }
     } catch (e) {
       log(`    ! compose: ${e instanceof Error ? e.message : e}`);
+    }
+  }
+
+  // ── Step 1b: Create blocks that compose can't handle (legacy types + popup associations) ──
+  const BLOCK_MODEL_MAP: Record<string, string> = {
+    table: 'TableBlockModel', filterForm: 'FilterFormBlockModel',
+    createForm: 'CreateFormModel', editForm: 'EditFormModel',
+    details: 'DetailsBlockModel', list: 'ListBlockModel',
+    gridCard: 'GridCardBlockModel', jsBlock: 'JSBlockModel',
+    chart: 'ChartBlockModel', markdown: 'MarkdownBlockModel',
+    iframe: 'IframeBlockModel',
+    comments: 'CommentsBlockModel', recordHistory: 'RecordHistoryBlockModel',
+    mailMessages: 'MailMessagesBlockModel',
+  };
+  for (const bs of blocksSpec) {
+    const key = bs.key || bs.type;
+    if (key in blocksState) continue; // already composed or exists
+    // toComposeBlock returned null → create via save_model
+    const cb = toComposeBlock(bs, coll);
+    if (cb) continue; // was composable but maybe already composed above
+    const modelName = BLOCK_MODEL_MAP[bs.type];
+    if (!modelName || !gridUid) continue;
+
+    try {
+      const { generateUid } = await import('../utils/uid');
+      const blockColl = bs.coll || coll;
+      const resBinding = (bs.resource_binding || {}) as Record<string, unknown>;
+      const newUid = generateUid();
+      const stepParams: Record<string, unknown> = {};
+
+      // Resource settings (with full associationName + sourceId for popup blocks)
+      const resource: Record<string, unknown> = {};
+      if (blockColl && blockColl !== bs.type) {
+        resource.collectionName = blockColl;
+        resource.dataSourceKey = 'main';
+      }
+      if (resBinding.associationName) resource.associationName = resBinding.associationName;
+      if (resBinding.sourceId) resource.sourceId = resBinding.sourceId;
+      if (resBinding.filterByTk) resource.filterByTk = resBinding.filterByTk;
+      if (Object.keys(resource).length) stepParams.resourceSettings = { init: resource };
+
+      if (bs.dataScope) stepParams.tableSettings = { dataScope: { filter: bs.dataScope } };
+      if (bs.title) stepParams.cardSettings = { titleDescription: { title: bs.title } };
+
+      await nb.models.save({
+        uid: newUid,
+        use: modelName,
+        parentId: gridUid,
+        subKey: 'items',
+        subType: 'array',
+        sortIndex: 0,
+        stepParams,
+        flowRegistry: {},
+      });
+
+      blocksState[key] = { uid: newUid, type: bs.type, grid_uid: '' };
+      log(`    + save_model: ${key} (${modelName})`);
+
+      // Read back grid_uid for blocks that have internal grids
+      try {
+        const blockData = await nb.get({ uid: newUid });
+        const innerGrid = blockData.tree.subModels?.grid;
+        if (innerGrid && !Array.isArray(innerGrid)) {
+          blocksState[key].grid_uid = (innerGrid as { uid: string }).uid;
+        }
+      } catch { /* skip */ }
+
+      // Fill content (actions, JS, field_layout, etc.)
+      await fillBlock(nb, newUid, blocksState[key].grid_uid || '', bs, coll, modDir, blocksState[key], blocksState, gridUid, log);
+    } catch (e) {
+      log(`    ! save_model ${key}: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
     }
   }
 
