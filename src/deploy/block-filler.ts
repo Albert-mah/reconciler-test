@@ -78,6 +78,29 @@ export async function fillBlock(
           const ps = (f as unknown as Record<string, unknown>).popupSettings as Record<string, unknown>;
           if (ps) {
             const popupColl = (ps.collectionName || coll) as string;
+
+            // Check if field already has a ChildPage (popup-deployer may have created it)
+            let fieldHasPopup = false;
+            try {
+              const fieldCheck = await nb.get({ uid: fieldUid });
+              fieldHasPopup = !!(fieldCheck.tree.subModels?.page);
+            } catch { /* skip */ }
+
+            if (fieldHasPopup) {
+              // Popup content already exists — just set popupSettings, don't compose
+              update.popupSettings = {
+                openView: {
+                  collectionName: popupColl, dataSourceKey: 'main',
+                  mode: ps.mode || 'drawer', size: ps.size || 'medium',
+                  pageModelClass: 'ChildPageModel', uid: fieldUid,
+                  filterByTk: ps.filterByTk || '{{ ctx.record.id }}',
+                },
+              };
+              log(`      ~ clickToOpen: ${fp} (popup already deployed)`);
+              await nb.updateModel(fieldUid, update);
+              continue;
+            }
+
             const isCircular = popupContext.seenColls.has(popupColl);
             const atMaxDepth = popupContext.depth >= popupContext.maxDepth;
 

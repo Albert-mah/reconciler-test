@@ -32,19 +32,23 @@ export async function deployPopup(
       const tabs = (popupPage as unknown as unknown as Record<string, unknown>).subModels as Record<string, unknown>;
       const tabList = tabs?.tabs;
       const tabArr = Array.isArray(tabList) ? tabList : tabList ? [tabList] : [];
-      // Check if ALL tabs have content (not just any)
-      let allTabsHaveContent = tabArr.length > 0;
+      // Check if popup has ENOUGH content (matches spec tab/block count)
+      const specTabCount = tabsSpec ? tabsSpec.length : 1;
+      const specBlockCount = tabsSpec
+        ? tabsSpec.reduce((n, t) => n + ((t.blocks || []).length), 0)
+        : (popupSpec.blocks || []).length;
+
+      let liveBlockCount = 0;
       for (const t of tabArr) {
         const g = (t as unknown as Record<string, unknown>).subModels as Record<string, unknown>;
         const gridObj = g?.grid as Record<string, unknown>;
         const items = gridObj?.subModels as Record<string, unknown>;
         const itemArr = items?.items;
-        if (!Array.isArray(itemArr) || !itemArr.length) {
-          allTabsHaveContent = false;
-          break;
-        }
+        if (Array.isArray(itemArr)) liveBlockCount += itemArr.length;
       }
-      const hasContent = allTabsHaveContent;
+
+      // Content is sufficient if live has at least as many tabs and blocks as spec
+      const hasContent = tabArr.length >= specTabCount && liveBlockCount >= specBlockCount && liveBlockCount > 0;
       if (hasContent) {
         if (force) {
           log(`  ~ popup [${targetRef}] (update in-place)`);
