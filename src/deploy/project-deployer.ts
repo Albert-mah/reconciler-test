@@ -343,12 +343,26 @@ async function deployOnePage(
     // Create + deploy additional tabs — check existing first
     if (!pageState.tab_states) pageState.tab_states = {};
 
-    // Enable tabs on the page route
+    // Enable tabs: must update BOTH route AND RootPageModel.props
     try {
+      // 1. Route
       await nb.http.post(`${nb.baseUrl}/api/desktopRoutes:update`,
         { enableTabs: true },
         { params: { 'filter[id]': pageState.route_id } },
       );
+      // 2. RootPageModel props (frontend reads enableTabs from props, not stepParams)
+      if (pageState.page_uid) {
+        const pageData = await nb.get({ uid: pageState.page_uid });
+        const rootPage = pageData.tree.subModels?.page;
+        if (rootPage && !Array.isArray(rootPage)) {
+          const rootUid = (rootPage as { uid: string }).uid;
+          const existingProps = ((rootPage as unknown as Record<string, unknown>).props || {}) as Record<string, unknown>;
+          await nb.http.post(`${nb.baseUrl}/api/flowModels:save`, {
+            uid: rootUid,
+            props: { ...existingProps, enableTabs: true },
+          });
+        }
+      }
     } catch (e) {
       log(`    ! enableTabs: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
     }
