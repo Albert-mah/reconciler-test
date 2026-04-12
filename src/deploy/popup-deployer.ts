@@ -59,9 +59,10 @@ export async function deployPopup(
         // Popup exists — sync content (fillBlock runs for templateRef, JS, etc.)
         log(`  = popup [${targetRef}] (exists, sync content)`);
         const blocks = popupSpec.blocks || (tabsSpec ? tabsSpec[0]?.blocks : []) || [];
+        const popupLayout = popupSpec.layout || (tabsSpec ? tabsSpec[0]?.layout : undefined);
         if (blocks.length) {
           const syncResult = await deploySurface(
-            nb, targetUid, { blocks, coll } as any, modDir, false, {}, log,
+            nb, targetUid, { blocks, coll, layout: popupLayout } as any, modDir, false, {}, log,
           );
           return syncResult;
         }
