@@ -14,3 +14,11 @@ export { exportPageSurface, exportPopupSurface, exportAllPopups } from './export
 
 // Sync
 export { sync } from './sync';
+
+// ACL
+export { exportAcl, deployAcl, deployAclSpec } from './acl';
+export type { AclSpec, RoleSpec, ScopeSpec, ExportAclOptions, DeployAclOptions } from './acl';
+
+// Workflow
+export { exportWorkflows, deployWorkflows } from './workflow';
+export type { WorkflowSpec, NodeSpec, WorkflowState, WorkflowStateFile } from './workflow';
