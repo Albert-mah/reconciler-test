@@ -2,6 +2,12 @@
  * Convert YAML block spec → compose API format.
  *
  * Pure function — no API calls. Used by surface-deployer before compose.
+ *
+ * ⚠️ PITFALLS:
+ * - resource must always have dataSourceKey: 'main' (compose 400 without it)
+ * - popup context (editForm/details): binding: 'currentRecord' required
+ * - details block: edit/view actions must go to recordActions (not actions)
+ * - edit/view NOT in COMPOSE_ACTIONS — only created via save_model when spec declares them
  */
 import type { BlockSpec, FieldSpec, LayoutRow } from '../types/spec';
 

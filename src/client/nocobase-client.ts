@@ -1,3 +1,12 @@
+/**
+ * NocoBase API client.
+ *
+ * ⚠️ PITFALLS — read before modifying:
+ * - desktopRoutes:update must use POST (not PUT). PUT returns 200 but doesn't persist.
+ * - flowModels:update clears parentId → NEVER call directly. Use updateModel() or configure().
+ * - enableTabs lives on route (POST desktopRoutes:update), NOT on flowModel stepParams.
+ * - See src/PITFALLS.md for complete list.
+ */
 import axios, { type AxiosInstance } from 'axios';
 import { resolveToken, resolveCredentials } from './auth';
 import { FlowSurfacesApi } from './flow-surfaces';

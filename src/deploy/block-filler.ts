@@ -2,6 +2,13 @@
  * Fill a compose-created block with content: JS, charts, actions, dividers, event flows.
  *
  * Compose creates empty shells. This fills them with actual content.
+ *
+ * ⚠️ PITFALLS:
+ * - clickToOpen popup deployment priority: inline popup > popup file > template > default
+ * - If field already has ChildPage with enough blocks, skip compose (let popup-deployer handle)
+ * - filterManager must be set on PAGE-LEVEL BlockGridModel (not filterForm's own grid)
+ * - JS items must be ordered before field items (syncGridItemsOrder at end)
+ * - See src/PITFALLS.md for complete list.
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';

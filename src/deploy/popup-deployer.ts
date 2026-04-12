@@ -1,5 +1,11 @@
 /**
  * Deploy popups — simple, tabbed, and nested.
+ *
+ * ⚠️ PITFALLS:
+ * - compose target for popup tab: use ChildPage TAB uid (not field/action uid)
+ * - hasContent check: compare live blockCount vs spec blockCount (not just >0)
+ * - popupSettings.uid must point to field itself (NocoBase resolves field → page)
+ * - See src/PITFALLS.md for complete list.
  */
 import type { NocoBaseClient } from '../client';
 import type { PopupSpec, BlockSpec } from '../types/spec';

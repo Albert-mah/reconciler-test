@@ -2,6 +2,11 @@
  * Layout DSL parser + applier.
  *
  * Converts YAML layout spec → gridSettings.rows/sizes format.
+ *
+ * ⚠️ PITFALLS:
+ * - rows format: [[uid1,uid2]] = 1 col stacked, [[uid1],[uid2]] = 2 cols side by side
+ * - After setLayout, must moveNode to sync subModels.items order (affects rendering)
+ * - See src/PITFALLS.md for complete list.
  */
 import type { NocoBaseClient } from '../client';
 import type { LayoutRow } from '../types/spec';
