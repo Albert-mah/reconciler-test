@@ -348,6 +348,16 @@ async function deployOnePage(
       });
     } catch { /* skip */ }
 
+    // Rename first tab if it's Untitled
+    const firstTabTitle = tabs[0].title || '';
+    if (firstTabTitle) {
+      try {
+        await nb.updateModel(pageState.tab_uid, {
+          pageTabSettings: { title: { title: firstTabTitle } },
+        });
+      } catch { /* skip */ }
+    }
+
     // Read existing tabs from live page
     let existingLiveTabs: { uid: string; title: string }[] = [];
     try {
