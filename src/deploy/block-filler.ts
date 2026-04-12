@@ -81,11 +81,16 @@ export async function fillBlock(
               mode: ps.mode || 'drawer',
               size: ps.size || 'medium',
               pageModelClass: 'ChildPageModel',
-              uid: fieldUid,
               filterByTk: ps.filterByTk || '{{ ctx.record.id }}',
             };
             if (ps.popupTemplateUid) {
+              // Template mode: NocoBase generates popup from template
               openView.popupTemplateUid = ps.popupTemplateUid;
+              // uid must NOT be the field itself — leave for NocoBase to assign
+              // or set to a new UID that will become the ChildPage
+              openView.uid = generateUid();
+            } else {
+              openView.uid = fieldUid;
             }
             update.popupSettings = { openView };
           }
