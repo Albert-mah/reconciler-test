@@ -29,7 +29,7 @@ import type { RouteInfo } from '../client/routes';
 import type { FlowModelNode } from '../types/api';
 import { exportBlock, TYPE_MAP, type PopupRef } from './block-exporter';
 import { exportAllTemplates, exportTemplateUsages } from './template-exporter';
-import { dumpYaml } from '../utils/yaml';
+import { dumpYaml, loadYaml } from '../utils/yaml';
 import { slugify } from '../utils/slugify';
 
 interface ExportOptions {
@@ -286,6 +286,58 @@ async function exportSingleTab(
       // Can't dereference — keep as reference block
     }
     delete b._reference;
+  }
+
+  // Inline popup content into clickToOpen fields
+  // Read template content and embed directly in field spec
+  for (const b of blocks) {
+    const br = b as Record<string, unknown>;
+    const fields = br.fields as unknown[];
+    if (!Array.isArray(fields)) continue;
+    for (let fi = 0; fi < fields.length; fi++) {
+      const f = fields[fi];
+      if (typeof f !== 'object' || !(f as Record<string, unknown>).clickToOpen) continue;
+      const ps = (f as Record<string, unknown>).popupSettings as Record<string, unknown>;
+      const templateUid = ps?.popupTemplateUid as string;
+      if (!templateUid) continue;
+
+      // Find template in our exported templates
+      const tplIndexFile = path.join(path.dirname(path.dirname(outDir)), 'templates', '_index.yaml');
+      // Walk up to find templates/_index.yaml
+      let tplIndex: Record<string, unknown>[] = [];
+      for (let d = outDir; d !== path.dirname(d); d = path.dirname(d)) {
+        const idx = path.join(d, 'templates', '_index.yaml');
+        if (fs.existsSync(idx)) {
+          tplIndex = loadYaml<Record<string, unknown>[]>(idx) || [];
+          break;
+        }
+      }
+      const tplEntry = tplIndex.find(t => t.uid === templateUid);
+      if (!tplEntry?.file) continue;
+
+      // Read template content
+      let tplDir = outDir;
+      for (let d = outDir; d !== path.dirname(d); d = path.dirname(d)) {
+        if (fs.existsSync(path.join(d, 'templates'))) { tplDir = d; break; }
+      }
+      const tplFile = path.join(tplDir, 'templates', tplEntry.file as string);
+      if (!fs.existsSync(tplFile)) continue;
+
+      const tplSpec = loadYaml<Record<string, unknown>>(tplFile);
+      const content = tplSpec.content as Record<string, unknown>;
+      if (!content) continue;
+
+      // Inline popup content into the field spec
+      const fieldSpec = f as Record<string, unknown>;
+      fieldSpec.popup = {
+        _template: tplSpec.name || templateUid,
+        mode: ps.mode || 'drawer',
+        size: ps.size || 'medium',
+        ...content,  // blocks or tabs with full detail
+      };
+      // Remove raw popupSettings (replaced by inline popup)
+      delete fieldSpec.popupSettings;
+    }
   }
 
   // Infer coll for filterForm from sibling table/reference/form blocks
