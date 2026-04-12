@@ -89,7 +89,19 @@ export function toComposeBlock(
     return COMPOSE_ACTIONS.has(t);
   });
 
-  if (actions.length > 0) {
+  // Details blocks: edit/view must be in recordActions (compose API requirement)
+  if (btype === 'details') {
+    const moveToRecord = ['edit', 'view'];
+    const toMove = actions.filter(a => {
+      const t = typeof a === 'string' ? a : (a as Record<string, unknown>).type as string;
+      return moveToRecord.includes(t);
+    });
+    const remaining = actions.filter(a => !toMove.includes(a));
+    if (toMove.length) recordActions.push(...toMove);
+    if (remaining.length > 0) {
+      block.actions = remaining.map(a => typeof a === 'string' ? { type: a } : a);
+    }
+  } else if (actions.length > 0) {
     block.actions = actions.map(a => typeof a === 'string' ? { type: a } : a);
   }
   if (recordActions.length > 0) {

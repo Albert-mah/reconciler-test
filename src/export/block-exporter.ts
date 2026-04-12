@@ -520,7 +520,19 @@ function exportActions(
         }
         target.push(actionSpec);
       } else {
-        target.push(atype);
+        // For actions with stepParams (popup buttons, updateRecord, etc.)
+        const sp = (act.stepParams || {}) as Record<string, unknown>;
+        const props = (act as unknown as Record<string, unknown>).props as Record<string, unknown>;
+        const hasConfig = Object.keys(sp).length > 0 || (props && Object.keys(props).length > 0);
+
+        if (hasConfig && ['popup', 'updateRecord', 'duplicate'].includes(atype)) {
+          const actionSpec: Record<string, unknown> = { type: atype };
+          if (Object.keys(sp).length) actionSpec.stepParams = sp;
+          if (props && Object.keys(props).length) actionSpec.props = props;
+          target.push(actionSpec);
+        } else {
+          target.push(atype);
+        }
       }
 
       // Check for popup (ChildPage under action)
