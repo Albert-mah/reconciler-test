@@ -351,22 +351,22 @@ async function deployOnePage(
       log(`    ! enableTabs: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
     }
 
-    // Rename first tab via both flowModel + route
+    // Sync first tab title + icon via both flowModel + route
     const firstTabTitle = tabs[0].title || '';
+    const firstTabIcon = (tabs[0] as unknown as Record<string, unknown>).icon as string || '';
     if (firstTabTitle) {
       try {
         await nb.updateModel(pageState.tab_uid, {
           pageTabSettings: { title: { title: firstTabTitle } },
         });
-        // Also update route title — find tab route by schemaUid
         const allRoutes = await nb.http.get(`${nb.baseUrl}/api/desktopRoutes:list`, { params: { pageSize: 500 } });
         const tabRoute = (allRoutes.data.data || []).find(
           (r: any) => r.schemaUid === pageState.tab_uid && r.type === 'tabs',
         );
         if (tabRoute) {
-          await nb.http.post(`${nb.baseUrl}/api/desktopRoutes:update?filter[id]=${tabRoute.id}`, {
-            title: firstTabTitle,
-          });
+          const routeUpdate: Record<string, unknown> = { title: firstTabTitle };
+          if (firstTabIcon) routeUpdate.icon = firstTabIcon;
+          await nb.http.post(`${nb.baseUrl}/api/desktopRoutes:update?filter[id]=${tabRoute.id}`, routeUpdate);
         }
       } catch (e) {
         log(`    ! tab rename: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
@@ -412,9 +412,10 @@ async function deployOnePage(
             const tabRouteId = r.tabRouteId as number;
             if (tabRouteId) {
               try {
-                await nb.http.post(`${nb.baseUrl}/api/desktopRoutes:update?filter[id]=${tabRouteId}`, {
-                  title: tabTitle,
-                });
+                const tabIcon = (tabs[ti] as unknown as Record<string, unknown>).icon as string || '';
+                const routeUpdate: Record<string, unknown> = { title: tabTitle };
+                if (tabIcon) routeUpdate.icon = tabIcon;
+                await nb.http.post(`${nb.baseUrl}/api/desktopRoutes:update?filter[id]=${tabRouteId}`, routeUpdate);
               } catch (e) {
                 log(`    ! tab route title: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
               }

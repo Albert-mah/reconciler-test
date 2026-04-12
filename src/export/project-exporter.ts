@@ -136,20 +136,23 @@ async function exportPage(
   fs.writeFileSync(path.join(pageDir, 'page.yaml'), dumpYaml(pageMeta));
 
   // Check if multi-tab page — read from RootPageModel (route.schemaUid)
-  let tabs: { uid: string; title: string }[] = [];
+  let tabs: { uid: string; title: string; icon?: string }[] = [];
   try {
     const pageData = await nb.get({ uid: route.schemaUid || '' });
     const rawTabs = pageData.tree.subModels?.tabs;
     const tabArr = (Array.isArray(rawTabs) ? rawTabs : rawTabs ? [rawTabs] : []) as FlowModelNode[];
-    tabs = tabArr.map((t, i) => ({
-      uid: t.uid,
-      title: ((t.stepParams as Record<string, unknown>)?.pageTabSettings as Record<string, unknown>)
-        ?.title as Record<string, unknown>
-        ? (((t.stepParams as Record<string, unknown>)?.pageTabSettings as Record<string, unknown>)?.title as Record<string, unknown>)?.title as string || `Tab${i}`
-        : (t as unknown as Record<string, unknown>).props
-          ? ((t as unknown as Record<string, unknown>).props as Record<string, unknown>)?.title as string || `Tab${i}`
-          : `Tab${i}`,
-    }));
+    // Also read tab icons from route children
+    const routeTabs = (route.children || []).filter(c => c.type === 'tabs');
+    tabs = tabArr.map((t, i) => {
+      const titleSetting = ((t.stepParams as Record<string, unknown>)?.pageTabSettings as Record<string, unknown>)
+        ?.title as Record<string, unknown>;
+      const title = (titleSetting?.title as string)
+        || ((t as unknown as Record<string, unknown>).props as Record<string, unknown>)?.title as string
+        || routeTabs[i]?.title
+        || `Tab${i}`;
+      const icon = routeTabs[i]?.icon || '';
+      return { uid: t.uid, title, icon };
+    });
   } catch { /* single tab fallback */ }
 
   // If only 1 tab, export normally. If multi-tab, export each tab.
@@ -178,7 +181,7 @@ async function exportPage(
     await exportSingleTab(nb, grid as FlowModelNode, pageDir, pageSlug, pageMeta);
   } else {
     // Multi-tab — export each tab separately
-    pageMeta.tabs = tabs.map(t => t.title);
+    pageMeta.tabs = tabs.map(t => t.icon ? { title: t.title, icon: t.icon } : t.title);
     fs.writeFileSync(path.join(pageDir, 'page.yaml'), dumpYaml(pageMeta));
 
     for (let ti = 0; ti < tabs.length; ti++) {

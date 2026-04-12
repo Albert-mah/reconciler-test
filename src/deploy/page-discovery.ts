@@ -98,14 +98,30 @@ export function readPageDir(pageDir: string, title: string, icon?: string): Page
     };
   } else if (tabDirs.length) {
     // Multi-tab page — first tab becomes the main layout, others become tabs
-    const tabs: { title: string; blocks: BlockSpec[]; layout?: PageSpec['layout'] }[] = [];
+    // Read tab metadata from page.yaml if available (title, icon)
+    const pageTabsMeta = (pageMeta.tabs as unknown[]) || [];
+    const tabMetaMap = new Map<string, { title: string; icon?: string }>();
+    for (const tm of pageTabsMeta) {
+      if (typeof tm === 'string') {
+        tabMetaMap.set(slugify(tm), { title: tm });
+      } else if (tm && typeof tm === 'object') {
+        const t = tm as Record<string, string>;
+        tabMetaMap.set(slugify(t.title || ''), { title: t.title, icon: t.icon });
+      }
+    }
+
+    const tabs: { title: string; icon?: string; blocks: BlockSpec[]; layout?: PageSpec['layout'] }[] = [];
     for (const td of tabDirs) {
       const tabLayout = path.join(pageDir, td, 'layout.yaml');
       if (!fs.existsSync(tabLayout)) continue;
       const tabRaw = loadYaml<Record<string, unknown>>(tabLayout);
-      const tabTitle = td.replace('tab_', '').replace(/_/g, ' ');
+      const dirSlug = td.replace('tab_', '');
+      const meta = tabMetaMap.get(dirSlug);
+      const tabTitle = meta?.title || dirSlug.replace(/_/g, ' ');
+      const tabIcon = meta?.icon;
       tabs.push({
         title: tabTitle,
+        icon: tabIcon,
         blocks: (tabRaw.blocks || []) as BlockSpec[],
         layout: tabRaw.layout as PageSpec['layout'],
       });
