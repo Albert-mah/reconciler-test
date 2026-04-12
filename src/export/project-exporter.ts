@@ -488,7 +488,11 @@ async function exportPopupsToDir(
               const content = tplSpec.content as Record<string, unknown>;
               if (content) {
                 // Copy template JS files to page's js dir and rewrite paths
-                const tplBaseDir = path.dirname(tplFile);
+                // Template JS files are in <slug>/js/ next to the YAML, or <slug>_js/
+                const tplSlug = path.basename(tplFile, '.yaml');
+                const tplBaseDir = fs.existsSync(path.join(path.dirname(tplFile), tplSlug, 'js'))
+                  ? path.join(path.dirname(tplFile), tplSlug)
+                  : path.dirname(tplFile);
                 copyTemplateJsFiles(tplBaseDir, jsDir, content);
 
                 const popupSpec: Record<string, unknown> = {

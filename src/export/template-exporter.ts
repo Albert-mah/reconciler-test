@@ -161,12 +161,13 @@ async function exportChildPageContent(
   const tabs = (Array.isArray(rawTabs) ? rawTabs : rawTabs ? [rawTabs] : []) as FlowModelNode[];
 
   if (tabs.length <= 1) {
-    // Single tab — export blocks directly
     const tabGrid = tabs.length ? tabs[0].subModels?.grid : null;
     if (!tabGrid || Array.isArray(tabGrid)) return { content: { blocks: [] } };
 
-    const blocks = exportGridItems(tabGrid as FlowModelNode, jsDir, prefix);
-    return { content: { blocks } };
+    const { blocks, layout } = exportGridItems(tabGrid as FlowModelNode, jsDir, prefix);
+    const content: Record<string, unknown> = { blocks };
+    if (layout.length) content.layout = layout;
+    return { content };
   }
 
   // Multi tab
@@ -177,10 +178,14 @@ async function exportChildPageContent(
       ?.title as Record<string, unknown>;
     const tabTitle = (title?.title as string) || `Tab${i}`;
     const tabGrid = tab.subModels?.grid;
-    const blocks = (tabGrid && !Array.isArray(tabGrid))
-      ? exportGridItems(tabGrid as FlowModelNode, jsDir, `${prefix}_tab${i}`)
-      : [];
-    tabSpecs.push({ title: tabTitle, blocks });
+    if (tabGrid && !Array.isArray(tabGrid)) {
+      const { blocks, layout } = exportGridItems(tabGrid as FlowModelNode, jsDir, `${prefix}_tab${i}`);
+      const tabEntry: Record<string, unknown> = { title: tabTitle, blocks };
+      if (layout.length) tabEntry.layout = layout;
+      tabSpecs.push(tabEntry);
+    } else {
+      tabSpecs.push({ title: tabTitle, blocks: [] });
+    }
   }
   return { content: { tabs: tabSpecs } };
 }
@@ -189,11 +194,12 @@ function exportGridItems(
   grid: FlowModelNode,
   jsDir: string,
   prefix: string,
-): Record<string, unknown>[] {
+): { blocks: Record<string, unknown>[]; layout: unknown[] } {
   const rawItems = grid.subModels?.items;
   const items = (Array.isArray(rawItems) ? rawItems : []) as FlowModelNode[];
   const usedKeys = new Set<string>();
   const blocks: Record<string, unknown>[] = [];
+  const blockUidToKey = new Map<string, string>();
 
   for (let i = 0; i < items.length; i++) {
     const exported = exportBlock(items[i], jsDir, prefix, i, usedKeys);
@@ -201,10 +207,59 @@ function exportGridItems(
       const spec = { ...exported.spec };
       delete spec._popups;
       blocks.push(spec);
+      blockUidToKey.set(items[i].uid, exported.key);
     }
   }
 
-  return blocks;
+  // Extract grid layout (rows/sizes → layout DSL)
+  const layout = extractTemplateGridLayout(grid, blockUidToKey);
+
+  return { blocks, layout };
+}
+
+/**
+ * Extract grid layout from gridSettings.rows → layout DSL.
+ * Same logic as project-exporter's exportLayout but standalone.
+ */
+function extractTemplateGridLayout(
+  grid: FlowModelNode,
+  blockUidToKey: Map<string, string>,
+): unknown[] {
+  const gs = (grid.stepParams as Record<string, unknown>)?.gridSettings as Record<string, unknown>;
+  const gridInner = (gs?.grid || {}) as Record<string, unknown>;
+  const rows = (gridInner.rows || {}) as Record<string, string[][]>;
+  const sizes = (gridInner.sizes || {}) as Record<string, number[]>;
+  const rowOrder = (gridInner.rowOrder || Object.keys(rows)) as string[];
+
+  if (!Object.keys(rows).length) return [];
+  const layout: unknown[] = [];
+
+  for (const rk of rowOrder) {
+    const cols = rows[rk];
+    if (!cols) continue;
+    const sz = sizes[rk] || [];
+    const nCols = cols.length;
+    const defaultSize = nCols > 0 ? Math.floor(24 / nCols) : 24;
+    const row: unknown[] = [];
+
+    for (let j = 0; j < cols.length; j++) {
+      const colUids = cols[j];
+      const names = colUids.map(u => blockUidToKey.get(u) || u.slice(0, 8));
+      const s = j < sz.length ? sz[j] : defaultSize;
+
+      if (names.length === 1) {
+        if (s === defaultSize && new Set(sz).size <= 1) {
+          row.push(names[0]);
+        } else {
+          row.push({ [names[0]]: s });
+        }
+      } else {
+        row.push({ col: names, size: s });
+      }
+    }
+    if (row.length) layout.push(row);
+  }
+  return layout;
 }
 
 /**
