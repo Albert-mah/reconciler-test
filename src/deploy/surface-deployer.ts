@@ -101,10 +101,6 @@ export async function deploySurface(
           }
         }
 
-        if (bs.type === 'table' && specFields.length) {
-          await reorderTableColumns(nb, blockUid, specFields);
-        }
-
         // Apply non-default column settings (width, ellipsis)
         if (bs.type === 'table') {
           await applyColumnSettings(nb, blockUid, bs.fields || []);
@@ -113,6 +109,18 @@ export async function deploySurface(
 
       // Update content (JS, charts, title, actions, settings)
       await fillBlock(nb, blockUid, blockGrid, bs, coll, modDir, blocksState[key], blocksState, gridUid, log, popupContext);
+
+      // Reorder columns AFTER fillBlock (JS columns created by deployJsColumns)
+      if (bs.type === 'table') {
+        const sf = (bs.fields || [])
+          .map(f => typeof f === 'string' ? f : (f.field || f.fieldPath || ''))
+          .filter(fp => fp && !fp.startsWith('['));
+        if (sf.length) {
+          const jsKeys = (bs.js_columns || []).map((j: any) => j.key as string);
+          const colOrder = (bs as any).column_order as string[] | undefined;
+          await reorderTableColumns(nb, blockUid, sf, jsKeys, colOrder);
+        }
+      }
     }
 
     // Always apply layout

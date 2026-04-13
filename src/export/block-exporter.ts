@@ -202,9 +202,15 @@ export function exportBlock(
 
   // ── Table fields + columns ──
   if (btype === 'table') {
-    const { fields, jsCols, fieldPopups, hasActionsColumn, actColActions, actColPopups } = exportTableContents(item, jsDir, prefix, key);
+    const { fields, jsCols, columnOrder, fieldPopups, hasActionsColumn, actColActions, actColPopups } = exportTableContents(item, jsDir, prefix, key);
     if (fields.length) spec.fields = fields;
-    if (jsCols.length) spec.js_columns = jsCols;
+    if (jsCols.length) {
+      spec.js_columns = jsCols;
+      // Export interleaved column order when JS columns are mixed with fields
+      if (columnOrder.length && columnOrder.some((c: string) => c.startsWith('[JS:'))) {
+        spec.column_order = columnOrder;
+      }
+    }
     // actCol record actions (edit/view/updateRecord buttons inside TableActionsColumn)
     if (actColActions.length) {
       spec.recordActions = actColActions;
@@ -305,7 +311,7 @@ function exportTableContents(
   jsDir: string | null,
   prefix: string,
   blockKey: string,
-): { fields: unknown[]; jsCols: unknown[]; fieldPopups: PopupRef[]; hasActionsColumn: boolean; actColActions: unknown[]; actColPopups: PopupRef[] } {
+): { fields: unknown[]; jsCols: unknown[]; columnOrder: string[]; fieldPopups: PopupRef[]; hasActionsColumn: boolean; actColActions: unknown[]; actColPopups: PopupRef[] } {
   const cols = item.subModels?.columns;
   const colArr = (Array.isArray(cols) ? cols : []) as FlowModelNode[];
   const fields: unknown[] = [];
@@ -353,6 +359,9 @@ function exportTableContents(
     }
   }
 
+  // Track interleaved column order (fields + JS columns in visual order)
+  const columnOrder: string[] = [];
+
   for (const col of colArr) {
     if (col.use?.includes('TableActionsColumn')) continue;
 
@@ -376,6 +385,7 @@ function exportTableContents(
           ...(title ? { title } : {}),
           ...(desc ? { desc } : {}),
         });
+        columnOrder.push(`[JS:${safe}]`);
       }
     } else if (fieldPath) {
       // Check if field has clickToOpen (default detail popup on click)
@@ -402,6 +412,7 @@ function exportTableContents(
           };
         }
         fields.push(fieldSpec);
+        columnOrder.push(fieldPath);
       } else {
         // Check for non-default column settings (width, ellipsis)
         const colSettings = (col.stepParams as Record<string, unknown>)?.tableColumnSettings as Record<string, unknown>;
@@ -417,6 +428,7 @@ function exportTableContents(
         } else {
           fields.push(fieldPath);
         }
+        columnOrder.push(fieldPath);
       }
     }
 
@@ -448,7 +460,7 @@ function exportTableContents(
     }
   }
 
-  return { fields, jsCols, fieldPopups, hasActionsColumn, actColActions, actColPopups };
+  return { fields, jsCols, columnOrder, fieldPopups, hasActionsColumn, actColActions, actColPopups };
 }
 
 // ── Form/detail contents ──
