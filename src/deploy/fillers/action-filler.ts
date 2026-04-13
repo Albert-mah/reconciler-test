@@ -26,8 +26,6 @@ const NON_COMPOSE_ACTION_MAP: Record<string, string> = {
   addChild: 'AddChildActionModel',
 };
 
-export { NON_COMPOSE_ACTION_MAP };
-
 export async function deployNonComposeActions(
   nb: NocoBaseClient,
   blockUid: string,

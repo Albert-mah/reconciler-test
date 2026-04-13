@@ -12,6 +12,7 @@ import { toComposeBlock } from './block-composer';
 import { fillBlock } from './block-filler';
 import { reorderTableColumns } from './column-reorder';
 import { slugify } from '../utils/slugify';
+import { BLOCK_TYPES } from '../utils/block-types';
 
 // Layout engine (imported separately)
 import { parseLayoutSpec, applyLayout } from '../layout/layout-engine';
@@ -192,23 +193,13 @@ export async function deploySurface(
   }
 
   // ── Step 1b: Create blocks that compose can't handle (legacy types + popup associations) ──
-  const BLOCK_MODEL_MAP: Record<string, string> = {
-    table: 'TableBlockModel', filterForm: 'FilterFormBlockModel',
-    createForm: 'CreateFormModel', editForm: 'EditFormModel',
-    details: 'DetailsBlockModel', list: 'ListBlockModel',
-    gridCard: 'GridCardBlockModel', jsBlock: 'JSBlockModel',
-    chart: 'ChartBlockModel', markdown: 'MarkdownBlockModel',
-    iframe: 'IframeBlockModel',
-    comments: 'CommentsBlockModel', recordHistory: 'RecordHistoryBlockModel',
-    mailMessages: 'MailMessagesBlockModel',
-  };
   for (const bs of blocksSpec) {
     const key = bs.key || bs.type;
     if (key in blocksState) continue; // already composed or exists
     // toComposeBlock returned null → create via save_model
     const cb = toComposeBlock(bs, coll);
     if (cb) continue; // was composable but maybe already composed above
-    const modelName = BLOCK_MODEL_MAP[bs.type];
+    const modelName = BLOCK_TYPES[bs.type];
     if (!modelName || !gridUid) continue;
 
     try {

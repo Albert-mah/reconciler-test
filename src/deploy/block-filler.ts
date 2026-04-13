@@ -28,8 +28,9 @@ import {
   deployDividers,
   deployEventFlows,
   applyFieldLayout,
+  syncGridItemsOrder,
 } from './fillers';
-import { bestEffort } from '../utils/error-utils';
+
 
 export async function fillBlock(
   nb: NocoBaseClient,
@@ -283,55 +284,6 @@ export async function fillBlock(
     await applyFieldLayout(nb, gridUid, bs.field_layout!, log, bs);
   } else if (gridUid && ['filterForm', 'createForm', 'editForm', 'details'].includes(btype)) {
     // No field_layout → reorder items via moveNode to match spec declaration
-    await syncItemsOrder(nb, gridUid, bs);
+    await syncGridItemsOrder(nb, gridUid, bs, log);
   }
-}
-
-/**
- * Reorder grid items to match spec declaration order (js_items then fields).
- * Only used when no explicit field_layout is provided.
- */
-async function syncItemsOrder(
-  nb: NocoBaseClient,
-  gridUid: string,
-  bs: BlockSpec,
-): Promise<void> {
-  await bestEffort('syncItemsOrder', async () => {
-    const live = await nb.get({ uid: gridUid });
-    const rawItems = live.tree.subModels?.items;
-    const items = (Array.isArray(rawItems) ? rawItems : []) as { uid: string; use?: string; stepParams?: Record<string, unknown> }[];
-    if (items.length < 2) return;
-
-    // Build UID lookup
-    const uidByFieldPath = new Map<string, string>();
-    const jsUids: string[] = [];
-    for (const item of items) {
-      const fp = (item.stepParams?.fieldSettings as Record<string, unknown>)
-        ?.init as Record<string, unknown>;
-      const fieldPath = fp?.fieldPath as string;
-      if (fieldPath) uidByFieldPath.set(fieldPath, item.uid);
-      if (item.use?.includes('JSItem')) jsUids.push(item.uid);
-    }
-
-    // Desired order: js_items first, then fields in spec order, then rest
-    const desired: string[] = [];
-    for (const uid of jsUids) {
-      if (!desired.includes(uid)) desired.push(uid);
-    }
-    const specFields = (bs.fields || []).map(f =>
-      typeof f === 'string' ? f : ((f as unknown as Record<string, unknown>).field as string) || '',
-    ).filter(Boolean);
-    for (const fp of specFields) {
-      const uid = uidByFieldPath.get(fp);
-      if (uid && !desired.includes(uid)) desired.push(uid);
-    }
-    for (const item of items) {
-      if (!desired.includes(item.uid)) desired.push(item.uid);
-    }
-
-    // Apply via moveNode
-    for (let i = 1; i < desired.length; i++) {
-      await nb.surfaces.moveNode(desired[i], desired[i - 1], 'after');
-    }
-  });
 }

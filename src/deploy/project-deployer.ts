@@ -19,7 +19,8 @@ import * as path from 'node:path';
 import { NocoBaseClient } from '../client';
 import type { ModuleState, PageState, BlockState } from '../types/state';
 import type { StructureSpec, PageSpec, BlockSpec, PopupSpec, CollectionDef, EnhanceSpec } from '../types/spec';
-import { loadYaml, saveYaml } from '../utils/yaml';
+import { loadYaml, saveYaml, dumpYaml } from '../utils/yaml';
+import { buildGraph } from '../graph/graph-builder';
 import { slugify } from '../utils/slugify';
 import { ensureCollection } from './collection-deployer';
 import { deploySurface } from './surface-deployer';
@@ -107,7 +108,6 @@ export async function deployProject(
   log('  ✓ Validation passed');
 
   // ── 2b. Build graph for circular ref detection ──
-  const { buildGraph } = await import('../graph/graph-builder');
   const graph = buildGraph(root);
   const graphStats = graph.stats();
   if (graphStats.cycles > 0) {
