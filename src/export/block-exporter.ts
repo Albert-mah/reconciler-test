@@ -186,12 +186,13 @@ export function exportBlock(
     }
   }
 
-  // ── Reference block — dereference template to get actual form fields ──
+  // ── Reference block — extract template info from stepParams if present ──
+  // (templateRef is also set by project-exporter via flowModelTemplateUsages lookup)
   if (btype === 'reference') {
     const refSettings = sp.referenceSettings as Record<string, unknown>;
     const useTemplate = refSettings?.useTemplate as Record<string, unknown>;
     if (useTemplate) {
-      spec._reference = {
+      spec.templateRef = {
         templateUid: useTemplate.templateUid,
         templateName: useTemplate.templateName,
         targetUid: useTemplate.targetUid,

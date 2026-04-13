@@ -431,8 +431,8 @@ function convertLayout(
       if (cellKey && !blockKeys.has(cellKey)) {
         // Try to remap orphan layout keys to actual block keys
         if (cellKey === 'reference') {
-          // "reference" in layout = a block with templateRef OR a dereferenced block
-          const refBlock = blocks.find(b => b.templateRef || (b as unknown as Record<string, unknown>)._dereferenced_from);
+          // "reference" in layout = a block with templateRef
+          const refBlock = blocks.find(b => b.templateRef);
           if (refBlock) {
             keyRemap.set(cellKey, refBlock.key || refBlock.type);
           } else {

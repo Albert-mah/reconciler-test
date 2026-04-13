@@ -111,8 +111,8 @@ export function toComposeBlock(
     block.resource = { collectionName: blockColl, dataSourceKey: 'main' };
   }
 
-  // ── Template reference for forms (ReferenceFormGridModel) ──
-  // When template usage is 'block', compose only accepts key + template (no type/resource/actions)
+  // ── Template reference (ReferenceBlockModel) ──
+  // Compose with template creates ReferenceBlockModel — only key + template, no type/resource/actions
   const hasTemplateRef = !!bs.templateRef?.templateUid;
   if (hasTemplateRef && ['createForm', 'editForm'].includes(btype)) {
     // Return minimal compose block — template handles everything

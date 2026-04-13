@@ -309,41 +309,9 @@ async function exportSingleTab(
     allPopupRefs.push(...exported.popupRefs);
   }
 
-  // Dereference reference blocks → convert to actual form/table content
-  for (let bi = 0; bi < blocks.length; bi++) {
-    const b = blocks[bi] as Record<string, unknown>;
-    if (b.type !== 'reference') continue;
-    const ref = (b._reference || b.templateRef) as Record<string, unknown> | undefined;
-    const targetUid = ref?.targetUid as string;
-    if (!targetUid) continue;
-
-    try {
-      const targetData = await nb.get({ uid: targetUid });
-      const targetTree = targetData.tree;
-      const targetType = TYPE_MAP[targetTree.use || ''] || 'createForm';
-      const targetColl = ((targetTree.stepParams as Record<string, unknown>)
-        ?.resourceSettings as Record<string, unknown>)
-        ?.init as Record<string, unknown>;
-
-      // Export target form as a regular block
-      const usedKeysRef = new Set<string>();
-      const exported = exportBlock(targetTree as any, jsDir, prefix, bi, usedKeysRef);
-      if (exported) {
-        const resolvedSpec = { ...exported.spec } as Record<string, unknown>;
-        resolvedSpec.key = targetType; // use actual type as key (table, createForm, etc.)
-        resolvedSpec.type = targetType;
-        if (targetColl?.collectionName) resolvedSpec.coll = targetColl.collectionName;
-        delete resolvedSpec._popups;
-        delete resolvedSpec._reference;
-        // Preserve templateRef for deploy
-        resolvedSpec.templateRef = ref;
-        blocks[bi] = resolvedSpec;
-        allPopupRefs.push(...exported.popupRefs);
-      }
-    } catch {
-      // Can't dereference — keep as reference block
-    }
-    delete b._reference;
+  // Reference blocks: keep as-is (templateRef preserved from lookup above)
+  for (const b of blocks) {
+    delete (b as Record<string, unknown>)._reference;
   }
 
   // Inline popup content into clickToOpen fields
@@ -712,60 +680,9 @@ async function exportGridBlocks(
     } catch { /* best effort */ }
   }
 
-  // Resolve ReferenceFormGridModel — follow template to get actual fields
+  // Reference blocks: keep as-is (templateRef preserved from lookup above)
   for (const b of blocks) {
-    const br = b as Record<string, unknown>;
-    const tplRef = br.templateRef as Record<string, unknown>;
-    if (!tplRef?.targetUid) continue;
-    try {
-      const targetData = await nb.get({ uid: tplRef.targetUid as string });
-      const targetGrid = targetData.tree.subModels?.grid;
-      if (!targetGrid || Array.isArray(targetGrid)) continue;
-      const targetItems = (targetGrid as FlowModelNode).subModels?.items;
-      const tItems = (Array.isArray(targetItems) ? targetItems : []) as FlowModelNode[];
-      // Extract field paths from template
-      const tplFields: string[] = [];
-      for (const ti of tItems) {
-        const fp = ((ti.stepParams as Record<string, unknown>)?.fieldSettings as Record<string, unknown>)
-          ?.init as Record<string, unknown>;
-        const fieldPath = fp?.fieldPath as string;
-        if (fieldPath) tplFields.push(fieldPath);
-      }
-      if (tplFields.length && !(br.fields as unknown[])?.length) {
-        br.fields = tplFields;
-      }
-    } catch { /* template read failed — fields stay empty */ }
-    // templateRef kept — fields resolved but ref info preserved for deploy
-  }
-
-  // Dereference reference blocks (both _reference from stepParams and templateRef from usages)
-  for (let bi = 0; bi < blocks.length; bi++) {
-    const b = blocks[bi] as Record<string, unknown>;
-    if (b.type !== 'reference') continue;
-    const ref = (b._reference || b.templateRef) as Record<string, unknown> | undefined;
-    const targetUid = ref?.targetUid as string;
-    if (!targetUid) continue;
-    try {
-      const targetData = await nb.get({ uid: targetUid });
-      const targetType = TYPE_MAP[targetData.tree.use || ''] || 'createForm';
-      const targetColl = ((targetData.tree.stepParams as Record<string, unknown>)
-        ?.resourceSettings as Record<string, unknown>)?.init as Record<string, unknown>;
-      const usedKeysRef = new Set<string>();
-      const resolved = exportBlock(targetData.tree as any, jsDir, prefix, bi, usedKeysRef);
-      if (resolved) {
-        const rspec = { ...resolved.spec } as Record<string, unknown>;
-        rspec.key = targetType;  // use actual type as key (table, createForm, etc.)
-        rspec.type = targetType;
-        if (targetColl?.collectionName) rspec.coll = targetColl.collectionName;
-        delete rspec._popups;
-        delete rspec._reference;
-        // Preserve templateRef for deploy to use reference mode
-        rspec.templateRef = ref;
-        blocks[bi] = rspec;
-        popupRefs.push(...resolved.popupRefs);
-      }
-    } catch { /* keep as reference */ }
-    delete b._reference;
+    delete (b as Record<string, unknown>)._reference;
   }
 
   // Extract grid layout (how blocks are arranged in rows/columns)
