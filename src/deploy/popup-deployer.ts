@@ -113,9 +113,11 @@ export async function deployPopup(
             }
             return blocksState;
           }
-          // No state → full deploy via deploySurface
+          // No state → extract live blocks, then sync via deploySurface
+          const liveBlocks = extractLiveBlockState(tabArr, blocks);
+          const composeTarget = findChildPageTabUid(tree) || targetUid;
           const syncResult = await deploySurface(
-            nb, targetUid, { blocks, coll, layout: popupLayout } as any, modDir, false, {}, log,
+            nb, composeTarget, { blocks, coll, layout: popupLayout } as any, modDir, false, liveBlocks, log,
           );
           return syncResult;
         }
@@ -164,14 +166,110 @@ async function deploySimplePopup(
   modDir: string,
   log: (msg: string) => void,
 ): Promise<Record<string, BlockState>> {
+  // Find ChildPage tab UID — compose can't target column/action wrappers directly
+  let composeTarget = targetUid;
+  try {
+    const data = await nb.get({ uid: targetUid });
+    const tabUid = findChildPageTabUid(data.tree);
+    if (tabUid) composeTarget = tabUid;
+  } catch { /* proceed with targetUid */ }
+
   const spec = {
     coll,
     blocks: popupSpec.blocks || [],
     layout: popupSpec.layout,
   };
-  const blocksState = await deploySurface(nb, targetUid, spec as any, modDir, false, {}, log);
+  const blocksState = await deploySurface(nb, composeTarget, spec as any, modDir, false, {}, log);
   log(`  + popup [${targetRef}]: ${Object.keys(blocksState).length} blocks`);
   return blocksState;
+}
+
+/**
+ * Find the first tab UID inside a ChildPage, checking both direct .page and .field.page paths.
+ */
+function findChildPageTabUid(tree: Record<string, unknown>): string | null {
+  const subs = tree.subModels as Record<string, unknown> | undefined;
+  if (!subs) return null;
+
+  // Direct: target.subModels.page
+  let page = subs.page as Record<string, unknown> | undefined;
+  if (!page || Array.isArray(page)) {
+    // Table column: target.subModels.field.subModels.page
+    const field = subs.field as Record<string, unknown> | undefined;
+    if (field && !Array.isArray(field)) {
+      page = (field.subModels as Record<string, unknown>)?.page as Record<string, unknown> | undefined;
+    }
+  }
+  if (!page || Array.isArray(page)) return null;
+
+  const pageSubs = page.subModels as Record<string, unknown> | undefined;
+  const tabs = pageSubs?.tabs;
+  const tabArr = Array.isArray(tabs) ? tabs : tabs ? [tabs] : [];
+  if (tabArr.length) {
+    return (tabArr[0] as Record<string, unknown>).uid as string || null;
+  }
+  return null;
+}
+
+/**
+ * Extract block state from live popup tab tree, mapping by spec keys.
+ * Used when popup has content but no saved state (first deploy sync).
+ */
+function extractLiveBlockState(
+  tabArr: unknown[],
+  specBlocks: BlockSpec[],
+): Record<string, BlockState> {
+  const result: Record<string, BlockState> = {};
+  if (!tabArr.length) return result;
+
+  const t0 = tabArr[0] as Record<string, unknown>;
+  const g = (t0.subModels as Record<string, unknown>)?.grid as Record<string, unknown>;
+  const items = (g?.subModels as Record<string, unknown>)?.items;
+  const itemArr = (Array.isArray(items) ? items : []) as Record<string, unknown>[];
+
+  // Map items to spec blocks by position (same order as compose creates them)
+  for (let i = 0; i < Math.min(itemArr.length, specBlocks.length); i++) {
+    const item = itemArr[i];
+    const bs = specBlocks[i];
+    const key = bs.key || bs.type;
+    const entry: BlockState = {
+      uid: (item.uid as string) || '',
+      type: bs.type,
+      grid_uid: '',
+    };
+
+    // Extract inner grid UID
+    const innerGrid = (item.subModels as Record<string, unknown>)?.grid as Record<string, unknown>;
+    if (innerGrid?.uid) entry.grid_uid = (innerGrid.uid as string) || '';
+
+    // Extract field UIDs from columns or grid items
+    const cols = (item.subModels as Record<string, unknown>)?.columns;
+    const colArr = (Array.isArray(cols) ? cols : []) as Record<string, unknown>[];
+    if (colArr.length) {
+      entry.fields = {};
+      for (const col of colArr) {
+        const fp = ((col.stepParams as Record<string, unknown>)?.fieldSettings as Record<string, unknown>)
+          ?.init as Record<string, unknown>;
+        const fieldPath = (fp?.fieldPath || '') as string;
+        if (fieldPath) entry.fields[fieldPath] = { wrapper: (col.uid as string) || '', field: '' };
+      }
+    }
+    // Also check grid items for form fields
+    const gridItems = (innerGrid?.subModels as Record<string, unknown>)?.items;
+    const gridItemArr = (Array.isArray(gridItems) ? gridItems : []) as Record<string, unknown>[];
+    if (gridItemArr.length && !entry.fields) {
+      entry.fields = {};
+      for (const gi of gridItemArr) {
+        const fp = ((gi.stepParams as Record<string, unknown>)?.fieldSettings as Record<string, unknown>)
+          ?.init as Record<string, unknown>;
+        const fieldPath = (fp?.fieldPath || '') as string;
+        if (fieldPath) entry.fields[fieldPath] = { wrapper: (gi.uid as string) || '', field: '' };
+      }
+    }
+
+    result[key] = entry;
+  }
+  return result;
 }
 
 async function deployTabbedPopup(

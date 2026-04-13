@@ -30,6 +30,7 @@ export async function deployClickToOpen(
   allBlocksState: Record<string, BlockState>,
   popupContext: PopupContext,
   log: LogFn,
+  popupTargetFields?: Set<string>,
 ): Promise<void> {
   if (bs.type !== 'table') return;
 
@@ -72,13 +73,15 @@ export async function deployClickToOpen(
           continue;
         }
 
-        // ── Path 3/4/5: Circular, template, or default ──
+        // ── Path 3/4/5: Circular, template, popup file, or default ──
         const isCircular = popupContext.seenColls.has(popupColl);
+        // If a popup YAML file handles this field, skip content creation here
+        const hasPopupFile = popupTargetFields?.has(fp);
 
         if (isCircular) {
           // Circular reference → stop recursion
           log(`      ~ clickToOpen: ${fp} (circular: ${popupColl}, stop)`);
-          await deployDefaultDetails(nb, fieldUid, popupColl);
+          if (!hasPopupFile) await deployDefaultDetails(nb, fieldUid, popupColl);
           update.popupSettings = makePopupSettings(fieldUid, popupColl, ps);
         } else {
           const hasTemplateRef = !!ps?.popupTemplateUid;
@@ -86,8 +89,11 @@ export async function deployClickToOpen(
           if (hasTemplateRef) {
             // Has popup template → keep as reference (don't expand)
             log(`      ~ clickToOpen: ${fp} (popup template ref)`);
+          } else if (hasPopupFile) {
+            // Popup YAML file exists → popup deployer handles content
+            log(`      ~ clickToOpen: ${fp} (popup file handles content)`);
           } else {
-            // No template ref → deploy default details
+            // No template ref, no popup file → deploy default details
             await deployDefaultDetails(nb, fieldUid, popupColl);
             log(`      ~ clickToOpen: ${fp} (default details)`);
           }

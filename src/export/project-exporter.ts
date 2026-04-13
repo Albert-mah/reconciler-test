@@ -312,9 +312,9 @@ async function exportSingleTab(
   // Dereference reference blocks → convert to actual form/table content
   for (let bi = 0; bi < blocks.length; bi++) {
     const b = blocks[bi] as Record<string, unknown>;
-    if (b.type !== 'reference' || !b._reference) continue;
-    const ref = b._reference as Record<string, unknown>;
-    const targetUid = ref.targetUid as string;
+    if (b.type !== 'reference') continue;
+    const ref = (b._reference || b.templateRef) as Record<string, unknown> | undefined;
+    const targetUid = ref?.targetUid as string;
     if (!targetUid) continue;
 
     try {
@@ -335,8 +335,8 @@ async function exportSingleTab(
         if (targetColl?.collectionName) resolvedSpec.coll = targetColl.collectionName;
         delete resolvedSpec._popups;
         delete resolvedSpec._reference;
-        // Save reference info as comment
-        resolvedSpec._dereferenced_from = ref.templateName;
+        // Preserve templateRef for deploy
+        resolvedSpec.templateRef = ref;
         blocks[bi] = resolvedSpec;
         allPopupRefs.push(...exported.popupRefs);
       }
@@ -738,12 +738,12 @@ async function exportGridBlocks(
     // templateRef kept — fields resolved but ref info preserved for deploy
   }
 
-  // Dereference reference blocks
+  // Dereference reference blocks (both _reference from stepParams and templateRef from usages)
   for (let bi = 0; bi < blocks.length; bi++) {
     const b = blocks[bi] as Record<string, unknown>;
-    if (b.type !== 'reference' || !b._reference) continue;
-    const ref = b._reference as Record<string, unknown>;
-    const targetUid = ref.targetUid as string;
+    if (b.type !== 'reference') continue;
+    const ref = (b._reference || b.templateRef) as Record<string, unknown> | undefined;
+    const targetUid = ref?.targetUid as string;
     if (!targetUid) continue;
     try {
       const targetData = await nb.get({ uid: targetUid });
@@ -759,7 +759,8 @@ async function exportGridBlocks(
         if (targetColl?.collectionName) rspec.coll = targetColl.collectionName;
         delete rspec._popups;
         delete rspec._reference;
-        rspec._dereferenced_from = ref.templateName;
+        // Preserve templateRef for deploy to use reference mode
+        rspec.templateRef = ref;
         blocks[bi] = rspec;
         popupRefs.push(...resolved.popupRefs);
       }

@@ -26,6 +26,7 @@ export async function deploySurface(
   existingState: Record<string, BlockState> = {},
   log: (msg: string) => void = console.log,
   popupContext?: { seenColls: Set<string> },
+  popupTargetFields?: Set<string>,
 ): Promise<Record<string, BlockState>> {
   const coll = (spec as { coll?: string }).coll || '';
   const blocksSpec = (spec as { blocks?: BlockSpec[] }).blocks || [];
@@ -108,7 +109,7 @@ export async function deploySurface(
       }
 
       // Update content (JS, charts, title, actions, settings)
-      await fillBlock(nb, blockUid, blockGrid, bs, coll, modDir, blocksState[key], blocksState, gridUid, log, popupContext);
+      await fillBlock(nb, blockUid, blockGrid, bs, coll, modDir, blocksState[key], blocksState, gridUid, log, popupContext, popupTargetFields);
 
       // Reorder columns AFTER fillBlock (JS columns created by deployJsColumns)
       if (bs.type === 'table') {
@@ -198,7 +199,7 @@ export async function deploySurface(
         const key = bs.key || bs.type;
         if (key in existing) continue;
         if (!blocksState[key]) continue;
-        await fillBlock(nb, blocksState[key].uid, blocksState[key].grid_uid || '', bs, coll, modDir, blocksState[key], blocksState, gridUid, log);
+        await fillBlock(nb, blocksState[key].uid, blocksState[key].grid_uid || '', bs, coll, modDir, blocksState[key], blocksState, gridUid, log, undefined, popupTargetFields);
       }
     } catch (e) {
       log(`    ! compose: ${e instanceof Error ? e.message : e}`);
@@ -332,7 +333,7 @@ export async function deploySurface(
       }
 
       // Fill content (non-compose actions, JS, field_layout, etc.)
-      await fillBlock(nb, newUid, blocksState[key].grid_uid || '', bs, coll, modDir, blocksState[key], blocksState, gridUid, log);
+      await fillBlock(nb, newUid, blocksState[key].grid_uid || '', bs, coll, modDir, blocksState[key], blocksState, gridUid, log, undefined, popupTargetFields);
     } catch (e) {
       log(`    ! save_model ${key}: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
     }

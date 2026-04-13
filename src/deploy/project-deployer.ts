@@ -525,6 +525,9 @@ async function deployOnePage(
     log(`  = page: ${pageInfo.title}`);
   }
 
+  // Build popup target fields so click-to-open skips content for fields handled by popup YAML
+  const popupTargetFields = buildPopupTargetFields(pageInfo.popups);
+
   // Deploy surface — handle multi-tab pages
   const tabs = pageInfo.layout.tabs;
   if (tabs && tabs.length > 1) {
@@ -533,7 +536,7 @@ async function deployOnePage(
     const firstTabSpec = { ...pageInfo.layout, blocks: tabs[0].blocks || [] };
     const firstBlocks = await deploySurface(
       nb, pageState.tab_uid, firstTabSpec, fs.existsSync(firstTabDir) ? firstTabDir : pageInfo.dir,
-      force, pageState.blocks, log,
+      force, pageState.blocks, log, undefined, popupTargetFields,
     );
     pageState.blocks = firstBlocks;
 
@@ -629,7 +632,7 @@ async function deployOnePage(
       const tabBlocks = await deploySurface(
         nb, tabState.tab_uid, tabSpec as any,
         fs.existsSync(tabDir) ? tabDir : pageInfo.dir,
-        force, tabState.blocks, log,
+        force, tabState.blocks, log, undefined, popupTargetFields,
       );
       tabState.blocks = tabBlocks;
       (pageState.tab_states as Record<string, unknown>)[tabSlug] = tabState;
@@ -637,7 +640,7 @@ async function deployOnePage(
   } else {
     // Single tab
     const blocksState = await deploySurface(
-      nb, pageState.tab_uid, pageInfo.layout, pageInfo.dir, force, pageState.blocks, log,
+      nb, pageState.tab_uid, pageInfo.layout, pageInfo.dir, force, pageState.blocks, log, undefined, popupTargetFields,
     );
     pageState.blocks = blocksState;
   }
@@ -684,6 +687,9 @@ async function deployPageBlueprint(
 
     // Read back page structure + run deploySurface sync for each tab
     if (pageSchemaUid) {
+      // Build popup target fields so click-to-open skips content for fields handled by popup YAML
+      const popupTargetFields = buildPopupTargetFields(pageInfo.popups);
+
       const pageData = await nb.get({ pageSchemaUid });
       const tree = pageData.tree;
       const liveTabs = tree.subModels?.tabs;
@@ -723,7 +729,7 @@ async function deployPageBlueprint(
         const existingBlocks = extractBlockState(liveTab, tabSpec.blocks || []);
 
         const blocksState = await deploySurface(
-          nb, tabUid, tabSpec, tabDir, false, existingBlocks, log,
+          nb, tabUid, tabSpec, tabDir, false, existingBlocks, log, undefined, popupTargetFields,
         );
 
         if (ti === 0) {
@@ -854,6 +860,21 @@ async function deployPagePopups(
     }
   }
   state.pages[pageKey] = pageState;
+}
+
+/**
+ * Extract field paths from popup specs that target fields in this page's blocks.
+ * Used to prevent click-to-open from creating default details when a popup YAML handles the content.
+ */
+function buildPopupTargetFields(popups: PopupSpec[]): Set<string> {
+  const result = new Set<string>();
+  for (const ps of popups) {
+    const target = ps.target || '';
+    // Match $SELF.<blockKey>.fields.<fieldPath> or nested patterns
+    const m = target.match(/\.fields\.([^.]+)$/);
+    if (m) result.add(m[1]);
+  }
+  return result;
 }
 
 /**

@@ -44,6 +44,7 @@ export async function fillBlock(
   pageGridUid = '',
   log: (msg: string) => void = console.log,
   popupContext: { seenColls: Set<string> } = { seenColls: new Set() },
+  popupTargetFields?: Set<string>,
 ): Promise<void> {
   const btype = bs.type;
   const coll = bs.coll || defaultColl;
@@ -180,7 +181,7 @@ export async function fillBlock(
   blockState.fields = fieldStates;
 
   // ── clickToOpen on table fields ──
-  await deployClickToOpen(nb, bs, coll, fieldStates, mod, allBlocksState, popupContext, log);
+  await deployClickToOpen(nb, bs, coll, fieldStates, mod, allBlocksState, popupContext, log, popupTargetFields);
 
   // ── FilterForm custom fields (FilterFormCustomFieldModel) ──
   if (btype === 'filterForm' && gridUid) {

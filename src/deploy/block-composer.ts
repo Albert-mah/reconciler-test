@@ -112,17 +112,21 @@ export function toComposeBlock(
   }
 
   // ── Template reference for forms (ReferenceFormGridModel) ──
+  // When template usage is 'block', compose only accepts key + template (no type/resource/actions)
   const hasTemplateRef = !!bs.templateRef?.templateUid;
   if (hasTemplateRef && ['createForm', 'editForm'].includes(btype)) {
-    block.template = {
-      uid: bs.templateRef!.templateUid,
-      mode: bs.templateRef!.mode || 'reference',
+    // Return minimal compose block — template handles everything
+    return {
+      key,
+      template: {
+        uid: bs.templateRef!.templateUid,
+        mode: bs.templateRef!.mode || 'reference',
+      },
     };
   }
 
   // ── Fields ──
-  // Skip fields for forms with templateRef — they use ReferenceFormGridModel instead
-  const includeFields = !hasTemplateRef && (
+  const includeFields = (
     ['table', 'createForm', 'editForm', 'details', 'filterForm'].includes(btype)
   );
 
