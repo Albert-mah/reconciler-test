@@ -191,13 +191,26 @@ export async function fillBlock(
 
   // ── FilterForm custom fields (FilterFormCustomFieldModel) ──
   if (btype === 'filterForm' && gridUid) {
+    // Check which custom fields actually exist in live tree (not just state)
+    const liveCustomNames = new Set<string>();
+    try {
+      const gridData = await nb.get({ uid: gridUid });
+      const gridItems = (gridData.tree.subModels?.items || []) as { use?: string; stepParams?: Record<string, unknown> }[];
+      for (const gi of (Array.isArray(gridItems) ? gridItems : [])) {
+        if (gi.use === 'FilterFormCustomFieldModel') {
+          const cfName = ((gi.stepParams?.formItemSettings as Record<string, unknown>)?.fieldSettings as Record<string, unknown>)?.name as string || '';
+          if (cfName) liveCustomNames.add(cfName);
+        }
+      }
+    } catch { /* skip */ }
+
     for (const f of bs.fields || []) {
       if (typeof f !== 'object' || (f as unknown as Record<string, unknown>).type !== 'custom') continue;
       const custom = f as unknown as Record<string, unknown>;
       const customName = (custom.name as string) || '';
       if (!customName) continue;
-      // Check if already exists
-      if (blockState.fields?.[customName]) continue;
+      // Check if actually exists in live tree
+      if (liveCustomNames.has(customName)) continue;
       try {
         const newUid = (await import('../utils/uid')).generateUid();
         await nb.models.save({
