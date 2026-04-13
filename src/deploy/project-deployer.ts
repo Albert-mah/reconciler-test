@@ -453,10 +453,10 @@ async function deployOnePage(
         continue;
       }
       const pp = targetRef.split('.').pop() || '';
-      const popupBlocks = await deployPopup(nb, targetUid, targetRef, ps, pageInfo.dir, force, pp, log);
+      const popupKey = targetRef.replace(`$${pageKey}.`, '');
+      const existingPopupBlocks = pageState.popups?.[popupKey]?.blocks || {};
+      const popupBlocks = await deployPopup(nb, targetUid, targetRef, ps, pageInfo.dir, force, pp, log, existingPopupBlocks);
       if (Object.keys(popupBlocks).length) {
-        // Store popup blocks in state for nested ref resolution
-        const popupKey = targetRef.replace(`$${pageKey}.`, '');
         pageState.popups[popupKey] = { target_uid: targetUid, blocks: popupBlocks };
         state.pages[pageKey] = pageState;
       }
@@ -475,10 +475,11 @@ async function deployOnePage(
           continue;
         }
         const pp = targetRef.split('.').pop() || '';
-        const popupBlocks = await deployPopup(nb, targetUid, targetRef, ps, pageInfo.dir, force, pp, log);
+        const popupKey2 = targetRef.replace(`$${pageKey}.`, '');
+        const existingPopupBlocks2 = pageState.popups?.[popupKey2]?.blocks || {};
+        const popupBlocks = await deployPopup(nb, targetUid, targetRef, ps, pageInfo.dir, force, pp, log, existingPopupBlocks2);
         if (Object.keys(popupBlocks).length) {
-          const popupKey = targetRef.replace(`$${pageKey}.`, '');
-          pageState.popups[popupKey] = { target_uid: targetUid, blocks: popupBlocks };
+          pageState.popups[popupKey2] = { target_uid: targetUid, blocks: popupBlocks };
         }
       }
     }

@@ -24,6 +24,7 @@ export async function deployPopup(
   force = false,
   popupPath = '',
   log: (msg: string) => void = console.log,
+  existingPopupBlocks: Record<string, BlockState> = {},
 ): Promise<Record<string, BlockState>> {
   const mode = popupSpec.mode || 'drawer';
   const coll = popupSpec.coll || '';
@@ -56,41 +57,43 @@ export async function deployPopup(
       // Content is sufficient if live has at least as many tabs and blocks as spec
       const hasContent = tabArr.length >= specTabCount && liveBlockCount >= specBlockCount && liveBlockCount > 0;
       if (hasContent) {
-        // Popup exists — sync content (fillBlock runs for templateRef, JS, etc.)
+        // Popup exists — sync content only (fillBlock for JS, templateRef, etc.)
+        // Do NOT re-compose: just update existing blocks in-place by position
         log(`  = popup [${targetRef}] (exists, sync content)`);
         const blocks = popupSpec.blocks || (tabsSpec ? tabsSpec[0]?.blocks : []) || [];
         const popupLayout = popupSpec.layout || (tabsSpec ? tabsSpec[0]?.layout : undefined);
+
         if (blocks.length) {
-          // Build existingState from live popup blocks so deploySurface skips compose
-          const existingBlocks: Record<string, BlockState> = {};
-          for (const t of tabArr) {
-            const tg = (t as unknown as Record<string, unknown>).subModels as Record<string, unknown>;
-            const tGrid = tg?.grid as Record<string, unknown>;
-            const tItems = (tGrid?.subModels as Record<string, unknown>)?.items;
-            if (!Array.isArray(tItems)) continue;
-            for (const ti of tItems) {
-              const tiObj = ti as Record<string, unknown>;
-              const tiUse = tiObj.use as string || '';
-              const tiUid = tiObj.uid as string || '';
-              // Match by block type to spec key
-              for (const bs of blocks) {
-                const specKey = bs.key || bs.type;
-                if (specKey in existingBlocks) continue;
-                const TYPE_MAP: Record<string, string> = {
-                  TableBlockModel: 'table', FilterFormBlockModel: 'filterForm',
-                  CreateFormModel: 'createForm', EditFormModel: 'editForm',
-                  DetailsBlockModel: 'details', ListBlockModel: 'list',
-                  JSBlockModel: 'jsBlock', CommentsBlockModel: 'comments',
-                };
-                if (TYPE_MAP[tiUse] === bs.type || tiUse.toLowerCase().includes(bs.type.toLowerCase())) {
-                  existingBlocks[specKey] = { uid: tiUid, type: bs.type, grid_uid: '' };
-                  break;
+          // Use state-based key→uid mapping (from previous deploy)
+          // Falls back to deploySurface if no state exists
+          if (Object.keys(existingPopupBlocks).length) {
+            const { fillBlock } = await import('./block-filler');
+            const blocksState = { ...existingPopupBlocks };
+            for (const bs of blocks) {
+              const key = bs.key || bs.type;
+              const existing = blocksState[key];
+              if (!existing?.uid) continue;
+              await fillBlock(nb, existing.uid, existing.grid_uid || '', bs, coll, modDir, existing, blocksState, '', log);
+            }
+            // Apply layout
+            if (popupLayout) {
+              const { parseLayoutSpec, applyLayout } = await import('../layout/layout-engine');
+              const tg0 = (tabArr[0] as unknown as Record<string, unknown>).subModels as Record<string, unknown>;
+              const gridUid = (tg0?.grid as Record<string, unknown>)?.uid as string || '';
+              if (gridUid) {
+                const uidMap: Record<string, string> = {};
+                for (const [k, v] of Object.entries(blocksState)) {
+                  if (v.uid) uidMap[k] = v.uid;
                 }
+                const layout = parseLayoutSpec(popupLayout as any[], Object.keys(uidMap));
+                await applyLayout(nb, gridUid, layout, uidMap);
               }
             }
+            return blocksState;
           }
+          // No state → full deploy via deploySurface
           const syncResult = await deploySurface(
-            nb, targetUid, { blocks, coll, layout: popupLayout } as any, modDir, false, existingBlocks, log,
+            nb, targetUid, { blocks, coll, layout: popupLayout } as any, modDir, false, {}, log,
           );
           return syncResult;
         }
