@@ -277,7 +277,19 @@ export async function deploySurface(
         }
       } catch { /* skip */ }
 
-      // Fill content (actions, JS, field_layout, etc.)
+      // Add compose-type actions (filter/refresh/addNew etc.) via API
+      // These are normally created by compose, but save_model blocks skip compose
+      const COMPOSE_ACTIONS_SET = new Set(['filter', 'refresh', 'addNew', 'delete', 'bulkDelete', 'submit', 'reset']);
+      for (const aspec of bs.actions || []) {
+        const atype = typeof aspec === 'string' ? aspec : (aspec as Record<string, unknown>).type as string;
+        if (COMPOSE_ACTIONS_SET.has(atype)) {
+          try {
+            await nb.surfaces.addAction(newUid, atype);
+          } catch { /* skip — might not be supported for this block type */ }
+        }
+      }
+
+      // Fill content (non-compose actions, JS, field_layout, etc.)
       await fillBlock(nb, newUid, blocksState[key].grid_uid || '', bs, coll, modDir, blocksState[key], blocksState, gridUid, log);
     } catch (e) {
       log(`    ! save_model ${key}: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
