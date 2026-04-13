@@ -133,6 +133,7 @@ export async function deploySurface(
       }
       const layout = parseLayoutSpec(layoutSpec, Object.keys(uidMap));
       await applyLayout(nb, gridUid, layout, uidMap);
+      log(`    layout: ${layoutSpec.map(r => Array.isArray(r) ? `[${r.map(c => typeof c === 'string' ? c : Object.entries(c).map(([k, v]) => `${k}:${v}`).join(',')).join(', ')}]` : String(r)).join(' | ')}`);
     }
 
     return blocksState;

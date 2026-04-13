@@ -151,6 +151,7 @@ export function readPageDir(pageDir: string, title: string, icon?: string): Page
       tabs: tabs.length > 1 ? tabs.map(t => ({
         title: t.title,
         blocks: t.blocks,
+        layout: t.layout,
       })) : undefined,
     };
   } else {
