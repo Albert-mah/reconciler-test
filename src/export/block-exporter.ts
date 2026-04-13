@@ -7,7 +7,7 @@ import type { NocoBaseClient } from '../client';
 import type { FlowModelNode } from '../types/api';
 import { slugify } from '../utils/slugify';
 import { dumpYaml } from '../utils/yaml';
-import { extractJsDesc } from '../utils/js-utils';
+import { extractJsDesc, stripAutoHeader } from '../utils/js-utils';
 import { actionKey as genActionKey } from '../utils/action-key';
 
 function ensureDir(filePath: string) {
@@ -149,7 +149,7 @@ export function exportBlock(
       if (desc) spec.desc = desc;
       if (jsDir) {
         const fname = prefix ? `${prefix}_${key}.js` : `${key}.js`;
-        safeWrite(path.join(jsDir, fname), code);
+        safeWrite(path.join(jsDir, fname), stripAutoHeader(code));
         spec.file = `./js/${fname}`;
       }
     }
@@ -278,7 +278,7 @@ export function exportBlock(
           const eventsDir = path.join(path.dirname(jsDir), 'events');
           fs.mkdirSync(eventsDir, { recursive: true });
           const fname = `${prefix}_${key}_event_${flowKey}_${stepKey}.js`;
-          safeWrite(path.join(eventsDir, fname), code);
+          safeWrite(path.join(eventsDir, fname), stripAutoHeader(code));
           eventFlows.push({
             event: fd.on || 'formValuesChange',
             flow_key: flowKey,
@@ -369,7 +369,7 @@ function exportTableContents(
       if (code && jsDir) {
         const safe = slugify(title || desc || `col_${jsCols.length}`);
         const fname = `${prefix}_${blockKey}_col_${safe}.js`;
-        safeWrite(path.join(jsDir, fname), code);
+        safeWrite(path.join(jsDir, fname), stripAutoHeader(code));
         jsCols.push({
           key: safe, field: fieldPath || '',
           file: `./js/${fname}`,
@@ -497,7 +497,7 @@ function exportFormContents(
 
       if (code && jsDir) {
         const fname = `${prefix}_${blockKey}_${jsName}.js`;
-        safeWrite(path.join(jsDir, fname), code);
+        safeWrite(path.join(jsDir, fname), stripAutoHeader(code));
         jsItems.push({ key: jsName, file: `./js/${fname}`, desc });
       }
       uidToName.set(gi.uid, desc ? `[JS:${desc}]` : '[JS]');

@@ -46,6 +46,26 @@ export function replaceJsUids(
 }
 
 /**
+ * Strip NocoBase auto-generated header comment (/** @type JSBlockModel *​/).
+ * Keeps headers that have real descriptions (non-@-only content).
+ */
+export function stripAutoHeader(code: string): string {
+  const match = code.match(/^\/\*\*([\s\S]*?)\*\/\s*\n?/);
+  if (!match) return code;
+
+  // Check if header has any non-@ content
+  const lines = match[1].split('\n')
+    .map(l => l.replace(/^\s*\*\s?/, '').trim())
+    .filter(l => l && !l.startsWith('@'));
+
+  if (lines.length === 0) {
+    // Pure auto-generated header — strip it
+    return code.slice(match[0].length);
+  }
+  return code;
+}
+
+/**
  * Extract description from JS code header comment.
  * Skips auto-generated annotations (@type, @collection, @fields).
  */
