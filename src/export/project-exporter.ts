@@ -222,7 +222,34 @@ async function exportSingleTab(
   const eventsDir = path.join(outDir, 'events');
 
   const rawItems = gridNode.subModels?.items;
-  const items = (Array.isArray(rawItems) ? rawItems : []) as FlowModelNode[];
+  let items = (Array.isArray(rawItems) ? rawItems : []) as FlowModelNode[];
+
+  // Sort items by layout display order (gridSettings.grid.rows) for deterministic key assignment
+  const gridSettings = (gridNode.stepParams as Record<string, unknown>)?.gridSettings as Record<string, unknown>;
+  const gridRows = (gridSettings?.grid as Record<string, unknown>)?.rows as Record<string, string[][]> | undefined;
+  if (gridRows) {
+    const uidOrder = new Map<string, number>();
+    let order = 0;
+    for (const rowCells of Object.values(gridRows)) {
+      if (Array.isArray(rowCells)) {
+        for (const cell of rowCells) {
+          if (Array.isArray(cell)) {
+            for (const uid of cell) {
+              if (typeof uid === 'string') uidOrder.set(uid, order++);
+            }
+          }
+        }
+      }
+    }
+    if (uidOrder.size) {
+      items = [...items].sort((a, b) => {
+        const oa = uidOrder.get(a.uid) ?? 999;
+        const ob = uidOrder.get(b.uid) ?? 999;
+        return oa - ob;
+      });
+    }
+  }
+
   const usedKeys = new Set<string>();
 
   const blocks: Record<string, unknown>[] = [];
