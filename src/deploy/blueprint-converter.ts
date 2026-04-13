@@ -240,7 +240,7 @@ function blockSpecToBlueprint(bs: BlockSpec, pageDir: string, tabKey = 'main'): 
   const BLUEPRINT_ACTION_KEYS = new Set(['key', 'type', 'title', 'settings', 'popup', 'script', 'chart']);
   const BLUEPRINT_SUPPORTED_ACTIONS = new Set([
     'filter', 'refresh', 'addNew', 'delete', 'bulkDelete',
-    'submit', 'reset', 'export', 'import',
+    'submit', 'reset', 'export', 'import', 'link',
     'edit', 'view', 'duplicate', 'updateRecord', 'addChild',
   ]);
   if (bs.actions?.length) {
