@@ -533,7 +533,9 @@ async function deployOnePage(
   if (tabs && tabs.length > 1) {
     // Multi-tab: deploy first tab to main tabSchemaUid
     const firstTabDir = path.join(pageInfo.dir, `tab_${slugify(tabs[0].title || 'tab0')}`);
-    const firstTabSpec = { ...pageInfo.layout, blocks: tabs[0].blocks || [] };
+    // Deep-clone layout to avoid stale references (blueprint converter may have mutated shared refs)
+    const firstTabLayout = JSON.parse(JSON.stringify(tabs[0].layout || pageInfo.layout.layout || null));
+    const firstTabSpec = { ...pageInfo.layout, blocks: tabs[0].blocks || [], layout: firstTabLayout };
     const firstBlocks = await deploySurface(
       nb, pageState.tab_uid, firstTabSpec, fs.existsSync(firstTabDir) ? firstTabDir : pageInfo.dir,
       force, pageState.blocks, log, undefined, popupTargetFields,
@@ -628,7 +630,7 @@ async function deployOnePage(
         log(`    = tab: ${tabTitle}`);
       }
 
-      const tabSpec = { blocks: tabs[ti].blocks, layout: tabs[ti].layout };
+      const tabSpec = { blocks: tabs[ti].blocks, layout: tabs[ti].layout ? JSON.parse(JSON.stringify(tabs[ti].layout)) : undefined };
       const tabBlocks = await deploySurface(
         nb, tabState.tab_uid, tabSpec as any,
         fs.existsSync(tabDir) ? tabDir : pageInfo.dir,
