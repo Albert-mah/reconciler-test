@@ -23,6 +23,8 @@ export interface FieldRef {
   filterPaths?: string[];
   fieldPath?: string;
   clickToOpen?: boolean;
+  width?: number;       // Column width (default 150, only export if non-default)
+  ellipsis?: boolean;   // Ellipsis on overflow (default true, only export if false)
   popupSettings?: {
     collectionName?: string;
     mode?: string;

@@ -251,6 +251,49 @@ export async function fillBlock(
   // ── Chart config ──
   await deployChart(nb, blockUid, bs, mod, log);
 
+  // ── Ensure compose-type actions exist ──
+  // DetailsBlockModel is a "record action container" → must use addRecordAction, not addAction.
+  // Form blocks (createForm/editForm/filterForm) use addAction normally.
+  const RECORD_ACTION_BLOCKS = new Set(['details', 'list', 'gridCard']);
+  const isRecordActionBlock = RECORD_ACTION_BLOCKS.has(btype);
+
+  const COMPOSE_ACTIONS: Record<string, string> = {
+    filter: 'FilterActionModel', refresh: 'RefreshActionModel',
+    addNew: 'AddNewActionModel', delete: 'DeleteActionModel',
+    bulkDelete: 'BulkDeleteActionModel', submit: 'SubmitActionModel',
+    reset: 'ResetActionModel', edit: 'EditActionModel', view: 'ViewActionModel',
+  };
+  for (const aspec of bs.actions || []) {
+    const atype = typeof aspec === 'string' ? aspec : (aspec as Record<string, unknown>).type as string;
+    if (!(atype in COMPOSE_ACTIONS)) continue;
+    if (blockState.actions?.[atype]) continue;  // already tracked
+    let uid = '';
+    try {
+      // Use addRecordAction for record-action containers (details/list/gridCard)
+      const result = isRecordActionBlock
+        ? await nb.surfaces.addRecordAction(blockUid, atype) as Record<string, unknown>
+        : await nb.surfaces.addAction(blockUid, atype) as Record<string, unknown>;
+      uid = (result?.uid as string) || '';
+    } catch {
+      // Fallback: save_model
+      try {
+        const { generateUid } = await import('../utils/uid');
+        uid = generateUid();
+        await nb.models.save({
+          uid, use: COMPOSE_ACTIONS[atype],
+          parentId: blockUid,
+          subKey: isRecordActionBlock ? 'recordActions' : 'actions',
+          subType: 'array',
+          sortIndex: 0, stepParams: {}, flowRegistry: {},
+        });
+      } catch { uid = ''; }
+    }
+    if (uid) {
+      if (!blockState.actions) blockState.actions = {};
+      blockState.actions[atype] = { uid };
+    }
+  }
+
   // ── Non-compose actions (legacy save_model) ──
   await deployNonComposeActions(nb, blockUid, bs, blockState, mod, log);
 

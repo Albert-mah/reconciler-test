@@ -37,6 +37,8 @@ export interface DeployAclOptions {
   dataSourceKey?: string;
   /** If true, only log what would change without making API calls. */
   dryRun?: boolean;
+  /** Pre-loaded collections metadata for offline validation (from collections.yaml). */
+  localCollections?: Record<string, { fields: Record<string, { interface: string; type: string; foreignKey?: string; target?: string }> }>;
 }
 
 /**
@@ -49,14 +51,22 @@ export async function deployAcl(
   log: LogFn = console.log,
   opts: DeployAclOptions = {},
 ): Promise<void> {
-  const aclFile = path.join(path.resolve(projectDir), 'acl.yaml');
+  const dir = path.resolve(projectDir);
+  const aclFile = path.join(dir, 'acl.yaml');
   if (!fs.existsSync(aclFile)) {
     log('  No acl.yaml found, skipping ACL deploy');
     return;
   }
 
   const spec = loadYaml<AclSpec>(aclFile);
-  await deployAclSpec(nb, spec, log, opts);
+
+  // Load local collections.yaml for offline validation (exported alongside acl.yaml)
+  const collFile = path.join(dir, 'collections.yaml');
+  const localCollections = fs.existsSync(collFile)
+    ? loadYaml<Record<string, { fields: Record<string, { interface: string; type: string; foreignKey?: string; target?: string }> }>>(collFile)
+    : undefined;
+
+  await deployAclSpec(nb, spec, log, { ...opts, localCollections });
 }
 
 /**
@@ -72,8 +82,15 @@ export async function deployAclSpec(
   const dryRun = opts.dryRun ?? false;
   const prefix = dryRun ? '  [dry-run]' : ' ';
 
-  // ── Step 0: Validate ──
+  // ── Step 0: Validate (static) ──
   validateSpec(spec);
+
+  // ── Step 0b: Validate scope filters against collection metadata ──
+  log('  Validating scope filters...');
+  const scopeErrors = await validateScopeFilters(nb, spec, log, opts.localCollections);
+  if (scopeErrors.length) {
+    throw new Error(`acl.yaml: scope filter validation failed:\n${scopeErrors.map(e => `  - ${e}`).join('\n')}`);
+  }
   log('  ACL spec validated');
 
   // ── Step 1: Fetch current state ──
@@ -226,7 +243,7 @@ export async function deployAclSpec(
       if (!dryRun && routeIds.length) {
         await nb.http.post(
           `${nb.baseUrl}/api/roles/${roleName}/desktopRoutes:set`,
-          { values: routeIds },
+          routeIds,
         );
       }
       log(`${prefix} Role '${roleName}' routes: ${routeIds.length} pages`);
@@ -236,7 +253,70 @@ export async function deployAclSpec(
   log('  ACL deploy complete');
 }
 
-// ── Validation ──
+// ── Scope filter validation (uses shared filter-validator) ──
+
+import {
+  validateFilter,
+  collectionsFromYaml,
+  type CollectionsMap,
+} from '../utils/filter-validator';
+
+async function validateScopeFilters(
+  nb: NocoBaseClient,
+  spec: AclSpec,
+  log: LogFn,
+  localCollections?: Record<string, { fields: Record<string, { interface: string; type: string; foreignKey?: string; target?: string }> }>,
+): Promise<string[]> {
+  if (!spec.scopes || !Object.keys(spec.scopes).length) return [];
+
+  // Build CollectionsMap: prefer local, fall back to API
+  let collections: CollectionsMap;
+
+  if (localCollections) {
+    log('  Using local collections.yaml for validation');
+    collections = collectionsFromYaml(localCollections);
+  } else {
+    try {
+      const resp = await nb.http.get(`${nb.baseUrl}/api/collections:list`, {
+        params: { paginate: 'false', 'appends[]': ['fields'] },
+      });
+      collections = new Map();
+      for (const c of resp.data.data || []) {
+        const fields = new Map();
+        for (const f of c.fields || []) {
+          fields.set(f.name, {
+            name: f.name,
+            interface: f.interface || '',
+            type: f.type || '',
+            foreignKey: f.foreignKey,
+            target: f.target,
+          });
+        }
+        collections.set(c.name, fields);
+      }
+    } catch {
+      log('  ! Could not fetch collection fields for scope validation, skipping');
+      return [];
+    }
+  }
+
+  const errors: string[] = [];
+  for (const [key, scopeDef] of Object.entries(spec.scopes)) {
+    if (!scopeDef.filter || typeof scopeDef.filter !== 'object') continue;
+    const issues = validateFilter(scopeDef.filter, scopeDef.collection, collections, {
+      context: `scope '${key}'`,
+      filterContext: 'acl-scope',
+    });
+    for (const issue of issues) {
+      if (issue.level === 'error') {
+        errors.push(`${issue.path}: ${issue.message}`);
+      }
+    }
+  }
+  return errors;
+}
+
+// ── Static validation ──
 
 function validateSpec(spec: AclSpec): void {
   if (!spec.roles || typeof spec.roles !== 'object') {
@@ -424,8 +504,6 @@ function resolvePagePatterns(
       const entry = routePathMap.get(pattern);
       if (entry) {
         included.add(entry.id);
-        // Also include parent groups so the route is visible in navigation
-        includeParentGroups(pattern, routePathMap, included);
       }
     }
   }
@@ -454,24 +532,6 @@ function resolvePagePatterns(
   return [...included].filter(id => !excluded.has(id)).sort((a, b) => a - b);
 }
 
-/**
- * When granting an individual page, also include its parent group routes
- * so the page is visible in navigation.
- */
-function includeParentGroups(
-  pagePath: string,
-  routePathMap: Map<string, RoutePathEntry>,
-  included: Set<number>,
-): void {
-  const parts = pagePath.split('/');
-  for (let i = 1; i < parts.length; i++) {
-    const parentPath = parts.slice(0, i).join('/');
-    const parentEntry = routePathMap.get(parentPath);
-    if (parentEntry && parentEntry.type === 'group') {
-      included.add(parentEntry.id);
-    }
-  }
-}
 
 // ── API fetch helpers (same as exporter, kept local to avoid circular deps) ──
 

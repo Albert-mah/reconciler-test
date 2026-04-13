@@ -5,7 +5,7 @@
  * Used for both pages and popup content.
  */
 import type { NocoBaseClient } from '../client';
-import type { BlockSpec, PageSpec, LayoutRow } from '../types/spec';
+import type { BlockSpec, PageSpec, LayoutRow, FieldSpec } from '../types/spec';
 import type { BlockState } from '../types/state';
 import type { ComposeBlockResult } from '../types/api';
 import { toComposeBlock } from './block-composer';
@@ -103,6 +103,11 @@ export async function deploySurface(
 
         if (bs.type === 'table' && specFields.length) {
           await reorderTableColumns(nb, blockUid, specFields);
+        }
+
+        // Apply non-default column settings (width, ellipsis)
+        if (bs.type === 'table') {
+          await applyColumnSettings(nb, blockUid, bs.fields || []);
         }
       }
 
@@ -338,4 +343,46 @@ export async function deploySurface(
   }
 
   return blocksState;
+}
+
+/**
+ * Apply non-default column settings (width, ellipsis) to table columns.
+ * Only sets values that differ from defaults (width=150, ellipsis=true).
+ */
+async function applyColumnSettings(
+  nb: NocoBaseClient,
+  blockUid: string,
+  fields: FieldSpec[],
+): Promise<void> {
+  // Collect fields with custom settings
+  const customFields = new Map<string, { width?: number; ellipsis?: boolean }>();
+  for (const f of fields) {
+    if (typeof f === 'string') continue;
+    if (!f.field) continue;
+    if (f.width || f.ellipsis === false) {
+      customFields.set(f.field, { width: f.width, ellipsis: f.ellipsis });
+    }
+  }
+  if (!customFields.size) return;
+
+  // Read live columns to find UIDs
+  try {
+    const data = await nb.get({ uid: blockUid });
+    const cols = data.tree.subModels?.columns;
+    const colArr = (Array.isArray(cols) ? cols : []) as { uid: string; stepParams?: Record<string, unknown> }[];
+
+    for (const col of colArr) {
+      const fp = ((col.stepParams?.fieldSettings as Record<string, unknown>)?.init as Record<string, unknown>)?.fieldPath as string || '';
+      const custom = customFields.get(fp);
+      if (!custom) continue;
+
+      const patch: Record<string, unknown> = {};
+      if (custom.width) patch.width = { width: custom.width };
+      if (custom.ellipsis === false) patch.ellipsis = { ellipsis: false };
+
+      if (Object.keys(patch).length) {
+        await nb.updateModel(col.uid, { tableColumnSettings: patch });
+      }
+    }
+  } catch { /* best effort */ }
 }

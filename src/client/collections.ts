@@ -12,6 +12,31 @@ export class CollectionsApi {
     private baseUrl: string,
   ) {}
 
+  /**
+   * Upsert a collection via collections:apply (high-level modeling API).
+   * Creates if new, updates if exists. Handles fields in one call.
+   */
+  async apply(definition: {
+    name: string;
+    title?: string;
+    fields?: Record<string, unknown>[];
+    [key: string]: unknown;
+  }) {
+    const resp = await this.http.post(`${this.baseUrl}/api/collections:apply`, definition);
+    return resp.data.data;
+  }
+
+  /**
+   * Upsert a single field via fields:apply.
+   */
+  async applyField(collectionName: string, field: Record<string, unknown>) {
+    const resp = await this.http.post(`${this.baseUrl}/api/fields:apply`, {
+      collectionName,
+      ...field,
+    });
+    return resp.data.data;
+  }
+
   async exists(name: string): Promise<boolean> {
     const resp = await this.http.get(`${this.baseUrl}/api/collections:list`, {
       params: { paginate: 'false' },

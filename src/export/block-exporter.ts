@@ -403,7 +403,20 @@ function exportTableContents(
         }
         fields.push(fieldSpec);
       } else {
-        fields.push(fieldPath);
+        // Check for non-default column settings (width, ellipsis)
+        const colSettings = (col.stepParams as Record<string, unknown>)?.tableColumnSettings as Record<string, unknown>;
+        const colWidth = (colSettings?.width as Record<string, unknown>)?.width as number | undefined;
+        const colEllipsis = (colSettings?.ellipsis as Record<string, unknown>)?.ellipsis as boolean | undefined;
+        const hasCustomSettings = (colWidth !== undefined && colWidth !== 150) || colEllipsis === false;
+
+        if (hasCustomSettings) {
+          const fieldSpec: Record<string, unknown> = { field: fieldPath };
+          if (colWidth !== undefined && colWidth !== 150) fieldSpec.width = colWidth;
+          if (colEllipsis === false) fieldSpec.ellipsis = false;
+          fields.push(fieldSpec as any);
+        } else {
+          fields.push(fieldPath);
+        }
       }
     }
 

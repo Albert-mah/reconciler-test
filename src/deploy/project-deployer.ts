@@ -32,10 +32,11 @@ import { postVerify } from './post-verify';
 import { verifySqlFromPages } from './sql-verifier';
 import { discoverPages, type RouteEntry, type PageInfo } from './page-discovery';
 import { RefResolver } from '../refs';
+import { pageToBlueprint } from './blueprint-converter';
 
 export async function deployProject(
   projectDir: string,
-  opts: { force?: boolean; planOnly?: boolean; group?: string; page?: string } = {},
+  opts: { force?: boolean; planOnly?: boolean; group?: string; page?: string; blueprint?: boolean } = {},
   log: (msg: string) => void = console.log,
 ): Promise<void> {
   const root = path.resolve(projectDir);
@@ -60,8 +61,9 @@ export async function deployProject(
   }
 
   // Discover all pages from directory tree
+  // --group only controls the target menu group name in NocoBase, not page file discovery
   const pagesDir = path.join(root, 'pages');
-  let pages = discoverPages(pagesDir, routes, opts.group);
+  let pages = discoverPages(pagesDir, routes);
 
   // Filter to single page if specified
   if (opts.page) {
@@ -155,14 +157,18 @@ export async function deployProject(
     templateUidMap = await deployTemplates(nb, root, log);
   }
 
-  // Routes + pages (skip duplicate groups)
+  // Routes + pages
+  // --group overrides the target group name (e.g. deploy "Main" pages as "CRM Copy")
   const deployedGroups = new Set<string>();
   for (const routeEntry of routes) {
     if (routeEntry.type === 'group') {
-      if (opts.group && routeEntry.title !== opts.group) continue;
       if (deployedGroups.has(routeEntry.title)) continue;
       deployedGroups.add(routeEntry.title);
-      await deployGroup(nb, routeEntry, pages, state, root, opts.force || false, log);
+      // Override group title if --group is specified
+      const targetEntry = opts.group
+        ? { ...routeEntry, title: opts.group }
+        : routeEntry;
+      await deployGroup(nb, targetEntry, pages, state, root, opts.force || false, log, opts.blueprint || false);
     } else if (routeEntry.type === 'flowPage' && !opts.group) {
       const pageInfo = pages.find(p => p.title === routeEntry.title);
       if (pageInfo) {
@@ -252,8 +258,49 @@ async function deployGroup(
   root: string,
   force: boolean,
   log: (msg: string) => void,
+  useBlueprint = false,
 ): Promise<void> {
-  // Find or create group
+  // Blueprint mode: let applyBlueprint create navigation + pages in one call
+  if (useBlueprint) {
+    // Ensure group exists for sub-page blueprint calls with groupId
+    if (!state.group_id) {
+      const result = await nb.createGroup(routeEntry.title, routeEntry.icon || 'appstoreoutlined');
+      state.group_id = result.routeId;
+      log(`  + group: ${routeEntry.title}`);
+      nb.routes.clearCache();
+    } else {
+      log(`  = group: ${routeEntry.title}`);
+    }
+
+    for (const child of routeEntry.children || []) {
+      if (child.type === 'flowPage') {
+        const pageInfo = pages.find(p => p.title === child.title);
+        if (pageInfo) {
+          await deployPageBlueprint(nb, pageInfo, state, state.group_id!, routeEntry.title, log);
+        }
+      } else if (child.type === 'group') {
+        const subGroupKey = `_subgroup_${slugify(child.title)}`;
+        let subGroupId = (state as unknown as Record<string, unknown>)[subGroupKey] as number | undefined;
+        if (!subGroupId) {
+          const result = await nb.createGroup(child.title, child.icon || 'folderoutlined', state.group_id!);
+          subGroupId = result.routeId;
+          (state as unknown as Record<string, unknown>)[subGroupKey] = subGroupId;
+          log(`  + sub-group: ${child.title}`);
+        } else {
+          log(`  = sub-group: ${child.title}`);
+        }
+        for (const sc of child.children || []) {
+          const pageInfo = pages.find(p => p.title === sc.title);
+          if (pageInfo) {
+            await deployPageBlueprint(nb, pageInfo, state, subGroupId, child.title, log);
+          }
+        }
+      }
+    }
+    return;
+  }
+
+  // Legacy mode: multi-step deploy
   if (!state.group_id) {
     const result = await nb.createGroup(routeEntry.title, routeEntry.icon || 'appstoreoutlined');
     state.group_id = result.routeId;
@@ -270,7 +317,6 @@ async function deployGroup(
         await deployOnePage(nb, pageInfo, state, state.group_id!, force, log);
       }
     } else if (child.type === 'group') {
-      // Sub-group — create sub-group route under parent group
       const subGroupKey = `_subgroup_${slugify(child.title)}`;
       let subGroupId = (state as unknown as Record<string, unknown>)[subGroupKey] as number | undefined;
       if (!subGroupId) {
@@ -485,6 +531,171 @@ async function deployOnePage(
     }
   }
   state.pages[pageKey] = pageState;
+}
+
+/**
+ * Deploy a page using flowSurfaces:applyBlueprint — single API call for entire page.
+ *
+ * Creates navigation + page + all tabs + blocks + fields + actions + layout + assets.
+ * Falls back to legacy deployOnePage if blueprint fails (e.g. unsupported block types).
+ */
+async function deployPageBlueprint(
+  nb: NocoBaseClient,
+  pageInfo: PageInfo,
+  state: ModuleState,
+  groupId: number,
+  groupTitle: string,
+  log: (msg: string) => void,
+): Promise<void> {
+  const pageKey = slugify(pageInfo.title);
+  const pageState = state.pages[pageKey];
+
+  // If page already exists in state, use replace mode
+  const isReplace = !!pageState?.page_uid;
+
+  const blueprint = pageToBlueprint(pageInfo, {
+    groupId: isReplace ? undefined : groupId,
+    groupTitle: isReplace ? undefined : groupTitle,
+    mode: isReplace ? 'replace' : 'create',
+    pageSchemaUid: isReplace ? pageState.page_uid : undefined,
+  });
+
+  try {
+    const result = await nb.surfaces.applyBlueprint(blueprint as unknown as Record<string, unknown>) as Record<string, unknown>;
+    const target = (result.target || {}) as Record<string, unknown>;
+    const pageSchemaUid = (target.pageSchemaUid || '') as string;
+    const pageUid = (target.pageUid || '') as string;
+
+    log(`  ${isReplace ? '~' : '+'} page (blueprint): ${pageInfo.title}`);
+
+    // Read back page structure to build state + run fillBlock for polish
+    // (clean auto-created action columns, add non-standard actions, titles, linkage rules)
+    if (pageSchemaUid) {
+      const pageData = await nb.get({ pageSchemaUid });
+      const tree = pageData.tree;
+      const tabs = tree.subModels?.tabs;
+      const tabArr = Array.isArray(tabs) ? tabs : tabs ? [tabs] : [];
+
+      if (tabArr.length) {
+        const firstTab = tabArr[0] as unknown as Record<string, unknown>;
+        const tabUid = firstTab.uid as string || '';
+
+        // Extract block UIDs from live page tree so deploySurface sees them as "existing"
+        const existingBlocks: Record<string, BlockState> = {};
+        const tabSub = firstTab.subModels as Record<string, unknown> | undefined;
+        const tabGrid = tabSub?.grid as Record<string, unknown> | undefined;
+        const gridSub = tabGrid?.subModels as Record<string, unknown> | undefined;
+        const gridItems = gridSub?.items;
+        const itemArr = (Array.isArray(gridItems) ? gridItems : []) as Record<string, unknown>[];
+        const specBlocks = [...(pageInfo.layout.blocks || [])];
+
+        for (const item of itemArr) {
+          const uid = item.uid as string || '';
+          const use = item.use as string || '';
+          if (!uid) continue;
+
+          // Match to spec block by model name
+          const matched = specBlocks.find(b => {
+            const modelMap: Record<string, string> = {
+              table: 'TableBlockModel', filterForm: 'FilterFormBlockModel',
+              createForm: 'CreateFormModel', editForm: 'EditFormModel',
+              details: 'DetailsBlockModel', list: 'ListBlockModel',
+              gridCard: 'GridCardBlockModel', jsBlock: 'JSBlockModel',
+              chart: 'ChartBlockModel', markdown: 'MarkdownBlockModel',
+              iframe: 'IframeBlockModel',
+            };
+            return use === modelMap[b.type] || use.toLowerCase().includes(b.type.toLowerCase());
+          });
+
+          if (matched) {
+            const key = matched.key || matched.type;
+            if (!existingBlocks[key]) {
+              const entry: BlockState = { uid, type: matched.type, grid_uid: (tabGrid?.uid as string) || '' };
+
+              // For table/form blocks, extract existing field UIDs so deploySurface won't re-add them
+              const itemSub = item.subModels as Record<string, unknown> | undefined;
+              const columns = itemSub?.columns;
+              const colArr = (Array.isArray(columns) ? columns : []) as Record<string, unknown>[];
+              if (colArr.length) {
+                entry.fields = {};
+                for (const col of colArr) {
+                  const colSp = col.stepParams as Record<string, unknown> | undefined;
+                  const fieldInit = (colSp?.fieldSettings as Record<string, unknown>)?.init as Record<string, unknown> | undefined;
+                  const fp = (fieldInit?.fieldPath || '') as string;
+                  if (fp) {
+                    entry.fields[fp] = { wrapper: col.uid as string || '', field: '' };
+                  }
+                }
+              }
+
+              // Also check grid items (for form/details/filterForm blocks)
+              const blockGrid = itemSub?.grid as Record<string, unknown> | undefined;
+              const blockGridItems = (blockGrid?.subModels as Record<string, unknown> | undefined)?.items;
+              const bgItemArr = (Array.isArray(blockGridItems) ? blockGridItems : []) as Record<string, unknown>[];
+              if (bgItemArr.length && !entry.fields) {
+                entry.fields = {};
+                for (const gi of bgItemArr) {
+                  const giSp = gi.stepParams as Record<string, unknown> | undefined;
+                  const fp = ((giSp?.fieldSettings as Record<string, unknown>)?.init as Record<string, unknown>)?.fieldPath as string || '';
+                  if (fp) {
+                    entry.fields[fp] = { wrapper: gi.uid as string || '', field: '' };
+                  }
+                }
+              }
+
+              // Extract existing actions so fillBlock won't re-add them
+              const itemSub2 = item.subModels as Record<string, unknown> | undefined;
+              for (const actKey of ['actions', 'recordActions'] as const) {
+                const acts = itemSub2?.[actKey];
+                const actArr = (Array.isArray(acts) ? acts : []) as Record<string, unknown>[];
+                if (actArr.length) {
+                  const stateKey = actKey === 'recordActions' ? 'record_actions' : 'actions';
+                  if (!(entry as any)[stateKey]) (entry as any)[stateKey] = {};
+                  for (const a of actArr) {
+                    const aUid = a.uid as string || '';
+                    const aUse = a.use as string || '';
+                    // Derive action type from model name
+                    const aType = aUse.replace('ActionModel', '').replace('Action', '');
+                    const aKey = aType.charAt(0).toLowerCase() + aType.slice(1);
+                    if (aUid) (entry as any)[stateKey][aKey] = { uid: aUid };
+                  }
+                }
+              }
+
+              existingBlocks[key] = entry;
+              const idx = specBlocks.indexOf(matched);
+              if (idx >= 0) specBlocks.splice(idx, 1);
+            }
+          }
+        }
+
+        // deploySurface in sync mode — blocks exist, only fillBlock for polish
+        const blocksState = await deploySurface(
+          nb, tabUid, pageInfo.layout, pageInfo.dir, false, existingBlocks, log,
+        );
+
+        state.pages[pageKey] = {
+          route_id: (target.routeId || 0) as number,
+          page_uid: pageUid || pageSchemaUid,
+          tab_uid: tabUid,
+          blocks: blocksState,
+        };
+      } else {
+        state.pages[pageKey] = {
+          route_id: (target.routeId || 0) as number,
+          page_uid: pageUid || pageSchemaUid,
+          tab_uid: '',
+          blocks: {},
+        };
+      }
+    }
+  } catch (e) {
+    const err = e as { response?: { data?: { errors?: { message: string }[] } }; message?: string };
+    const apiMsg = err.response?.data?.errors?.[0]?.message || err.message || String(e);
+    log(`  ! blueprint failed for ${pageInfo.title}: ${apiMsg.slice(0, 120)}`);
+    log(`    falling back to legacy deploy...`);
+    await deployOnePage(nb, pageInfo, state, groupId, false, log);
+  }
 }
 
 /**

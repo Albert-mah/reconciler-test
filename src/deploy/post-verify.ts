@@ -97,8 +97,12 @@ export async function postVerify(
 
     const hasContent = await checkPopupContent(nb, targetUid);
     if (!hasContent) {
+      // Skip known unsupported: tree addChild with self-referencing association
+      const isAddChild = target.includes('addChild');
       if (isAutoEdit) {
         errors.push(`Popup ${target}: edit popup is EMPTY (no edit form inside)`);
+      } else if (isAddChild) {
+        warnings.push(`Popup ${target}: addChild popup skipped (tree association not supported by compose)`);
       } else if (blocks.length) {
         errors.push(`Popup ${target}: popup is EMPTY (no blocks inside)`);
       }

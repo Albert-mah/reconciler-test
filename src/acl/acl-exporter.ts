@@ -34,6 +34,9 @@ const SKIP_ROLES = new Set(['root']);
 /** Built-in scope keys that don't need to be declared in scopes:. */
 const BUILTIN_SCOPE_KEYS = new Set(['all', 'own']);
 
+/** Canonical action order for deterministic output. */
+const ACTION_ORDER: AclActionName[] = ['create', 'view', 'update', 'destroy', 'export', 'importXlsx'];
+
 type LogFn = (msg: string) => void;
 
 export interface ExportAclOptions {
@@ -83,6 +86,10 @@ export async function exportAcl(
   const routeIdToPath = buildRoutePathMap(routeTree);
   log(`  ${routeIdToPath.size} routes mapped`);
 
+  // ── Step 3b: Fetch collection metadata (for field optimization + scope validation) ──
+  const collMeta = await fetchCollectionsMeta(nb);
+  const collFieldCounts = collMeta.fieldCounts;
+
   // ── Step 4: For each role, fetch strategy + collections + routes ──
   const aclSpec: AclSpec = { scopes: {}, roles: {} };
   const referencedScopeIds = new Set<string | number>();
@@ -102,7 +109,8 @@ export async function exportAcl(
     for (const coll of resourceActionColls) {
       const resource = await fetchResourceDetail(nb, role.name, coll.name, ds);
       if (!resource?.actions?.length) continue;
-      const perms = convertActions(resource.actions, scopeById);
+      const totalFields = collFieldCounts.get(coll.name) ?? 0;
+      const perms = convertActions(resource.actions, scopeById, totalFields);
       if (Object.keys(perms.permissions).length) {
         collPerms[coll.name] = perms.permissions;
         for (const sid of perms.scopeIds) referencedScopeIds.add(sid);
@@ -153,6 +161,15 @@ export async function exportAcl(
     delete aclSpec.scopes;
   }
 
+  // ── Step 5b: Validate exported scope filters ──
+  if (aclSpec.scopes) {
+    const warnings = validateScopeFilters(aclSpec.scopes, collMeta.fieldsByCollection);
+    if (warnings.length) {
+      log(`  ⚠ ${warnings.length} scope filter warning(s):`);
+      for (const w of warnings) log(`    ! ${w}`);
+    }
+  }
+
   // ── Step 6: Write YAML ──
   const outDir = path.resolve(opts.outDir);
   fs.mkdirSync(outDir, { recursive: true });
@@ -160,10 +177,97 @@ export async function exportAcl(
   fs.writeFileSync(path.join(outDir, 'acl.yaml'), yamlContent, 'utf8');
   log(`  Written acl.yaml to ${outDir}`);
 
+  // ── Step 7: Write collections metadata (for offline validation) ──
+  const collSnapshot: Record<string, { title?: string; fields: Record<string, { interface: string; type: string; foreignKey?: string; target?: string }> }> = {};
+  for (const [name, fields] of collMeta.fieldsByCollection) {
+    const fieldsObj: Record<string, { interface: string; type: string; foreignKey?: string; target?: string }> = {};
+    for (const [fname, finfo] of fields) {
+      const entry: { interface: string; type: string; foreignKey?: string; target?: string } = {
+        interface: finfo.interface,
+        type: finfo.type,
+      };
+      if (finfo.foreignKey) entry.foreignKey = finfo.foreignKey;
+      if (finfo.target) entry.target = finfo.target;
+      fieldsObj[fname] = entry;
+    }
+    collSnapshot[name] = { fields: fieldsObj };
+  }
+  const collYaml = dumpYaml(collSnapshot);
+  fs.writeFileSync(path.join(outDir, 'collections.yaml'), collYaml, 'utf8');
+  log(`  Written collections.yaml (${collMeta.fieldsByCollection.size} collections)`);
+
   return aclSpec;
 }
 
 // ── API fetch helpers ──
+
+import {
+  validateFilter,
+  collectionsFromYaml,
+  type CollectionsMap,
+  type FieldMeta,
+} from '../utils/filter-validator';
+
+type CollectionFieldInfo = FieldMeta;
+
+interface CollectionsMeta {
+  fieldCounts: Map<string, number>;
+  fieldsByCollection: Map<string, Map<string, CollectionFieldInfo>>;
+}
+
+/**
+ * Fetch collection metadata: field counts + field details.
+ * Used for field optimization (omit all-fields) and scope filter validation.
+ */
+async function fetchCollectionsMeta(nb: NocoBaseClient): Promise<CollectionsMeta> {
+  const fieldCounts = new Map<string, number>();
+  const fieldsByCollection = new Map<string, Map<string, CollectionFieldInfo>>();
+  try {
+    const resp = await nb.http.get(`${nb.baseUrl}/api/collections:list`, {
+      params: { paginate: 'false', 'appends[]': ['fields'] },
+    });
+    for (const c of resp.data.data || []) {
+      const fields = new Map<string, CollectionFieldInfo>();
+      for (const f of c.fields || []) {
+        fields.set(f.name, {
+          name: f.name,
+          interface: f.interface || '',
+          type: f.type || '',
+          foreignKey: f.foreignKey,
+          target: f.target,
+        });
+      }
+      fieldCounts.set(c.name, (c.fields || []).length);
+      fieldsByCollection.set(c.name, fields);
+    }
+  } catch {
+    // Non-fatal — features will degrade gracefully
+  }
+  return { fieldCounts, fieldsByCollection };
+}
+
+/**
+ * Validate scope filters using the shared filter validator.
+ */
+function validateScopeFilters(
+  scopes: Record<string, ScopeSpec>,
+  fieldsByCollection: CollectionsMap,
+): string[] {
+  const warnings: string[] = [];
+
+  for (const [key, scopeDef] of Object.entries(scopes)) {
+    if (!scopeDef.filter || typeof scopeDef.filter !== 'object') continue;
+
+    const issues = validateFilter(scopeDef.filter, scopeDef.collection, fieldsByCollection, {
+      context: `scope '${key}'`,
+    });
+    for (const issue of issues) {
+      warnings.push(`${issue.path}: ${issue.message}`);
+    }
+  }
+
+  return warnings;
+}
 
 async function fetchRoles(nb: NocoBaseClient): Promise<ApiRole[]> {
   const resp = await nb.http.get(`${nb.baseUrl}/api/roles:list`, {
@@ -359,15 +463,41 @@ function resolveRoutePatterns(
     }
   }
 
-  return patterns.sort();
+  // Deduplicate: remove patterns that are subsets of a broader "Group/**"
+  const globPatterns = patterns.filter(p => p.endsWith('/**'));
+  const deduped = patterns.filter(pattern => {
+    if (pattern.endsWith('/**')) {
+      // Check if a parent glob already covers this
+      const parts = pattern.slice(0, -3).split('/');
+      for (let i = 1; i < parts.length; i++) {
+        const parent = parts.slice(0, i).join('/') + '/**';
+        if (globPatterns.includes(parent)) return false;
+      }
+    } else {
+      // Check if any glob pattern covers this exact path
+      for (const glob of globPatterns) {
+        const prefix = glob.slice(0, -3);  // Remove "/**"
+        if (pattern.startsWith(prefix + '/') || pattern === prefix) {
+          return false;
+        }
+      }
+    }
+    return true;
+  });
+
+  return deduped.sort();
 }
 
 /**
  * Convert API action records to our DSL format.
+ *
+ * Optimization: if an action's fields list equals ALL fields in the collection,
+ * omit fields entirely (= no restriction). This dramatically reduces YAML size.
  */
 function convertActions(
   actions: { name: string; fields: string[]; scopeId?: number | string | null; scope?: ApiScope | null }[],
   scopeById: Map<string | number, ApiScope>,
+  totalFieldCount: number,
 ): { permissions: CollectionPermissions; scopeIds: Set<string | number> } {
   const permissions: CollectionPermissions = {};
   const scopeIds = new Set<string | number>();
@@ -391,9 +521,9 @@ function convertActions(
       }
     }
 
-    // Resolve fields
-    if (action.fields?.length) {
-      perm.fields = action.fields;
+    // Resolve fields — omit if all fields are listed (= no restriction)
+    if (action.fields?.length && action.fields.length < totalFieldCount) {
+      perm.fields = [...action.fields].sort();
       hasContent = true;
     }
 
@@ -406,5 +536,13 @@ function convertActions(
     }
   }
 
-  return { permissions, scopeIds };
+  // Sort by canonical action order
+  const sorted: CollectionPermissions = {};
+  for (const name of ACTION_ORDER) {
+    if (name in permissions) {
+      sorted[name] = permissions[name];
+    }
+  }
+
+  return { permissions: sorted, scopeIds };
 }

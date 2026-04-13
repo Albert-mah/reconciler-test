@@ -15,6 +15,10 @@ import { deployPopup } from '../deploy/popup-deployer';
 import { reorderTableColumns } from '../deploy/column-reorder';
 import { postVerify } from '../deploy/post-verify';
 import { exportPageSurface, exportAllPopups, exportProject } from '../export';
+import { exportAcl } from '../acl/acl-exporter';
+import { deployAcl } from '../acl/acl-deployer';
+import { exportWorkflows } from '../workflow/workflow-exporter';
+import { deployWorkflows } from '../workflow/workflow-deployer';
 import { scaffold } from '../deploy/scaffold';
 import { deployProject } from '../deploy/project-deployer';
 import { sync } from '../sync';
@@ -32,7 +36,7 @@ async function main() {
 
   if (!command) {
     console.log('Usage: cli.ts <command> [options]');
-    console.log('Commands: deploy, deploy-project, scaffold, verify-sql, export, export-project, sync, graph');
+    console.log('Commands: deploy, deploy-project, scaffold, verify-sql, export, export-project, sync, graph, export-acl, deploy-acl, export-workflows, deploy-workflows');
     process.exit(1);
   }
 
@@ -60,6 +64,18 @@ async function main() {
       break;
     case 'sync':
       await cmdSync(args.slice(1));
+      break;
+    case 'export-acl':
+      await cmdExportAcl(args.slice(1));
+      break;
+    case 'deploy-acl':
+      await cmdDeployAcl(args.slice(1));
+      break;
+    case 'export-workflows':
+      await cmdExportWorkflows(args.slice(1));
+      break;
+    case 'deploy-workflows':
+      await cmdDeployWorkflows(args.slice(1));
       break;
     default:
       console.error(`Unknown command: ${command}`);
@@ -259,14 +275,15 @@ async function cmdExport(args: string[]) {
 
 async function cmdDeployProject(args: string[]) {
   const dir = args[0];
-  if (!dir) { console.error('Usage: cli.ts deploy-project <dir> [--force] [--plan] [--group X] [--page X]'); process.exit(1); }
+  if (!dir) { console.error('Usage: cli.ts deploy-project <dir> [--force] [--plan] [--group X] [--page X] [--blueprint]'); process.exit(1); }
   const force = args.includes('--force');
   const planOnly = args.includes('--plan');
+  const blueprint = args.includes('--blueprint');
   const groupIdx = args.indexOf('--group');
   const group = groupIdx >= 0 ? args[groupIdx + 1] : undefined;
   const pageIdx = args.indexOf('--page');
   const page = pageIdx >= 0 ? args[pageIdx + 1] : undefined;
-  await deployProject(dir, { force, planOnly, group, page });
+  await deployProject(dir, { force, planOnly, group, page, blueprint });
 }
 
 async function cmdGraph(args: string[]) {
@@ -333,6 +350,43 @@ async function cmdSync(args: string[]) {
   const pageFilter = pageIdx >= 0 ? args[pageIdx + 1] : undefined;
   const nb = await NocoBaseClient.create();
   await sync(modDir, nb, pageFilter);
+}
+
+async function cmdExportAcl(args: string[]) {
+  const outDir = args[0];
+  if (!outDir) { console.error('Usage: cli.ts export-acl <outdir> [--roles role1,role2]'); process.exit(1); }
+  const rolesIdx = args.indexOf('--roles');
+  const roles = rolesIdx >= 0 && args[rolesIdx + 1] ? args[rolesIdx + 1].split(',').map(s => s.trim()) : undefined;
+  const nb = await NocoBaseClient.create();
+  await exportAcl(nb, { outDir, roles });
+}
+
+async function cmdDeployAcl(args: string[]) {
+  const dir = args[0];
+  if (!dir) { console.error('Usage: cli.ts deploy-acl <project-dir> [--dry-run]'); process.exit(1); }
+  const dryRun = args.includes('--dry-run');
+  const nb = await NocoBaseClient.create();
+  await deployAcl(nb, dir, console.log, { dryRun });
+}
+
+async function cmdExportWorkflows(args: string[]) {
+  const outDir = args[0];
+  if (!outDir) { console.error('Usage: cli.ts export-workflows <outdir> [--enabled] [--type X] [--title-pattern X]'); process.exit(1); }
+  const nb = await NocoBaseClient.create();
+  const filter: Record<string, unknown> = {};
+  if (args.includes('--enabled')) filter.enabled = true;
+  const typeIdx = args.indexOf('--type');
+  if (typeIdx >= 0) filter.type = args[typeIdx + 1];
+  const patternIdx = args.indexOf('--title-pattern');
+  if (patternIdx >= 0) filter.titlePattern = args[patternIdx + 1];
+  await exportWorkflows(nb, { outDir, filter: filter as any });
+}
+
+async function cmdDeployWorkflows(args: string[]) {
+  const dir = args[0];
+  if (!dir) { console.error('Usage: cli.ts deploy-workflows <project-dir>'); process.exit(1); }
+  const nb = await NocoBaseClient.create();
+  await deployWorkflows(nb, dir);
 }
 
 main().catch(e => { console.error(e.message || e); process.exit(1); });

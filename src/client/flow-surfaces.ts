@@ -121,6 +121,50 @@ export class FlowSurfacesApi {
     return this.call('addTab', body);
   }
 
+  // ── Blueprint (whole-page deploy in one call) ──
+
+  async applyBlueprint(document: Record<string, unknown>) {
+    return this.call('applyBlueprint', document);
+  }
+
+  async describeSurface(locator: Record<string, unknown>, bindKeys?: Record<string, unknown>[]) {
+    const body: Record<string, unknown> = { locator };
+    if (bindKeys) body.bindKeys = bindKeys;
+    return this.call('describeSurface', body);
+  }
+
+  // ── Templates ──
+
+  async listTemplates(filter?: Record<string, unknown>) {
+    return this.call('listTemplates', filter || {});
+  }
+
+  async getTemplate(uid: string) {
+    return this.call('getTemplate', { uid });
+  }
+
+  async saveTemplate(template: Record<string, unknown>) {
+    return this.call('saveTemplate', template);
+  }
+
+  // ── Linkage rules ──
+
+  async setFieldLinkageRules(targetUid: string, rules: Record<string, unknown>[]) {
+    return this.call('setFieldLinkageRules', { target: { uid: targetUid }, rules });
+  }
+
+  async setBlockLinkageRules(targetUid: string, rules: Record<string, unknown>[]) {
+    return this.call('setBlockLinkageRules', { target: { uid: targetUid }, rules });
+  }
+
+  async setActionLinkageRules(targetUid: string, rules: Record<string, unknown>[]) {
+    return this.call('setActionLinkageRules', { target: { uid: targetUid }, rules });
+  }
+
+  async getReactionMeta(targetUid: string) {
+    return this.call('getReactionMeta', { target: { uid: targetUid } });
+  }
+
   // ── Node operations ──
 
   async removeNode(uid: string) {
