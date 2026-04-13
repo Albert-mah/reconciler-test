@@ -644,14 +644,17 @@ async function exportGridBlocks(
 
   // Supplement popupTemplateUid from flowModels:get (flowSurfaces:get strips it)
   // Also detect popup template fields that flowSurfaces tree missed
-  for (let bi = 0; bi < blocks.length; bi++) {
-    const br = blocks[bi] as Record<string, unknown>;
-    if (br.type !== 'table') continue;
-    const item = items[bi];
+  for (const br of blocks) {
+    const b = br as Record<string, unknown>;
+    if (b.type !== 'table') continue;
+    // Find corresponding item by UID
+    const blockKey = b.key as string;
+    const blockUid = [...blockUidToKey.entries()].find(([, k]) => k === blockKey)?.[0];
+    const item = items.find(it => it.uid === blockUid);
     if (!item) continue;
     const cols = item.subModels?.columns;
     const colArr = (Array.isArray(cols) ? cols : []) as FlowModelNode[];
-    const fields = br.fields as unknown[];
+    const fields = b.fields as unknown[];
     if (!Array.isArray(fields)) continue;
 
     for (const col of colArr) {
