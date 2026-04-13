@@ -61,8 +61,36 @@ export async function deployPopup(
         const blocks = popupSpec.blocks || (tabsSpec ? tabsSpec[0]?.blocks : []) || [];
         const popupLayout = popupSpec.layout || (tabsSpec ? tabsSpec[0]?.layout : undefined);
         if (blocks.length) {
+          // Build existingState from live popup blocks so deploySurface skips compose
+          const existingBlocks: Record<string, BlockState> = {};
+          for (const t of tabArr) {
+            const tg = (t as unknown as Record<string, unknown>).subModels as Record<string, unknown>;
+            const tGrid = tg?.grid as Record<string, unknown>;
+            const tItems = (tGrid?.subModels as Record<string, unknown>)?.items;
+            if (!Array.isArray(tItems)) continue;
+            for (const ti of tItems) {
+              const tiObj = ti as Record<string, unknown>;
+              const tiUse = tiObj.use as string || '';
+              const tiUid = tiObj.uid as string || '';
+              // Match by block type to spec key
+              for (const bs of blocks) {
+                const specKey = bs.key || bs.type;
+                if (specKey in existingBlocks) continue;
+                const TYPE_MAP: Record<string, string> = {
+                  TableBlockModel: 'table', FilterFormBlockModel: 'filterForm',
+                  CreateFormModel: 'createForm', EditFormModel: 'editForm',
+                  DetailsBlockModel: 'details', ListBlockModel: 'list',
+                  JSBlockModel: 'jsBlock', CommentsBlockModel: 'comments',
+                };
+                if (TYPE_MAP[tiUse] === bs.type || tiUse.toLowerCase().includes(bs.type.toLowerCase())) {
+                  existingBlocks[specKey] = { uid: tiUid, type: bs.type, grid_uid: '' };
+                  break;
+                }
+              }
+            }
+          }
           const syncResult = await deploySurface(
-            nb, targetUid, { blocks, coll, layout: popupLayout } as any, modDir, false, {}, log,
+            nb, targetUid, { blocks, coll, layout: popupLayout } as any, modDir, false, existingBlocks, log,
           );
           return syncResult;
         }
