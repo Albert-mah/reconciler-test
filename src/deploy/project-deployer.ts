@@ -636,57 +636,8 @@ async function deployOnePage(
   }
   state.pages[pageKey] = pageState;
 
-  // Deploy popups — two-pass: first pass resolves page-level refs,
-  // second pass resolves nested popup refs (using popup block state from first pass)
-  if (pageInfo.popups.length) {
-    if (!pageState.popups) pageState.popups = {};
-    const expanded = expandPopups(pageInfo.popups);
-    const deferred: typeof expanded = [];
-
-    // Pass 1: deploy popups whose targets are in page-level blocks
-    for (const ps of expanded) {
-      const targetRef = ps.target.replace('$SELF', `$${pageKey}`);
-      const resolver = new RefResolver(state);
-      let targetUid: string;
-      try {
-        targetUid = resolver.resolveUid(targetRef);
-      } catch {
-        deferred.push(ps);
-        continue;
-      }
-      const pp = targetRef.split('.').pop() || '';
-      const popupKey = targetRef.replace(`$${pageKey}.`, '');
-      const existingPopupBlocks = pageState.popups?.[popupKey]?.blocks || {};
-      const popupBlocks = await deployPopup(nb, targetUid, targetRef, ps, pageInfo.dir, force, pp, log, existingPopupBlocks);
-      if (Object.keys(popupBlocks).length) {
-        pageState.popups[popupKey] = { target_uid: targetUid, blocks: popupBlocks };
-        state.pages[pageKey] = pageState;
-      }
-    }
-
-    // Pass 2: deploy deferred popups (targets inside popup blocks)
-    if (deferred.length) {
-      const resolver2 = new RefResolver(state);
-      for (const ps of deferred) {
-        const targetRef = ps.target.replace('$SELF', `$${pageKey}`);
-        let targetUid: string;
-        try {
-          targetUid = resolver2.resolveUid(targetRef);
-        } catch (e) {
-          log(`  ! popup ${targetRef}: ${e instanceof Error ? e.message : e}`);
-          continue;
-        }
-        const pp = targetRef.split('.').pop() || '';
-        const popupKey2 = targetRef.replace(`$${pageKey}.`, '');
-        const existingPopupBlocks2 = pageState.popups?.[popupKey2]?.blocks || {};
-        const popupBlocks = await deployPopup(nb, targetUid, targetRef, ps, pageInfo.dir, force, pp, log, existingPopupBlocks2);
-        if (Object.keys(popupBlocks).length) {
-          pageState.popups[popupKey2] = { target_uid: targetUid, blocks: popupBlocks };
-        }
-      }
-    }
-  }
-  state.pages[pageKey] = pageState;
+  // Deploy popups
+  await deployPagePopups(nb, pageInfo, state, pageKey, log);
 }
 
 /**
@@ -779,6 +730,10 @@ async function deployPageBlueprint(
         }
       }
     }
+
+    // Deploy popups (same two-pass logic as deployOnePage)
+    await deployPagePopups(nb, pageInfo, state, pageKey, log);
+
   } catch (e) {
     const err = e as { response?: { data?: { errors?: { message: string }[] } }; message?: string };
     const apiMsg = err.response?.data?.errors?.[0]?.message || err.message || String(e);
@@ -786,6 +741,70 @@ async function deployPageBlueprint(
     log(`    falling back to legacy deploy...`);
     await deployOnePage(nb, pageInfo, state, groupId, false, log);
   }
+}
+
+/**
+ * Deploy popups for a page — two-pass for nested ref resolution.
+ * Extracted to share between deployOnePage and deployPageBlueprint.
+ */
+async function deployPagePopups(
+  nb: NocoBaseClient,
+  pageInfo: PageInfo,
+  state: ModuleState,
+  pageKey: string,
+  log: (msg: string) => void,
+): Promise<void> {
+  if (!pageInfo.popups.length) return;
+  const pageState = state.pages[pageKey];
+  if (!pageState) return;
+  if (!pageState.popups) pageState.popups = {};
+
+  const expanded = expandPopups(pageInfo.popups);
+  const deferred: typeof expanded = [];
+
+  // Pass 1: page-level refs
+  for (const ps of expanded) {
+    const targetRef = ps.target.replace('$SELF', `$${pageKey}`);
+    const resolver = new RefResolver(state);
+    let targetUid: string;
+    try {
+      targetUid = resolver.resolveUid(targetRef);
+    } catch {
+      deferred.push(ps);
+      continue;
+    }
+    const pp = targetRef.split('.').pop() || '';
+    const popupKey = targetRef.replace(`$${pageKey}.`, '');
+    const existingPopupBlocks = pageState.popups?.[popupKey]?.blocks || {};
+    const popupBlocks = await deployPopup(nb, targetUid, targetRef, ps, pageInfo.dir, false, pp, log, existingPopupBlocks);
+    if (Object.keys(popupBlocks).length) {
+      pageState.popups[popupKey] = { target_uid: targetUid, blocks: popupBlocks };
+      state.pages[pageKey] = pageState;
+    }
+  }
+
+  // Pass 2: nested refs (targets inside popup blocks)
+  if (deferred.length) {
+    const resolver2 = new RefResolver(state);
+    for (const ps of deferred) {
+      const targetRef = ps.target.replace('$SELF', `$${pageKey}`);
+      let targetUid: string;
+      try {
+        targetUid = resolver2.resolveUid(targetRef);
+      } catch (e) {
+        log(`  ! popup ${targetRef}: ${e instanceof Error ? e.message : e}`);
+        continue;
+      }
+      const pp = targetRef.split('.').pop() || '';
+      const popupKey2 = targetRef.replace(`$${pageKey}.`, '');
+      const existingPopupBlocks2 = pageState.popups?.[popupKey2]?.blocks || {};
+      const popupBlocks = await deployPopup(nb, targetUid, targetRef, ps, pageInfo.dir, false, pp, log, existingPopupBlocks2);
+      if (Object.keys(popupBlocks).length) {
+        pageState.popups[popupKey2] = { target_uid: targetUid, blocks: popupBlocks };
+      }
+    }
+  }
+  state.pages[pageKey] = pageState;
 }
 
 /**
