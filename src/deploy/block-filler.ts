@@ -43,7 +43,7 @@ export async function fillBlock(
   allBlocksState: Record<string, BlockState> = {},
   pageGridUid = '',
   log: (msg: string) => void = console.log,
-  popupContext: { refDepth: number; seenColls: Set<string> } = { refDepth: 2, seenColls: new Set() },
+  popupContext: { seenColls: Set<string> } = { seenColls: new Set() },
 ): Promise<void> {
   const btype = bs.type;
   const coll = bs.coll || defaultColl;

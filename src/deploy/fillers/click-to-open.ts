@@ -19,7 +19,7 @@ import type { NocoBaseClient } from '../../client';
 import type { BlockSpec } from '../../types/spec';
 import type { BlockState } from '../../types/state';
 import type { LogFn, PopupContext } from './types';
-import { loadTemplateContent } from './template-loader';
+// loadTemplateContent no longer needed — popup templates kept as references
 
 export async function deployClickToOpen(
   nb: NocoBaseClient,
@@ -82,36 +82,12 @@ export async function deployClickToOpen(
           update.popupSettings = makePopupSettings(fieldUid, popupColl, ps);
         } else {
           const hasTemplateRef = !!ps?.popupTemplateUid;
-          const canExpandRef = hasTemplateRef && popupContext.refDepth > 0;
 
-          if (hasTemplateRef && canExpandRef) {
-            // Template ref within budget → copy content, decrement refDepth
-            const childCtx = makeChildContext(popupContext, coll, true);
-            const tplContent = await loadTemplateContent(nb, modDir, ps.popupTemplateUid as string, popupColl);
-            if (tplContent.length) {
-              const { deploySurface } = await import('../surface-deployer');
-              let tplDir = mod;
-              for (let d = mod; d !== path.dirname(d); d = path.dirname(d)) {
-                if (fs.existsSync(path.join(d, 'templates'))) { tplDir = d; break; }
-              }
-              try {
-                await deploySurface(nb, fieldUid,
-                  { blocks: tplContent as any[], coll: popupColl } as any,
-                  tplDir, false, {}, log, childCtx);
-              } catch (e) {
-                log(`      ! clickToOpen ${fp} template: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
-              }
-              log(`      ~ clickToOpen: ${fp} (copy ref, refDepth=${popupContext.refDepth - 1})`);
-            } else {
-              await deployDefaultDetails(nb, fieldUid, popupColl);
-              log(`      ~ clickToOpen: ${fp} (default details)`);
-            }
-          } else if (hasTemplateRef) {
-            // Template ref beyond budget → keep as reference
-            log(`      ~ clickToOpen: ${fp} (keep ref, refDepth exhausted)`);
+          if (hasTemplateRef) {
+            // Has popup template → keep as reference (don't expand)
+            log(`      ~ clickToOpen: ${fp} (popup template ref)`);
           } else {
-            // No template ref → always copy (non-ref content)
-            const childCtx = makeChildContext(popupContext, coll, false);
+            // No template ref → deploy default details
             await deployDefaultDetails(nb, fieldUid, popupColl);
             log(`      ~ clickToOpen: ${fp} (default details)`);
           }
@@ -248,9 +224,8 @@ function makePopupSettings(
   };
 }
 
-function makeChildContext(parent: PopupContext, coll: string, isRefExpansion = false): PopupContext {
+function makeChildContext(parent: PopupContext, coll: string): PopupContext {
   return {
-    refDepth: isRefExpansion ? parent.refDepth - 1 : parent.refDepth,
     seenColls: new Set([...parent.seenColls, coll]),
   };
 }
