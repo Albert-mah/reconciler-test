@@ -7,7 +7,7 @@
 export type BlockType =
   | 'table' | 'filterForm' | 'createForm' | 'editForm' | 'details'
   | 'list' | 'gridCard' | 'jsBlock' | 'chart' | 'markdown' | 'iframe'
-  | 'comments' | 'recordHistory' | 'reference';
+  | 'comments' | 'recordHistory' | 'mailMessages' | 'reference';
 
 export type ActionType =
   | 'filter' | 'refresh' | 'addNew' | 'delete' | 'bulkDelete'

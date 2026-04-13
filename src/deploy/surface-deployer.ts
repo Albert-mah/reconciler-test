@@ -278,7 +278,6 @@ export async function deploySurface(
       } catch { /* skip */ }
 
       // Add compose-type actions (filter/refresh/addNew etc.) via API
-      // These are normally created by compose, but save_model blocks skip compose
       const COMPOSE_ACTIONS_SET = new Set(['filter', 'refresh', 'addNew', 'delete', 'bulkDelete', 'submit', 'reset']);
       for (const aspec of bs.actions || []) {
         const atype = typeof aspec === 'string' ? aspec : (aspec as Record<string, unknown>).type as string;
@@ -287,6 +286,36 @@ export async function deploySurface(
             await nb.surfaces.addAction(newUid, atype);
           } catch { /* skip — might not be supported for this block type */ }
         }
+      }
+
+      // Auto-create default columns for mailMessages (standard columns, not in DSL)
+      if (bs.type === 'mailMessages') {
+        const DEFAULT_MAIL_COLUMNS: { fieldPath: string; model: string; width?: number }[] = [
+          { fieldPath: 'from', model: 'CustomMailFromFieldModel' },
+          { fieldPath: 'subject', model: 'CustomMailSubjectFieldModel', width: 300 },
+          { fieldPath: 'to', model: 'CustomMailToFieldModel' },
+          { fieldPath: 'date', model: 'DisplayDateTimeFieldModel' },
+          { fieldPath: 'labels', model: 'CustomMailLabelsFieldModel' },
+        ];
+        for (const col of DEFAULT_MAIL_COLUMNS) {
+          const colUid = (await import('../utils/uid')).generateUid();
+          const colStepParams: Record<string, unknown> = {
+            fieldSettings: { init: { fieldPath: col.fieldPath } },
+            mailMessagesColumnSettings: { model: { use: col.model } },
+          };
+          if (col.width) {
+            colStepParams.mailMessagesColumnSettings = {
+              ...(colStepParams.mailMessagesColumnSettings as Record<string, unknown>),
+              width: { width: col.width },
+            };
+          }
+          await nb.models.save({
+            uid: colUid, use: 'CustomMailMessagesColumnModel',
+            parentId: newUid, subKey: 'columns', subType: 'array',
+            sortIndex: 0, stepParams: colStepParams, flowRegistry: {},
+          });
+        }
+        log(`      + mail columns: ${DEFAULT_MAIL_COLUMNS.length} default columns`);
       }
 
       // Fill content (non-compose actions, JS, field_layout, etc.)
