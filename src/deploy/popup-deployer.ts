@@ -179,11 +179,19 @@ async function deployTabbedPopup(
   if (tabsSpec.length <= 1) return allBlocks;
 
   // ── Step 2: Read ChildPage to get popupPageUid + existing tabs ──
+  // ChildPage may be on target directly (.page) or on its field child (.field.page)
   let existingTabs: { uid: string }[] = [];
   let popupPageUid = '';
   try {
     const data = await nb.get({ uid: targetUid });
-    const pp = data.tree.subModels?.page;
+    let pp = data.tree.subModels?.page;
+    // If no ChildPage on target, check field subModel (for table column wrappers)
+    if ((!pp || Array.isArray(pp)) && data.tree.subModels?.field) {
+      const field = data.tree.subModels.field;
+      if (field && !Array.isArray(field)) {
+        pp = ((field as unknown as Record<string, unknown>).subModels as Record<string, unknown>)?.page as typeof pp;
+      }
+    }
     if (pp && !Array.isArray(pp)) {
       popupPageUid = (pp as unknown as Record<string, unknown>).uid as string || '';
       const subs = (pp as unknown as Record<string, unknown>).subModels as Record<string, unknown>;
