@@ -193,6 +193,18 @@ export async function deploySurface(
   }
 
   // ── Step 1b: Create blocks that compose can't handle (legacy types + popup associations) ──
+  // First, check what already exists in the grid to avoid duplicates
+  const existingModelTypes = new Set<string>();
+  try {
+    const gridData = await nb.get({ uid: gridUid });
+    const gridItems = gridData.tree.subModels?.items;
+    if (Array.isArray(gridItems)) {
+      for (const gi of gridItems) {
+        existingModelTypes.add((gi as { use?: string }).use || '');
+      }
+    }
+  } catch { /* skip */ }
+
   for (const bs of blocksSpec) {
     const key = bs.key || bs.type;
     if (key in blocksState) continue; // already composed or exists
@@ -201,6 +213,12 @@ export async function deploySurface(
     if (cb) continue; // was composable but maybe already composed above
     const modelName = BLOCK_TYPES[bs.type];
     if (!modelName || !gridUid) continue;
+
+    // Skip if this model type already exists in the grid (avoid duplicates)
+    if (existingModelTypes.has(modelName)) {
+      log(`    = save_model: ${key} (${modelName} already exists)`);
+      continue;
+    }
 
     try {
       const { generateUid } = await import('../utils/uid');
