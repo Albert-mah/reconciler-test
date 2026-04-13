@@ -647,10 +647,72 @@ async function exportGridBlocks(
     if (!exported) continue;
     const spec = { ...exported.spec };
     delete spec._popups;
-    // templateRef is resolved below in the template-ref resolution loop
+
+    // ReferenceBlockModel: look up templateUid from flowModelTemplateUsages
+    if (spec.type === 'reference' && items[i].uid) {
+      try {
+        const usageResp = await nb.http.get(`${nb.baseUrl}/api/flowModelTemplateUsages:list`, {
+          params: { 'filter[modelUid]': items[i].uid, paginate: 'false' },
+        });
+        const usages = usageResp.data.data || [];
+        if (usages.length) {
+          const templateUid = usages[0].templateUid;
+          try {
+            const tmplResp = await nb.http.get(`${nb.baseUrl}/api/flowModelTemplates:get`, {
+              params: { filterByTk: templateUid },
+            });
+            const tmpl = tmplResp.data.data;
+            spec.templateRef = {
+              templateUid, templateName: tmpl?.name || '', targetUid: tmpl?.targetUid || '', mode: 'reference',
+            };
+          } catch {
+            spec.templateRef = { templateUid, mode: 'reference' };
+          }
+        }
+      } catch { /* best effort */ }
+    }
+
     blocks.push(spec);
     popupRefs.push(...exported.popupRefs);
     blockUidToKey.set(items[i].uid, exported.key);
+  }
+
+  // Check for ReferenceFormGridModel with missing templateRef (stepParams empty)
+  // Look up templateUsages for form grid UIDs
+  for (let bi = 0; bi < blocks.length; bi++) {
+    const br = blocks[bi] as Record<string, unknown>;
+    if (!['createForm', 'editForm'].includes(br.type as string)) continue;
+    if (br.templateRef) continue;  // Already has templateRef
+    if ((br.fields as unknown[])?.length) continue;  // Already has fields
+
+    // Check if the form's grid is ReferenceFormGridModel
+    const item = items[bi];
+    if (!item) continue;
+    const formGrid = item.subModels?.grid;
+    if (!formGrid || Array.isArray(formGrid)) continue;
+    if ((formGrid as FlowModelNode).use !== 'ReferenceFormGridModel') continue;
+
+    // Query templateUsages for the form grid UID
+    try {
+      const usageResp = await nb.http.get(`${nb.baseUrl}/api/flowModelTemplateUsages:list`, {
+        params: { 'filter[modelUid]': (formGrid as FlowModelNode).uid, paginate: 'false' },
+      });
+      const usages = usageResp.data.data || [];
+      if (usages.length) {
+        const templateUid = usages[0].templateUid;
+        try {
+          const tmplResp = await nb.http.get(`${nb.baseUrl}/api/flowModelTemplates:get`, {
+            params: { filterByTk: templateUid },
+          });
+          const tmpl = tmplResp.data.data;
+          br.templateRef = {
+            templateUid, templateName: tmpl?.name || '', targetUid: tmpl?.targetUid || '', mode: 'reference',
+          };
+        } catch {
+          br.templateRef = { templateUid, mode: 'reference' };
+        }
+      }
+    } catch { /* best effort */ }
   }
 
   // Resolve ReferenceFormGridModel — follow template to get actual fields
