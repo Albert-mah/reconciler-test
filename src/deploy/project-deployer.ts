@@ -16,6 +16,7 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { execSync } from 'node:child_process';
 import { NocoBaseClient } from '../client';
 import type { ModuleState, PageState, BlockState } from '../types/state';
 import type { StructureSpec, PageSpec, BlockSpec, PopupSpec, CollectionDef, EnhanceSpec } from '../types/spec';
@@ -134,6 +135,9 @@ export async function deployProject(
     return;
   }
 
+  // ── 2c. Git snapshot before deploy ──
+  gitSnapshot(root, 'pre-deploy', log);
+
   // ── 3. Connect + deploy ──
   const nb = await NocoBaseClient.create();
   log(`\n  Connected to ${nb.baseUrl}`);
@@ -248,6 +252,62 @@ export async function deployProject(
   } catch (e) {
     log(`  ! Graph rebuild: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
   }
+
+  // ── Post-deploy: re-export + git diff ──
+  const targetGroup = opts.group || routes.find(r => r.type === 'group')?.title || '';
+  if (targetGroup) {
+    try {
+      const { exportProject } = await import('../export');
+      log('\n  ── Re-export for diff ──');
+      await exportProject(nb, { outDir: root, group: targetGroup });
+      const diff = gitDiff(root, log);
+      if (diff) {
+        log(`\n  ── Deploy diff (${diff.files} files changed) ──`);
+        log(diff.summary);
+      } else {
+        log('  ✓ No diff — deploy matches export');
+      }
+    } catch (e) {
+      log(`  ! Re-export failed: ${e instanceof Error ? e.message.slice(0, 80) : e}`);
+    }
+  }
+}
+
+// ── Git helpers ──
+
+function gitSnapshot(dir: string, label: string, log: (msg: string) => void): void {
+  try {
+    // Init if needed
+    if (!fs.existsSync(path.join(dir, '.git'))) {
+      execSync('git init', { cwd: dir, stdio: 'pipe' });
+      execSync('git add -A', { cwd: dir, stdio: 'pipe' });
+      execSync(`git commit -m "init" --allow-empty`, { cwd: dir, stdio: 'pipe' });
+    }
+    // Commit current state
+    execSync('git add -A', { cwd: dir, stdio: 'pipe' });
+    const status = execSync('git status --porcelain', { cwd: dir, encoding: 'utf8' }).trim();
+    if (status) {
+      execSync(`git commit -m "${label}" --allow-empty`, { cwd: dir, stdio: 'pipe' });
+      log(`  git: ${label} snapshot committed`);
+    }
+  } catch { /* skip — git not required */ }
+}
+
+function gitDiff(dir: string, log: (msg: string) => void): { files: number; summary: string } | null {
+  try {
+    if (!fs.existsSync(path.join(dir, '.git'))) return null;
+    execSync('git add -A', { cwd: dir, stdio: 'pipe' });
+    const status = execSync('git status --porcelain', { cwd: dir, encoding: 'utf8' }).trim();
+    if (!status) return null;
+    const lines = status.split('\n').filter(Boolean);
+    const summary = lines.slice(0, 20).map(l => `    ${l}`).join('\n')
+      + (lines.length > 20 ? `\n    ... and ${lines.length - 20} more` : '');
+    // Commit post-deploy state
+    execSync('git commit -m "post-deploy"', { cwd: dir, stdio: 'pipe' });
+    // Show diff summary
+    const diffStat = execSync('git diff HEAD~1 --stat', { cwd: dir, encoding: 'utf8' }).trim();
+    return { files: lines.length, summary: diffStat || summary };
+  } catch { return null; }
 }
 
 async function deployGroup(
