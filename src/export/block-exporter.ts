@@ -6,9 +6,10 @@ import * as path from 'node:path';
 import type { NocoBaseClient } from '../client';
 import type { FlowModelNode } from '../types/api';
 import { slugify } from '../utils/slugify';
-import { dumpYaml } from '../utils/yaml';
+import { dumpYaml, loadYaml } from '../utils/yaml';
 import { extractJsDesc, stripAutoHeader } from '../utils/js-utils';
 import { actionKey as genActionKey } from '../utils/action-key';
+import { stripDefaults } from '../utils/strip-defaults';
 import {
   MODEL_TO_BLOCK_TYPE as TYPE_MAP,
   MODEL_TO_ACTION_TYPE as ACTION_TYPE_MAP,
@@ -27,6 +28,241 @@ function safeWrite(filePath: string, content: string) {
 
 export { TYPE_MAP };
 
+/**
+ * Look up a template UID in templates/_index.yaml, walking up from a given directory.
+ * Returns the file path (e.g. "templates/popup/leads_view.yaml") or null.
+ */
+export function lookupTemplateFile(templateUid: string, fromDir: string): string | null {
+  for (let d = fromDir; d !== path.dirname(d); d = path.dirname(d)) {
+    const indexFile = path.join(d, 'templates', '_index.yaml');
+    if (!fs.existsSync(indexFile)) continue;
+    const index = loadYaml<Record<string, unknown>[]>(indexFile) || [];
+    const entry = index.find(t => t.uid === templateUid);
+    if (entry?.file) return `templates/${entry.file}`;
+    break;
+  }
+  return null;
+}
+
+/**
+ * Simplify clickToOpen + popupSettings into popup shorthand.
+ *
+ * - With popup template → popup: templates/popup/xxx.yaml
+ * - Default settings (drawer, large) → popup: true
+ * - Non-default settings → popup: { mode, size }
+ */
+export function simplifyPopup(
+  fieldSpec: Record<string, unknown>,
+  projectDir: string | null,
+): void {
+  if (!fieldSpec.clickToOpen && !fieldSpec.popupSettings) return;
+
+  const ps = fieldSpec.popupSettings as Record<string, unknown> | undefined;
+  const templateUid = ps?.popupTemplateUid as string | undefined;
+
+  // Remove original keys — replace with popup shorthand
+  delete fieldSpec.clickToOpen;
+  delete fieldSpec.popupSettings;
+
+  if (templateUid && projectDir) {
+    const tplFile = lookupTemplateFile(templateUid, projectDir);
+    if (tplFile) {
+      fieldSpec.popup = tplFile;
+      return;
+    }
+  }
+
+  // Check for non-default settings
+  const mode = (ps?.mode as string) || 'drawer';
+  const size = (ps?.size as string) || 'large';
+  const hasNonDefault = mode !== 'drawer' || size !== 'large';
+
+  if (hasNonDefault) {
+    const popupObj: Record<string, unknown> = {};
+    if (mode !== 'drawer') popupObj.mode = mode;
+    if (size !== 'large') popupObj.size = size;
+    fieldSpec.popup = popupObj;
+  } else {
+    fieldSpec.popup = true;
+  }
+}
+
+/**
+ * Simplify a link action from full stepParams into shorthand.
+ */
+function simplifyLinkAction(actionSpec: Record<string, unknown>): Record<string, unknown> {
+  const sp = actionSpec.stepParams as Record<string, unknown> | undefined;
+  if (!sp) return { link: {} };
+
+  const buttonSettings = sp.buttonSettings as Record<string, unknown> | undefined;
+  const general = (buttonSettings?.general || {}) as Record<string, unknown>;
+  const linkSettings = sp.linkButtonSettings as Record<string, unknown> | undefined;
+  const editLink = (linkSettings?.editLink || {}) as Record<string, unknown>;
+
+  const result: Record<string, unknown> = {};
+  if (general.title) result.title = general.title;
+  if (general.icon) result.icon = general.icon;
+  if (editLink.url) result.url = editLink.url;
+
+  return { link: result };
+}
+
+/**
+ * Simplify an AI action into shorthand.
+ * - Simple: ai: viz
+ * - With tasks: ai: { employee: viz, tasks: ./ai/xxx.yaml }
+ */
+function simplifyAiAction(actionSpec: Record<string, unknown>): Record<string, unknown> {
+  const employee = actionSpec.employee as string || '';
+  const tasksFile = actionSpec.tasks_file as string | undefined;
+
+  if (!tasksFile) {
+    return { ai: employee };
+  }
+  return { ai: { employee, tasks: tasksFile } };
+}
+
+/**
+ * Simplify a reference block into shorthand.
+ * - ref: templates/block/xxx.yaml
+ */
+function simplifyReference(spec: Record<string, unknown>, projectDir: string | null): Record<string, unknown> | null {
+  const tplRef = spec.templateRef as Record<string, unknown> | undefined;
+  if (!tplRef?.templateUid) return null;
+
+  const templateUid = tplRef.templateUid as string;
+  if (projectDir) {
+    const tplFile = lookupTemplateFile(templateUid, projectDir);
+    if (tplFile) {
+      return { ref: tplFile };
+    }
+  }
+  // Fallback: keep templateRef as-is
+  return null;
+}
+
+/**
+ * Simplify a jsBlock into shorthand.
+ * - Simple (no desc): js: ./js/xxx.js
+ * - With desc: js: { file: ./js/xxx.js, desc: Description }
+ */
+function simplifyJsBlock(spec: Record<string, unknown>): Record<string, unknown> {
+  const file = spec.file as string | undefined;
+  const desc = spec.desc as string | undefined;
+
+  if (!file) return spec;
+
+  if (!desc) {
+    return { js: file };
+  }
+  return { js: { file, desc } };
+}
+
+/**
+ * Simplify an updateRecord action from full stepParams into shorthand.
+ */
+function simplifyUpdateRecord(actionSpec: Record<string, unknown>): Record<string, unknown> {
+  const sp = actionSpec.stepParams as Record<string, unknown> | undefined;
+  if (!sp) return actionSpec;
+
+  const buttonSettings = sp.buttonSettings as Record<string, unknown> | undefined;
+  const general = (buttonSettings?.general || {}) as Record<string, unknown>;
+  const updateSettings = sp.updateRecordSettings as Record<string, unknown> | undefined;
+  const assignedValues = (updateSettings?.assignedValues || {}) as Record<string, unknown>;
+  const triggerWorkflows = updateSettings?.triggerWorkflows;
+  const linkageRules = (sp.linkageRules as Record<string, unknown> | undefined);
+
+  const result: Record<string, unknown> = {};
+
+  // Key
+  if (actionSpec.key) result.key = actionSpec.key;
+
+  // Button appearance
+  if (general.icon) result.icon = general.icon;
+  if (general.tooltip) result.tooltip = general.tooltip;
+  if (general.title) result.title = general.title;
+  const style = (general.type || general.buttonStyle) as string | undefined;
+  if (style && style !== 'default') result.style = style;
+  const danger = general.danger as boolean | undefined;
+  if (danger) result.danger = true;
+
+  // Assigned values — flatten pairs
+  const assignObj: Record<string, unknown> = {};
+  const pairs = assignedValues.pairs as Array<Record<string, unknown>> | undefined;
+  if (pairs?.length) {
+    for (const pair of pairs) {
+      const field = pair.field as string;
+      const value = pair.value;
+      if (field) assignObj[field] = value;
+    }
+  }
+  if (Object.keys(assignObj).length) result.assign = assignObj;
+
+  // Trigger workflows
+  if (triggerWorkflows) result.triggerWorkflows = triggerWorkflows;
+
+  // Linkage rules → hiddenWhen shorthand (simplified)
+  if (linkageRules) {
+    const rules = (linkageRules as Record<string, unknown>).rules as Array<Record<string, unknown>> | undefined;
+    if (rules?.length) {
+      const hiddenWhen = extractHiddenWhen(rules);
+      if (hiddenWhen) result.hiddenWhen = hiddenWhen;
+      else result.linkageRules = stripDefaults(linkageRules);
+    }
+  }
+
+  // Secondary confirmation
+  const confirm = (general.secondConfirmation || general.confirm) as Record<string, unknown> | undefined;
+  if (confirm) result.confirm = confirm;
+
+  return { updateRecord: result };
+}
+
+/**
+ * Try to extract simple hiddenWhen from linkageRules.
+ * Returns simplified shorthand or null if too complex.
+ */
+function extractHiddenWhen(rules: Array<Record<string, unknown>>): Record<string, unknown> | null {
+  // Only handle single rule with 'visible' property = false
+  if (rules.length !== 1) return null;
+  const rule = rules[0];
+  const properties = rule.properties as Array<Record<string, unknown>> | undefined;
+  if (!properties?.length) return null;
+
+  // Check for single property with visible=false (= hidden when condition is true)
+  const visibleProp = properties.find(p => p.type === 'visible' && p.value === false);
+  if (!visibleProp) return null;
+
+  const condition = rule.condition as Record<string, unknown> | undefined;
+  if (!condition) return null;
+
+  // Try to extract simple field conditions
+  const allOp = condition.$and as Array<Record<string, unknown>> | undefined;
+  const conditions = allOp || [condition];
+  const result: Record<string, unknown> = {};
+
+  for (const cond of conditions) {
+    // Each condition: { field: { operator: value } }
+    const entries = Object.entries(cond);
+    if (entries.length !== 1) return null;
+    const [field, ops] = entries[0];
+    if (field.startsWith('$')) return null;  // complex condition
+    if (typeof ops !== 'object' || ops === null) return null;
+    const opEntries = Object.entries(ops as Record<string, unknown>);
+    if (opEntries.length !== 1) return null;
+    const [op, val] = opEntries[0];
+    if (op === '$isTruly') {
+      result[field] = true;
+    } else if (op === '$isFalsy') {
+      result[field] = false;
+    } else {
+      result[field] = { [op]: val };
+    }
+  }
+
+  return Object.keys(result).length ? result : null;
+}
+
 export interface PopupRef {
   field: string;
   field_uid: string;
@@ -43,6 +279,9 @@ export interface ExportedBlock {
 
 /**
  * Export a single block from a FlowModel tree node.
+ *
+ * @param projectDir - Project root directory for template lookups (optional).
+ *                     When provided, enables popup/reference shorthand with template file paths.
  */
 export function exportBlock(
   item: FlowModelNode,
@@ -50,6 +289,7 @@ export function exportBlock(
   prefix: string,
   index: number,
   usedKeys: Set<string>,
+  projectDir: string | null = null,
 ): ExportedBlock | null {
   const use = item.use || '';
   const uid = item.uid;
@@ -188,11 +428,20 @@ export function exportBlock(
         mode: useTemplate.mode || 'reference',
       };
     }
+    // Simplify: ref: templates/block/xxx.yaml
+    const simplified = simplifyReference(spec, projectDir);
+    if (simplified) {
+      // Replace spec contents with simplified version
+      for (const k of Object.keys(spec)) delete spec[k];
+      Object.assign(spec, simplified);
+      // Re-add key for state tracking
+      spec.key = key;
+    }
   }
 
   // ── Table fields + columns ──
   if (btype === 'table') {
-    const { fields, jsCols, columnOrder, fieldPopups, hasActionsColumn, actColActions, actColPopups } = exportTableContents(item, jsDir, prefix, key);
+    const { fields, jsCols, columnOrder, fieldPopups, hasActionsColumn, actColActions, actColPopups } = exportTableContents(item, jsDir, prefix, key, projectDir);
     if (fields.length) spec.fields = fields;
     if (jsCols.length) {
       spec.js_columns = jsCols;
@@ -288,6 +537,36 @@ export function exportBlock(
     if (eventFlows.length) spec.event_flows = eventFlows;
   }
 
+  // ── Apply block-level simplifications ──
+
+  // jsBlock → js shorthand
+  if (btype === 'jsBlock' && spec.file) {
+    const jsSimplified = simplifyJsBlock(spec);
+    for (const k of Object.keys(spec)) delete spec[k];
+    Object.assign(spec, jsSimplified);
+    spec.key = key;
+  }
+
+  // Strip default/empty values from stepParams embedded in actions/recordActions
+  if (spec.actions) {
+    spec.actions = (spec.actions as unknown[]).map(a => {
+      if (typeof a === 'object' && a !== null) {
+        const ao = a as Record<string, unknown>;
+        if (ao.stepParams) ao.stepParams = stripDefaults(ao.stepParams);
+      }
+      return a;
+    });
+  }
+  if (spec.recordActions) {
+    spec.recordActions = (spec.recordActions as unknown[]).map(a => {
+      if (typeof a === 'object' && a !== null) {
+        const ao = a as Record<string, unknown>;
+        if (ao.stepParams) ao.stepParams = stripDefaults(ao.stepParams);
+      }
+      return a;
+    });
+  }
+
   // State
   const state: Record<string, unknown> = { uid, type: btype };
 
@@ -301,6 +580,7 @@ function exportTableContents(
   jsDir: string | null,
   prefix: string,
   blockKey: string,
+  projectDir: string | null = null,
 ): { fields: unknown[]; jsCols: unknown[]; columnOrder: string[]; fieldPopups: PopupRef[]; hasActionsColumn: boolean; actColActions: unknown[]; actColPopups: PopupRef[] } {
   const cols = item.subModels?.columns;
   const colArr = (Array.isArray(cols) ? cols : []) as FlowModelNode[];
@@ -333,7 +613,16 @@ function exportTableContents(
         const uniqueKey = actColUsedKeys.has(key) ? (() => { let i = 2; while (actColUsedKeys.has(`${key}_${i}`)) i++; return `${key}_${i}`; })() : key;
         actColUsedKeys.add(uniqueKey);
         actionSpec.key = uniqueKey;
-        actColActions.push(actionSpec);
+        // Apply type-specific simplification
+        if (atype === 'updateRecord') {
+          actColActions.push(simplifyUpdateRecord(actionSpec));
+        } else if (atype === 'link') {
+          actColActions.push(simplifyLinkAction(actionSpec));
+        } else {
+          // Apply stripDefaults to stepParams
+          if (actionSpec.stepParams) actionSpec.stepParams = stripDefaults(actionSpec.stepParams);
+          actColActions.push(actionSpec);
+        }
       } else {
         actColUsedKeys.add(atype);
         actColActions.push(atype);
@@ -401,6 +690,8 @@ function exportTableContents(
             ...(openView.popupTemplateUid ? { popupTemplateUid: openView.popupTemplateUid } : {}),
           };
         }
+        // Simplify clickToOpen + popupSettings → popup shorthand
+        simplifyPopup(fieldSpec, projectDir);
         fields.push(fieldSpec);
         columnOrder.push(fieldPath);
       } else {
@@ -711,16 +1002,30 @@ function exportActions(
           safeWrite(path.join(aiDir, tasksFname), dumpYaml({ tasks: simplifiedTasks }));
           actionSpec.tasks_file = `./ai/${tasksFname}`;
         }
-        target.push(actionSpec);
+        // Simplify: ai: viz or ai: { employee: viz, tasks: ./ai/xxx.yaml }
+        target.push(simplifyAiAction(actionSpec));
+      } else if (atype === 'link') {
+        // Simplify: link: { title, icon, url }
+        const sp = (act.stepParams || {}) as Record<string, unknown>;
+        const actionSpec: Record<string, unknown> = { type: atype, stepParams: sp };
+        actionSpec.key = genActionKey(actionSpec);
+        target.push(simplifyLinkAction(actionSpec));
+      } else if (atype === 'updateRecord') {
+        // Simplify: updateRecord: { key, icon, tooltip, assign, hiddenWhen }
+        const sp = (act.stepParams || {}) as Record<string, unknown>;
+        const actionSpec: Record<string, unknown> = { type: atype };
+        if (Object.keys(sp).length) actionSpec.stepParams = sp;
+        actionSpec.key = genActionKey(actionSpec);
+        target.push(simplifyUpdateRecord(actionSpec));
       } else if (atype === 'workflowTrigger') {
         const actionSpec: Record<string, unknown> = { type: atype };
         if (act.stepParams && Object.keys(act.stepParams).length) {
-          actionSpec.stepParams = act.stepParams;
+          actionSpec.stepParams = stripDefaults(act.stepParams) as Record<string, unknown>;
         }
         actionSpec.key = genActionKey(actionSpec);
         target.push(actionSpec);
       } else {
-        // For actions with stepParams (popup buttons, updateRecord, etc.)
+        // For actions with stepParams (popup buttons, etc.)
         const sp = (act.stepParams || {}) as Record<string, unknown>;
         const props = (act as unknown as Record<string, unknown>).props as Record<string, unknown>;
         const hasConfig = Object.keys(sp).length > 0 || (props && Object.keys(props).length > 0);
@@ -728,7 +1033,7 @@ function exportActions(
         // Actions with config: export stepParams. Only simple actions go as bare strings.
         if (hasConfig && !SIMPLE_ACTION_TYPES.has(atype)) {
           const actionSpec: Record<string, unknown> = { type: atype };
-          if (Object.keys(sp).length) actionSpec.stepParams = sp;
+          if (Object.keys(sp).length) actionSpec.stepParams = stripDefaults(sp);
           if (props && Object.keys(props).length) actionSpec.props = props;
           actionSpec.key = genActionKey(actionSpec);
           target.push(actionSpec);
@@ -741,9 +1046,17 @@ function exportActions(
       if (act.subModels?.page) {
         // Use the semantic key for the target ref
         const lastPushed = target[target.length - 1];
-        const refKey = typeof lastPushed === 'object' && lastPushed
-          ? ((lastPushed as Record<string, unknown>).key as string) || atype
-          : atype;
+        let refKey: string;
+        if (typeof lastPushed === 'object' && lastPushed) {
+          const lo = lastPushed as Record<string, unknown>;
+          // For simplified actions (link/ai/updateRecord), extract key from nested structure
+          refKey = (lo.key as string)
+            || ((lo.updateRecord as Record<string, unknown>)?.key as string)
+            || ((lo.link as Record<string, unknown>)?.key as string)
+            || atype;
+        } else {
+          refKey = atype;
+        }
         actionPopups.push({
           field: refKey,
           field_uid: act.uid,

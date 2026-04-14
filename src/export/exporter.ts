@@ -7,6 +7,7 @@ import type { NocoBaseClient } from '../client';
 import type { FlowModelNode } from '../types/api';
 import { exportBlock, type PopupRef } from './block-exporter';
 import { dumpYaml, saveYaml } from '../utils/yaml';
+import { stripDefaults } from '../utils/strip-defaults';
 
 const exportedPopupUids = new Set<string>();
 

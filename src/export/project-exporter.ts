@@ -27,10 +27,11 @@ import * as path from 'node:path';
 import type { NocoBaseClient } from '../client';
 import type { RouteInfo } from '../client/routes';
 import type { FlowModelNode } from '../types/api';
-import { exportBlock, TYPE_MAP, type PopupRef } from './block-exporter';
+import { exportBlock, lookupTemplateFile, simplifyPopup, TYPE_MAP, type PopupRef } from './block-exporter';
 import { exportAllTemplates, exportTemplateUsages } from './template-exporter';
 import { dumpYaml, loadYaml } from '../utils/yaml';
 import { slugify } from '../utils/slugify';
+import { stripDefaults } from '../utils/strip-defaults';
 
 interface ExportOptions {
   outDir: string;
@@ -257,7 +258,7 @@ async function exportSingleTab(
   const allPopupRefs: PopupRef[] = [];
 
   for (let i = 0; i < items.length; i++) {
-    const exported = exportBlock(items[i], jsDir, prefix, i, usedKeys);
+    const exported = exportBlock(items[i], jsDir, prefix, i, usedKeys, outDir);
     if (!exported) continue;
 
     const spec = { ...exported.spec };
@@ -272,20 +273,30 @@ async function exportSingleTab(
         const usages = usageResp.data.data || [];
         if (usages.length) {
           const templateUid = usages[0].templateUid;
-          // Look up template details
-          try {
-            const tmplResp = await nb.http.get(`${nb.baseUrl}/api/flowModelTemplates:get`, {
-              params: { filterByTk: templateUid },
-            });
-            const tmpl = tmplResp.data.data;
-            spec.templateRef = {
-              templateUid,
-              templateName: tmpl?.name || '',
-              targetUid: tmpl?.targetUid || '',
-              mode: 'reference',
-            };
-          } catch {
-            spec.templateRef = { templateUid, mode: 'reference' };
+          // Try simplified ref: templates/xxx.yaml
+          const tplFile = lookupTemplateFile(templateUid, outDir);
+          if (tplFile) {
+            // Replace spec with simplified ref
+            const blockKey = spec.key;
+            for (const k of Object.keys(spec)) delete spec[k];
+            spec.ref = tplFile;
+            spec.key = blockKey;
+          } else {
+            // Fallback: keep templateRef
+            try {
+              const tmplResp = await nb.http.get(`${nb.baseUrl}/api/flowModelTemplates:get`, {
+                params: { filterByTk: templateUid },
+              });
+              const tmpl = tmplResp.data.data;
+              spec.templateRef = {
+                templateUid,
+                templateName: tmpl?.name || '',
+                targetUid: tmpl?.targetUid || '',
+                mode: 'reference',
+              };
+            } catch {
+              spec.templateRef = { templateUid, mode: 'reference' };
+            }
           }
         }
       } catch { /* best effort */ }
@@ -348,6 +359,8 @@ async function exportSingleTab(
           fieldSpec.popupSettings = { collectionName: rawOv.collectionName || '', mode: rawOv.mode || 'drawer', size: rawOv.size || 'medium', filterByTk: rawOv.filterByTk || '{{ ctx.record.id }}' };
         }
         (fieldSpec.popupSettings as Record<string, unknown>).popupTemplateUid = rawOv.popupTemplateUid;
+        // Simplify clickToOpen + popupSettings → popup shorthand
+        simplifyPopup(fieldSpec, outDir);
         // Add popup ref
         if (!allPopupRefs.some(r => r.field_uid === fieldUid)) {
           allPopupRefs.push({ field: fieldPath, field_uid: fieldUid, block_key: blockKey, target: `$SELF.${blockKey}.fields.${fieldPath}` });
@@ -356,7 +369,7 @@ async function exportSingleTab(
     }
   }
 
-  // Fields with popupTemplateUid: keep as reference (don't inline template content)
+  // Fields with popup template: keep as reference (don't inline template content)
 
   // Enrich filterForm fields with filterManager data (filterPaths, label)
   // filterManager lives on the PAGE-LEVEL grid, not filterForm's own grid
@@ -438,9 +451,12 @@ async function exportSingleTab(
     }
   }
 
+  // Strip default/empty values from all block specs
+  const cleanedBlocks = blocks.map(b => stripDefaults(b) as Record<string, unknown>);
+
   // Layout
   const layout = exportLayout(gridNode, blockUidToKey);
-  const layoutSpec: Record<string, unknown> = { blocks };
+  const layoutSpec: Record<string, unknown> = { blocks: cleanedBlocks };
   // Skip trivial layout (single block, single row) — only export when layout adds info
   const isTrivialLayout = layout.length === 1 && Array.isArray(layout[0]) && (layout[0] as unknown[]).length === 1;
   if (layout.length && !isTrivialLayout) layoutSpec.layout = layout;
@@ -449,7 +465,7 @@ async function exportSingleTab(
   // Popups
   if (allPopupRefs.length) {
     fs.mkdirSync(popupsDir, { recursive: true });
-    await exportPopupsToDir(nb, allPopupRefs, popupsDir, jsDir, prefix);
+    await exportPopupsToDir(nb, allPopupRefs, popupsDir, jsDir, prefix, outDir);
   }
 
   // Clean empty dirs
@@ -471,6 +487,7 @@ async function exportPopupsToDir(
   popupsDir: string,
   jsDir: string,
   prefix: string,
+  projectDir: string | null = null,
   exportedUids = new Set<string>(),
   depth = 0,
 ): Promise<void> {
@@ -545,7 +562,7 @@ async function exportPopupsToDir(
         // Single tab
         const tabGrid = tabs.length ? (tabs[0] as FlowModelNode).subModels?.grid : null;
         if (tabGrid && !Array.isArray(tabGrid)) {
-          const { blocks, popupRefs: nested, layout: popupLayout } = await exportGridBlocks(nb, tabGrid as FlowModelNode, jsDir, `${prefix}_${ref.field}`);
+          const { blocks, popupRefs: nested, layout: popupLayout } = await exportGridBlocks(nb, tabGrid as FlowModelNode, jsDir, `${prefix}_${ref.field}`, projectDir);
           popupSpec.blocks = blocks;
           const isTrivial = popupLayout?.length === 1 && Array.isArray(popupLayout[0]) && (popupLayout[0] as unknown[]).length === 1;
           if (popupLayout?.length && !isTrivial) popupSpec.layout = popupLayout;
@@ -560,7 +577,7 @@ async function exportPopupsToDir(
             ?.title as Record<string, unknown>;
           const tabGrid = tab.subModels?.grid;
           if (tabGrid && !Array.isArray(tabGrid)) {
-            const { blocks, popupRefs: nested, layout: tabLayout } = await exportGridBlocks(nb, tabGrid as FlowModelNode, jsDir, `${prefix}_${ref.field}_tab${i}`);
+            const { blocks, popupRefs: nested, layout: tabLayout } = await exportGridBlocks(nb, tabGrid as FlowModelNode, jsDir, `${prefix}_${ref.field}_tab${i}`, projectDir);
             const tabEntry: Record<string, unknown> = { title: (title?.title as string) || `Tab${i}`, blocks };
             if (tabLayout?.length) tabEntry.layout = tabLayout;
             tabSpecs.push(tabEntry);
@@ -570,15 +587,15 @@ async function exportPopupsToDir(
         popupSpec.tabs = tabSpecs;
       }
 
-      // Write popup file
+      // Write popup file (with defaults stripped)
       const fname = ref.block_key
         ? `${ref.block_key}.${ref.field}.yaml`
         : `${ref.field}.yaml`;
-      fs.writeFileSync(path.join(popupsDir, fname), dumpYaml(popupSpec));
+      fs.writeFileSync(path.join(popupsDir, fname), dumpYaml(stripDefaults(popupSpec)));
 
       // Recurse into nested popups
       if (nestedPopupRefs.length) {
-        await exportPopupsToDir(nb, nestedPopupRefs, popupsDir, jsDir, `${prefix}_${ref.field}`, exportedUids, depth + 1);
+        await exportPopupsToDir(nb, nestedPopupRefs, popupsDir, jsDir, `${prefix}_${ref.field}`, projectDir, exportedUids, depth + 1);
       }
     } catch {
       // popup read failed
@@ -591,6 +608,7 @@ async function exportGridBlocks(
   grid: FlowModelNode,
   jsDir: string,
   prefix: string,
+  projectDir: string | null = null,
 ): Promise<{ blocks: Record<string, unknown>[]; popupRefs: PopupRef[]; layout: unknown[] }> {
   const rawItems = grid.subModels?.items;
   const items = (Array.isArray(rawItems) ? rawItems : []) as FlowModelNode[];
@@ -600,7 +618,7 @@ async function exportGridBlocks(
   const blockUidToKey = new Map<string, string>();
 
   for (let i = 0; i < items.length; i++) {
-    const exported = exportBlock(items[i], jsDir, prefix, i, usedKeys);
+    const exported = exportBlock(items[i], jsDir, prefix, i, usedKeys, projectDir);
     if (!exported) continue;
     const spec = { ...exported.spec };
     delete spec._popups;
@@ -614,16 +632,25 @@ async function exportGridBlocks(
         const usages = usageResp.data.data || [];
         if (usages.length) {
           const templateUid = usages[0].templateUid;
-          try {
-            const tmplResp = await nb.http.get(`${nb.baseUrl}/api/flowModelTemplates:get`, {
-              params: { filterByTk: templateUid },
-            });
-            const tmpl = tmplResp.data.data;
-            spec.templateRef = {
-              templateUid, templateName: tmpl?.name || '', targetUid: tmpl?.targetUid || '', mode: 'reference',
-            };
-          } catch {
-            spec.templateRef = { templateUid, mode: 'reference' };
+          // Try simplified ref: templates/xxx.yaml
+          const tplFile = lookupTemplateFile(templateUid, projectDir || jsDir);
+          if (tplFile) {
+            const blockKey = spec.key;
+            for (const k of Object.keys(spec)) delete spec[k];
+            spec.ref = tplFile;
+            spec.key = blockKey;
+          } else {
+            try {
+              const tmplResp = await nb.http.get(`${nb.baseUrl}/api/flowModelTemplates:get`, {
+                params: { filterByTk: templateUid },
+              });
+              const tmpl = tmplResp.data.data;
+              spec.templateRef = {
+                templateUid, templateName: tmpl?.name || '', targetUid: tmpl?.targetUid || '', mode: 'reference',
+              };
+            } catch {
+              spec.templateRef = { templateUid, mode: 'reference' };
+            }
           }
         }
       } catch { /* best effort */ }
@@ -690,6 +717,8 @@ async function exportGridBlocks(
           };
         }
         (fieldSpec.popupSettings as Record<string, unknown>).popupTemplateUid = rawOpenView.popupTemplateUid;
+        // Simplify clickToOpen + popupSettings → popup shorthand
+        simplifyPopup(fieldSpec, projectDir);
 
         // Add popup ref if not already present
         if (!popupRefs.some(r => r.field_uid === fieldUid)) {
@@ -747,10 +776,13 @@ async function exportGridBlocks(
     delete (b as Record<string, unknown>)._reference;
   }
 
+  // Strip default/empty values from all block specs
+  const cleanedBlocks = blocks.map(b => stripDefaults(b) as Record<string, unknown>);
+
   // Extract grid layout (how blocks are arranged in rows/columns)
   const layout = exportLayout(grid, blockUidToKey);
 
-  return { blocks, popupRefs, layout };
+  return { blocks: cleanedBlocks, popupRefs, layout };
 }
 
 function exportLayout(
