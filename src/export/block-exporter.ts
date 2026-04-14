@@ -163,6 +163,34 @@ function simplifyJsBlock(spec: Record<string, unknown>): Record<string, unknown>
  * into filter: { path.$op: value } shorthand.
  * Only simplifies flat $and conditions. Complex nested logic keeps original format.
  */
+/**
+ * Replace field UIDs with field paths in linkage rule arrays.
+ * Walks the rule tree replacing any UID string found in the map.
+ */
+function resolveRuleFieldUids(
+  rules: Record<string, unknown>[],
+  uidMap: Map<string, string>,
+): Record<string, unknown>[] {
+  if (!uidMap.size) return rules;
+  const resolve = (obj: unknown): unknown => {
+    if (typeof obj === 'string') return uidMap.get(obj) || obj;
+    if (Array.isArray(obj)) return obj.map(resolve);
+    if (obj && typeof obj === 'object') {
+      const result: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+        if (k === 'fields' && Array.isArray(v)) {
+          result[k] = v.map(uid => typeof uid === 'string' ? (uidMap.get(uid) || uid) : uid);
+        } else {
+          result[k] = resolve(v);
+        }
+      }
+      return result;
+    }
+    return obj;
+  };
+  return rules.map(r => resolve(r) as Record<string, unknown>);
+}
+
 export function simplifyDataScope(dataScope: Record<string, unknown>): Record<string, unknown> | null {
   const logic = dataScope.logic as string;
   const items = dataScope.items as Record<string, unknown>[] | undefined;
@@ -579,6 +607,20 @@ export function exportBlock(
   // fieldValueRules + fieldLinkageRules: different storage depending on block type.
   // Forms: fieldValue + fieldLinkage stored on the grid node.
   // Details: fieldLinkage stored on the block node itself.
+
+  // Build UID → fieldPath map for resolving linkage rule field references
+  const uidToFieldPath = new Map<string, string>();
+  const formGrid = item.subModels?.grid;
+  if (formGrid && !Array.isArray(formGrid)) {
+    const gridItems = (formGrid as FlowModelNode).subModels?.items;
+    for (const gi of (Array.isArray(gridItems) ? gridItems : []) as FlowModelNode[]) {
+      const fp = ((gi.stepParams as Record<string, unknown>)?.fieldSettings as Record<string, unknown>)
+        ?.init as Record<string, unknown>;
+      const fieldPath = (fp?.fieldPath || '') as string;
+      if (fieldPath && gi.uid) uidToFieldPath.set(gi.uid, fieldPath);
+    }
+  }
+
   if (['createForm', 'editForm'].includes(btype)) {
     const gridNode = item.subModels?.grid;
     if (gridNode && !Array.isArray(gridNode)) {
@@ -588,14 +630,14 @@ export function exportBlock(
       const assignRules = formModelSettings?.assignRules as Record<string, unknown> | undefined;
       const fieldValueRules = assignRules?.value;
       if (Array.isArray(fieldValueRules) && fieldValueRules.length) {
-        spec.fieldValueRules = fieldValueRules;
+        spec.fieldValueRules = resolveRuleFieldUids(fieldValueRules, uidToFieldPath);
       }
       // fieldLinkageRules: grid.stepParams.eventSettings.linkageRules.value
       const eventSettings = gridSp.eventSettings as Record<string, unknown> | undefined;
       const linkageRulesContainer = eventSettings?.linkageRules as Record<string, unknown> | undefined;
       const fieldLinkageRules = linkageRulesContainer?.value;
       if (Array.isArray(fieldLinkageRules) && fieldLinkageRules.length) {
-        spec.fieldLinkageRules = fieldLinkageRules;
+        spec.fieldLinkageRules = resolveRuleFieldUids(fieldLinkageRules, uidToFieldPath);
       }
     }
   } else if (btype === 'details') {
@@ -604,7 +646,7 @@ export function exportBlock(
     const linkageRulesContainer = detailsSettings?.linkageRules as Record<string, unknown> | undefined;
     const fieldLinkageRules = linkageRulesContainer?.value;
     if (Array.isArray(fieldLinkageRules) && fieldLinkageRules.length) {
-      spec.fieldLinkageRules = fieldLinkageRules;
+      spec.fieldLinkageRules = resolveRuleFieldUids(fieldLinkageRules, uidToFieldPath);
     }
   }
 
