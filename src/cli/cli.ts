@@ -19,6 +19,8 @@ import { exportAcl } from '../acl/acl-exporter';
 import { deployAcl } from '../acl/acl-deployer';
 import { exportWorkflows } from '../workflow/workflow-exporter';
 import { deployWorkflows } from '../workflow/workflow-deployer';
+import { validateWorkflow, formatValidationResult } from '../workflow/validator';
+import type { WorkflowSpec } from '../workflow/types';
 import { scaffold } from '../deploy/scaffold';
 import { deployProject } from '../deploy/project-deployer';
 import { sync } from '../sync';
@@ -36,7 +38,7 @@ async function main() {
 
   if (!command) {
     console.log('Usage: cli.ts <command> [options]');
-    console.log('Commands: deploy, deploy-project, scaffold, verify-sql, export, export-project, sync, graph, export-acl, deploy-acl, export-workflows, deploy-workflows');
+    console.log('Commands: deploy, deploy-project, scaffold, verify-sql, export, export-project, sync, graph, export-acl, deploy-acl, export-workflows, deploy-workflows, validate-workflows');
     process.exit(1);
   }
 
@@ -76,6 +78,9 @@ async function main() {
       break;
     case 'deploy-workflows':
       await cmdDeployWorkflows(args.slice(1));
+      break;
+    case 'validate-workflows':
+      cmdValidateWorkflows(args.slice(1));
       break;
     default:
       console.error(`Unknown command: ${command}`);
@@ -384,9 +389,55 @@ async function cmdExportWorkflows(args: string[]) {
 
 async function cmdDeployWorkflows(args: string[]) {
   const dir = args[0];
-  if (!dir) { console.error('Usage: cli.ts deploy-workflows <project-dir>'); process.exit(1); }
+  if (!dir) { console.error('Usage: cli.ts deploy-workflows <project-dir> [--skip-validation]'); process.exit(1); }
+  const skipValidation = args.includes('--skip-validation');
   const nb = await NocoBaseClient.create();
-  await deployWorkflows(nb, dir);
+  await deployWorkflows(nb, dir, { skipValidation });
+}
+
+function cmdValidateWorkflows(args: string[]) {
+  const dir = args[0];
+  if (!dir) { console.error('Usage: cli.ts validate-workflows <project-dir>'); process.exit(1); }
+
+  const wfBaseDir = path.join(dir, 'workflows');
+  if (!fs.existsSync(wfBaseDir)) {
+    console.error('No workflows/ directory found');
+    process.exit(1);
+  }
+
+  const entries = fs.readdirSync(wfBaseDir, { withFileTypes: true });
+  const wfDirs = entries
+    .filter(e => e.isDirectory())
+    .map(e => e.name)
+    .filter(name => fs.existsSync(path.join(wfBaseDir, name, 'workflow.yaml')));
+
+  if (!wfDirs.length) {
+    console.log('No workflow.yaml files found');
+    return;
+  }
+
+  console.log(`  Validating ${wfDirs.length} workflow(s)...\n`);
+  let totalErrors = 0;
+  let totalWarnings = 0;
+
+  for (const slug of wfDirs) {
+    const spec = loadYaml<WorkflowSpec>(path.join(wfBaseDir, slug, 'workflow.yaml'));
+    const result = validateWorkflow(spec);
+
+    const errors = result.errors.filter(e => e.level === 'error');
+    const warnings = result.errors.filter(e => e.level === 'warn');
+    totalErrors += errors.length;
+    totalWarnings += warnings.length;
+
+    if (result.errors.length) {
+      console.log(formatValidationResult(result, spec.title));
+    } else {
+      console.log(`  ✓ ${spec.title}: passed`);
+    }
+  }
+
+  console.log(`\n  Result: ${wfDirs.length} workflow(s), ${totalErrors} error(s), ${totalWarnings} warning(s)`);
+  if (totalErrors > 0) process.exit(1);
 }
 
 main().catch(e => { console.error(e.message || e); process.exit(1); });

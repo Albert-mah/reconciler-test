@@ -666,7 +666,22 @@ async function deployPageBlueprint(
   });
 
   try {
-    const result = await nb.surfaces.applyBlueprint(blueprint as unknown as Record<string, unknown>) as Record<string, unknown>;
+    let bpPayload = blueprint as unknown as Record<string, unknown>;
+    let result: Record<string, unknown>;
+    try {
+      result = await nb.surfaces.applyBlueprint(bpPayload) as Record<string, unknown>;
+    } catch (bpErr) {
+      const msg = (bpErr as { response?: { data?: { errors?: { message: string }[] } } }).response?.data?.errors?.[0]?.message || '';
+      if (isReplace && msg.includes('target not found')) {
+        // Stale page_uid — page was deleted externally. Retry as create.
+        log(`  . blueprint replace failed (stale UID), retrying as create...`);
+        delete state.pages[pageKey];
+        bpPayload = pageToBlueprint(pageInfo, { groupId, groupTitle, mode: 'create' }) as unknown as Record<string, unknown>;
+        result = await nb.surfaces.applyBlueprint(bpPayload) as Record<string, unknown>;
+      } else {
+        throw bpErr;
+      }
+    }
     const target = (result.target || {}) as Record<string, unknown>;
     const pageSchemaUid = (target.pageSchemaUid || '') as string;
     const pageUid = (target.pageUid || '') as string;

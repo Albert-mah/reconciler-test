@@ -16,6 +16,7 @@ import * as path from 'node:path';
 import type { NocoBaseClient } from '../client';
 import { slugify } from '../utils/slugify';
 import { dumpYaml, saveYaml } from '../utils/yaml';
+import { validateWorkflow, formatValidationResult } from './validator';
 import type {
   ApiWorkflow,
   ApiFlowNode,
@@ -252,6 +253,14 @@ export async function exportWorkflows(
     const result = await exportSingleWorkflow(nb, wf, outDir, log);
     if (result) {
       stateFile.workflows[result.slug] = result.state;
+
+      // Post-export validation: warn about potential issues in exported YAML
+      if (result.spec) {
+        const validation = validateWorkflow(result.spec);
+        if (validation.errors.length) {
+          log(formatValidationResult(validation, wf.title));
+        }
+      }
     }
   }
 
@@ -270,7 +279,7 @@ async function exportSingleWorkflow(
   wf: ApiWorkflow,
   outDir: string,
   log: (msg: string) => void,
-): Promise<{ slug: string; state: WorkflowState } | null> {
+): Promise<{ slug: string; state: WorkflowState; spec: WorkflowSpec } | null> {
   // Fetch nodes
   const nodeResp = await nb.http.get(`${nb.baseUrl}/api/workflows/${wf.id}/nodes:list`, {
     params: {
@@ -379,5 +388,5 @@ async function exportSingleWorkflow(
     nodes: nodeStates,
   };
 
-  return { slug, state };
+  return { slug, state, spec };
 }

@@ -11,6 +11,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { NocoBaseClient } from '../client';
 import { loadYaml, saveYaml } from '../utils/yaml';
+import { validateWorkflow, formatValidationResult } from './validator';
 import type {
   WorkflowSpec,
   NodeSpec,
@@ -186,6 +187,10 @@ function resolveConfig(
 
 export interface DeployWorkflowsOptions {
   log?: (msg: string) => void;
+  /** Skip pre-deploy validation (not recommended) */
+  skipValidation?: boolean;
+  /** Collection metadata for field-level validation */
+  collections?: Record<string, { fields: string[] }>;
 }
 
 /**
@@ -237,6 +242,26 @@ export async function deployWorkflows(
   }
 
   log(`  Deploying ${wfDirs.length} workflow(s)...`);
+
+  // Pre-deploy validation (unless skipped)
+  if (!opts.skipValidation) {
+    let hasErrors = false;
+    for (const slug of wfDirs) {
+      const wfDir = path.join(wfBaseDir, slug);
+      const spec = loadYaml<WorkflowSpec>(path.join(wfDir, 'workflow.yaml'));
+      const result = validateWorkflow(spec, opts.collections);
+
+      if (result.errors.length) {
+        log(formatValidationResult(result, spec.title));
+      }
+      if (!result.valid) {
+        hasErrors = true;
+      }
+    }
+    if (hasErrors) {
+      throw new Error('Workflow validation failed — fix errors above before deploying');
+    }
+  }
 
   for (const slug of wfDirs) {
     const wfDir = path.join(wfBaseDir, slug);

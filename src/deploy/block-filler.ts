@@ -18,6 +18,7 @@ import type { BlockSpec } from '../types/spec';
 import type { BlockState } from '../types/state';
 import { fixDisplayModels } from './display-model-fixer';
 import { ensureJsHeader, replaceJsUids } from '../utils/js-utils';
+import { FILLABLE_ACTION_TYPE_TO_MODEL } from '../utils/block-types';
 import {
   deployClickToOpen,
   configureFilter,
@@ -265,15 +266,9 @@ export async function fillBlock(
   const RECORD_ACTION_BLOCKS = new Set(['details', 'list', 'gridCard']);
   const isRecordActionBlock = RECORD_ACTION_BLOCKS.has(btype);
 
-  const COMPOSE_ACTIONS: Record<string, string> = {
-    filter: 'FilterActionModel', refresh: 'RefreshActionModel',
-    addNew: 'AddNewActionModel', delete: 'DeleteActionModel',
-    bulkDelete: 'BulkDeleteActionModel', submit: 'SubmitActionModel',
-    reset: 'ResetActionModel', edit: 'EditActionModel', view: 'ViewActionModel',
-  };
   for (const aspec of bs.actions || []) {
     const atype = typeof aspec === 'string' ? aspec : (aspec as Record<string, unknown>).type as string;
-    if (!(atype in COMPOSE_ACTIONS)) continue;
+    if (!(atype in FILLABLE_ACTION_TYPE_TO_MODEL)) continue;
     if (blockState.actions?.[atype]) continue;  // already tracked
     let uid = '';
     try {
@@ -289,7 +284,7 @@ export async function fillBlock(
         const { generateUid } = await import('../utils/uid');
         uid = generateUid();
         await nb.models.save({
-          uid, use: COMPOSE_ACTIONS[atype],
+          uid, use: FILLABLE_ACTION_TYPE_TO_MODEL[atype],
           parentId: blockUid,
           subKey: isRecordActionBlock ? 'recordActions' : 'actions',
           subType: 'array',

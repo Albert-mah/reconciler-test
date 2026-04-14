@@ -9,7 +9,7 @@
  *   - block-composer.ts      → COMPOSE_BLOCK_TYPES, LEGACY_BLOCK_TYPES, COMPOSE_ACTION_TYPES
  *   - block-exporter.ts      → MODEL_TO_BLOCK_TYPE, MODEL_TO_ACTION_TYPE, SIMPLE_ACTION_TYPES
  *   - action-filler.ts       → NON_COMPOSE_ACTION_TYPE_TO_MODEL
- *   - block-filler.ts        → COMPOSE_ACTION_TYPE_TO_MODEL
+ *   - block-filler.ts        → FILLABLE_ACTION_TYPE_TO_MODEL
  *   - blueprint-converter.ts → BLOCK_TYPE_TO_MODEL
  *   - export/index.ts        → MODEL_TO_BLOCK_TYPE
  */

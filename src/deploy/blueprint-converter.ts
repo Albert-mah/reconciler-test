@@ -20,6 +20,7 @@ import type { BlockSpec, FieldSpec, PopupSpec, LayoutRow } from '../types/spec';
 import type { PageInfo } from './page-discovery';
 import { loadYaml } from '../utils/yaml';
 import { slugify } from '../utils/slugify';
+import { BLOCK_TYPE_TO_MODEL } from '../utils/block-types';
 
 // ── Blueprint document types (matching NocoBase public-types.ts) ──
 
@@ -197,19 +198,12 @@ function blockSpecToBlueprint(bs: BlockSpec, pageDir: string, tabKey = 'main'): 
     key: bs.key || bs.type,
   };
 
-  // Map block type
-  const TYPE_MAP: Record<string, string> = {
-    table: 'table', filterForm: 'filterForm',
-    createForm: 'createForm', editForm: 'editForm',
-    details: 'details', list: 'list', gridCard: 'gridCard',
-    jsBlock: 'jsBlock', chart: 'chart',
-    markdown: 'markdown', iframe: 'iframe',
-  };
+  // Map block type — validate against known block types from registry
   if (bs.type === 'reference') {
     // Reference block: type comes from template, blueprint infers it
     // Only set template, don't set type
-  } else if (TYPE_MAP[bs.type]) {
-    block.type = TYPE_MAP[bs.type];
+  } else if (bs.type in BLOCK_TYPE_TO_MODEL) {
+    block.type = bs.type;
   }
 
   // Collection
