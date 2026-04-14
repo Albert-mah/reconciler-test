@@ -77,7 +77,16 @@ export async function deployPopup(
       }
 
       // Content is sufficient if live has at least as many tabs and blocks as spec
-      const hasContent = tabArr.length >= specTabCount && liveBlockCount >= specBlockCount && liveBlockCount > 0;
+      // But if spec expects reference blocks and live has regular blocks, re-compose is needed
+      const specHasRef = (popupSpec.blocks || []).some(b => b.type === 'reference');
+      const liveHasRef = tabArr.some(t => {
+        const g2 = (t as Record<string, unknown>).subModels as Record<string, unknown>;
+        const gi2 = (g2?.grid as Record<string, unknown>)?.subModels as Record<string, unknown>;
+        const ia2 = (gi2?.items || []) as { use?: string }[];
+        return Array.isArray(ia2) && ia2.some(i => i.use === 'ReferenceBlockModel');
+      });
+      const hasContent = tabArr.length >= specTabCount && liveBlockCount >= specBlockCount && liveBlockCount > 0
+        && (!specHasRef || liveHasRef); // reference spec needs reference blocks
       if (hasContent) {
         // Popup exists — sync content only (fillBlock for JS, templateRef, etc.)
         // Do NOT re-compose: just update existing blocks in-place by position
