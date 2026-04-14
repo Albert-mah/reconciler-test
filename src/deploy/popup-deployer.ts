@@ -85,6 +85,21 @@ export async function deployPopup(
         const ia2 = (gi2?.items || []) as { use?: string }[];
         return Array.isArray(ia2) && ia2.some(i => i.use === 'ReferenceBlockModel');
       });
+      // If spec wants reference blocks but live has regular blocks, clean up first
+      if (specHasRef && !liveHasRef && liveBlockCount > 0) {
+        for (const t of tabArr) {
+          const g2 = (t as Record<string, unknown>).subModels as Record<string, unknown>;
+          const gi2 = (g2?.grid as Record<string, unknown>)?.subModels as Record<string, unknown>;
+          const ia2 = (gi2?.items || []) as { uid?: string; use?: string }[];
+          for (const item of (Array.isArray(ia2) ? ia2 : [])) {
+            if (item.uid && item.use !== 'ReferenceBlockModel') {
+              try { await nb.surfaces.removeNode(item.uid); } catch { /* skip */ }
+              log(`    - removed default ${item.use} from popup (spec wants reference)`);
+            }
+          }
+        }
+      }
+
       const hasContent = tabArr.length >= specTabCount && liveBlockCount >= specBlockCount && liveBlockCount > 0
         && (!specHasRef || liveHasRef); // reference spec needs reference blocks
       if (hasContent) {
