@@ -213,7 +213,10 @@ async function createBlockTemplate(
   tplDir: string,
   log: (msg: string) => void,
 ): Promise<{ templateUid: string; targetUid: string } | undefined> {
-  const composeBlock = toComposeBlock(content as any, collName);
+  // Strip resource_binding for template compose — temp page has no record context.
+  // The binding will be set when the template is actually used in a popup.
+  const { resource_binding, ...contentForCompose } = content;
+  const composeBlock = toComposeBlock(contentForCompose as any, collName);
   if (!composeBlock) {
     // Fallback: block type not supported by compose — use direct model creation
     return createBlockTemplateViaModel(nb, name, content, collName, tplSpec);
@@ -236,6 +239,7 @@ async function createBlockTemplate(
     const saveResult = await nb.surfaces.saveTemplate({
       target: { uid: blockUid },
       name,
+      description: name,
       type: 'block',
       collectionName: collName,
       dataSourceKey: (tplSpec.dataSourceKey as string) || 'main',
