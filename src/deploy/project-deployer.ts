@@ -27,7 +27,7 @@ import { ensureCollection } from './collection-deployer';
 import { deploySurface } from './surface-deployer';
 import { deployPopup } from './popup-deployer';
 import { expandPopups } from './popup-expander';
-import { deployTemplates, type TemplateUidMap } from './template-deployer';
+import { deployTemplates, convertPopupToTemplate, type TemplateUidMap, type PendingPopupTemplate } from './template-deployer';
 import { reorderTableColumns } from './column-reorder';
 import { postVerify } from './post-verify';
 import { verifySqlFromPages } from './sql-verifier';
@@ -166,9 +166,15 @@ export async function deployProject(
 
   // Deploy templates (before pages, so popupTemplateUid can be mapped)
   let templateUidMap: TemplateUidMap = new Map();
+  let pendingPopups: PendingPopupTemplate[] = [];
   if (!opts.page) {
-    templateUidMap = await deployTemplates(nb, root, log);
+    const tplResult = await deployTemplates(nb, root, log);
+    templateUidMap = tplResult.uidMap;
+    pendingPopups = tplResult.pendingPopupTemplates;
   }
+
+  // For pending popup templates: expand their content inline into the first referencing popup
+  // (sugar.ts handles popup: templates/popup/xxx.yaml → inline blocks if template doesn't exist yet)
 
   // Rewrite template UIDs in page specs (old exported UIDs → new deployed UIDs)
   if (templateUidMap.size) {
@@ -233,6 +239,32 @@ export async function deployProject(
   if (pv.warnings.length) {
     log('\n  ── Hints ──');
     for (const w of pv.warnings) log(`  💡 ${w}`);
+  }
+
+  // Convert pending popup templates (inline popups → templates)
+  if (pendingPopups.length) {
+    for (const pp of pendingPopups) {
+      // Find a deployed field that has popup content matching this template
+      for (const [, ps] of Object.entries(state.pages)) {
+        const pageState = ps as Record<string, unknown>;
+        const popups = (pageState.popups || {}) as Record<string, Record<string, unknown>>;
+        for (const [popupKey, popupState] of Object.entries(popups)) {
+          // Match by collection name in the popup target
+          if (!popupKey.includes('.fields.')) continue;
+          const targetUid = popupState.target_uid as string;
+          if (!targetUid) continue;
+          try {
+            const result = await convertPopupToTemplate(nb, targetUid, pp.name, pp.collName, log);
+            if (result) {
+              templateUidMap.set(pp.uid, result.templateUid);
+              if (pp.targetUid) templateUidMap.set(pp.targetUid, result.targetUid);
+              break;
+            }
+          } catch { /* skip */ }
+        }
+        if (templateUidMap.has(pp.uid)) break;
+      }
+    }
   }
 
   // SQL verify

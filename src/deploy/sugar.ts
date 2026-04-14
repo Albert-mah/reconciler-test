@@ -387,18 +387,38 @@ function expandPopupFieldSugar(
   }
 
   if (typeof popupVal === 'string') {
-    // popup: templates/popup/leads_view.yaml → popup template ref
+    // popup: templates/popup/leads_view.yaml → popup template ref or inline content
     const absPath = path.resolve(projectRoot, popupVal);
     if (fs.existsSync(absPath)) {
       try {
         const template = loadYaml<Record<string, unknown>>(absPath);
-        result.popupSettings = {
-          popupTemplateUid: template.templateUid || template.uid || '',
-          collectionName: (template.collectionName || template.coll || blockColl) as string || undefined,
-          mode: 'drawer',
-          size: 'large',
-        };
-        return result;
+        const tplUid = (template.templateUid || template.uid || '') as string;
+
+        // If UID looks like a real NocoBase UID (short alphanumeric), use as template ref
+        // If it's a fake/placeholder UID (long, has underscores, etc.), inline the content
+        const isRealUid = tplUid && /^[a-z0-9]{8,15}$/.test(tplUid);
+
+        if (isRealUid) {
+          result.popupSettings = {
+            popupTemplateUid: tplUid,
+            collectionName: (template.collectionName || template.coll || blockColl) as string || undefined,
+            mode: 'drawer',
+            size: 'large',
+          };
+          return result;
+        }
+
+        // Inline the popup template content — will be deployed as inline popup,
+        // then converted to a real template post-deploy
+        const content = template.content as Record<string, unknown>;
+        if (content) {
+          result.popup = {
+            ...content,
+            _templateName: template.name, // Track for post-deploy conversion
+            _templateColl: template.collectionName || blockColl,
+          };
+          return result;
+        }
       } catch {
         // Fall through to default
       }

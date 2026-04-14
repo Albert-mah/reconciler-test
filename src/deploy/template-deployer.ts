@@ -43,6 +43,7 @@ interface ExistingTemplate {
 }
 
 export type TemplateUidMap = Map<string, string>; // oldUid → newUid
+export interface PendingPopupTemplate { name: string; collName: string; file: string; uid: string; targetUid: string; }
 
 /**
  * Auto-discover template YAML files when _index.yaml doesn't exist.
@@ -118,6 +119,7 @@ export async function deployTemplates(
   }
 
   const uidMap: TemplateUidMap = new Map();
+  const pendingPopupTemplates: { name: string; collName: string; file: string; uid: string; targetUid: string }[] = [];
   let created = 0;
   let reused = 0;
   let skipped = 0;
@@ -159,7 +161,16 @@ export async function deployTemplates(
       if (tpl.type === 'block') {
         result = await createBlockTemplate(nb, tpl.name, content, collName, tplSpec, tplDir, log);
       } else if (tpl.type === 'popup') {
-        result = await createPopupTemplate(nb, tpl.name, content, collName, tplSpec, tplDir, log);
+        // Popup templates are created AFTER page deployment:
+        // 1. Sugar expansion inlines the popup content into the first referencing field
+        // 2. Page deploys the inline popup normally
+        // 3. After deploy, convertPopupToTemplate() saves it as a template
+        // 4. Subsequent fields use popupTemplateUid
+        log(`    ~ popup template: ${tpl.name} (deferred — will deploy inline then convert)`);
+        // Store pending info for post-deploy conversion
+        pendingPopupTemplates.push({ name: tpl.name, collName, file: tpl.file, uid: tpl.uid, targetUid: tpl.targetUid });
+        skipped++;
+        continue;
       }
 
       if (!result) {
@@ -180,8 +191,8 @@ export async function deployTemplates(
     }
   }
 
-  log(`  templates: ${created} created, ${reused} reused${skipped ? `, ${skipped} skipped` : ''}`);
-  return uidMap;
+  log(`  templates: ${created} created, ${reused} reused${skipped ? `, ${skipped} deferred/skipped` : ''}`);
+  return { uidMap, pendingPopupTemplates };
 }
 
 // ── Block template creation ──
@@ -246,17 +257,50 @@ async function createBlockTemplate(
   }
 }
 
-// ── Popup template creation ──
+// ── Popup template: deferred creation ──
+// Popup templates can't be created from scratch via API.
+// Instead, deploy popup as inline content first, then convert to template.
 
 /**
- * Create a popup template:
- *   1. Create a field-like host node (DisplayTextFieldModel)
- *   2. Compose blocks into its ChildPage (auto-created by compose)
- *   3. Register as popup template via flowModelTemplates:create
+ * Convert an already-deployed inline popup into a popup template.
+ * Called AFTER page deployment, when a field has popup content that
+ * should become a reusable template.
  *
- * Popup templates use a different structure than block templates:
- * the targetUid points to the field host node, which contains a ChildPage
- * with tabs/blocks inside.
+ * @param fieldUid - The field model UID that has the deployed popup
+ * @param name - Template name
+ * @param collName - Collection name
+ * @returns templateUid + targetUid if successful
+ */
+export async function convertPopupToTemplate(
+  nb: NocoBaseClient,
+  fieldUid: string,
+  name: string,
+  collName: string,
+  log: (msg: string) => void = console.log,
+): Promise<{ templateUid: string; targetUid: string } | undefined> {
+  try {
+    const result = await nb.surfaces.saveTemplate({
+      target: { uid: fieldUid },
+      name,
+      description: name,
+      saveMode: 'duplicate',
+    }) as Record<string, unknown>;
+
+    const templateUid = (result.uid || result.templateUid) as string;
+    const targetUid = (result.targetUid) as string;
+
+    if (templateUid) {
+      log(`    + popup template: ${name} (${templateUid})`);
+      return { templateUid, targetUid };
+    }
+  } catch (e) {
+    log(`    . popup template convert: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
+  }
+  return undefined;
+}
+
+/**
+ * Legacy createPopupTemplate — fallback to manual registration.
  */
 async function createPopupTemplate(
   nb: NocoBaseClient,
