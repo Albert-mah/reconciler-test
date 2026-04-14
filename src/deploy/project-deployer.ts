@@ -518,11 +518,18 @@ async function deployGroup(
 ): Promise<void> {
   // Blueprint mode: let applyBlueprint create navigation + pages in one call
   if (useBlueprint) {
-    // Ensure group exists for sub-page blueprint calls with groupId
+    // Ensure group exists — find existing by title first, create only if not found
     if (!state.group_id) {
-      const result = await nb.createGroup(routeEntry.title, routeEntry.icon || 'appstoreoutlined');
-      state.group_id = result.routeId;
-      log(`  + group: ${routeEntry.title}`);
+      const liveRoutes = await nb.http.get(`${nb.baseUrl}/api/desktopRoutes:list`, { params: { paginate: 'false', tree: 'true' } });
+      const existingGroup = (liveRoutes.data.data || []).find((r: any) => r.type === 'group' && r.title === routeEntry.title);
+      if (existingGroup) {
+        state.group_id = existingGroup.id;
+        log(`  = group: ${routeEntry.title} (found existing)`);
+      } else {
+        const result = await nb.createGroup(routeEntry.title, routeEntry.icon || 'appstoreoutlined');
+        state.group_id = result.routeId;
+        log(`  + group: ${routeEntry.title}`);
+      }
       nb.routes.clearCache();
     } else {
       log(`  = group: ${routeEntry.title}`);
@@ -556,11 +563,18 @@ async function deployGroup(
     return;
   }
 
-  // Legacy mode: multi-step deploy
+  // Legacy mode: multi-step deploy — find existing group first
   if (!state.group_id) {
-    const result = await nb.createGroup(routeEntry.title, routeEntry.icon || 'appstoreoutlined');
-    state.group_id = result.routeId;
-    log(`  + group: ${routeEntry.title}`);
+    const liveRoutes = await nb.http.get(`${nb.baseUrl}/api/desktopRoutes:list`, { params: { paginate: 'false', tree: 'true' } });
+    const existingGroup = (liveRoutes.data.data || []).find((r: any) => r.type === 'group' && r.title === routeEntry.title);
+    if (existingGroup) {
+      state.group_id = existingGroup.id;
+      log(`  = group: ${routeEntry.title} (found existing)`);
+    } else {
+      const result = await nb.createGroup(routeEntry.title, routeEntry.icon || 'appstoreoutlined');
+      state.group_id = result.routeId;
+      log(`  + group: ${routeEntry.title}`);
+    }
     nb.routes.clearCache();
   } else {
     log(`  = group: ${routeEntry.title}`);
@@ -760,7 +774,25 @@ async function deployPageBlueprint(
   log: (msg: string) => void,
 ): Promise<void> {
   const pageKey = slugify(pageInfo.title);
-  const pageState = state.pages[pageKey];
+  let pageState = state.pages[pageKey];
+
+  // If not in state, check live routes for existing page (prevents duplicates)
+  if (!pageState?.page_uid) {
+    try {
+      const liveRoutes = await nb.http.get(`${nb.baseUrl}/api/desktopRoutes:list`, { params: { paginate: 'false', tree: 'true' } });
+      const liveGroup = (liveRoutes.data.data || []).find((r: any) => r.id === groupId || r.title === groupTitle);
+      const livePage = liveGroup?.children?.find((c: any) => c.title === pageInfo.title && c.type !== 'tabs');
+      if (livePage?.schemaUid) {
+        state.pages[pageKey] = { route_id: livePage.id, page_uid: livePage.schemaUid, tab_uid: '', blocks: {} };
+        pageState = state.pages[pageKey];
+        // Read tab UID
+        const pageData = await nb.get({ pageSchemaUid: livePage.schemaUid });
+        const tabs = pageData.tree.subModels?.tabs;
+        const tabArr = Array.isArray(tabs) ? tabs : tabs ? [tabs] : [];
+        if (tabArr.length) pageState.tab_uid = (tabArr[0] as Record<string, unknown>).uid as string || '';
+      }
+    } catch { /* skip — will create new */ }
+  }
 
   // If page already exists in state, use replace mode
   const isReplace = !!pageState?.page_uid;
