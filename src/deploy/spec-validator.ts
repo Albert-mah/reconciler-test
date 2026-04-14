@@ -155,6 +155,15 @@ function validateBlock(bs: BlockSpec, pageTitle: string, popups: PopupSpec[], is
     const jsItems = (bs as Record<string, unknown>).js_items as unknown[];
     if (!Array.isArray(jsItems) || !jsItems.length) {
       issues.push({ level: 'warn', page: pageTitle, block: key, message: 'filterForm has no JS stats button group — consider adding js_items for quick filter stats' });
+    } else if (bs.field_layout?.length) {
+      // JS items exist — check that JS is on the first row of field_layout
+      const firstRow = bs.field_layout[0];
+      const firstRowHasJs = Array.isArray(firstRow)
+        ? firstRow.some(item => typeof item === 'string' && item.startsWith('[JS:'))
+        : (typeof firstRow === 'string' && firstRow.startsWith('[JS:'));
+      if (!firstRowHasJs) {
+        issues.push({ level: 'warn', page: pageTitle, block: key, message: 'filterForm has js_items but JS is not on the first row of field_layout — move [JS:...] to the first row for CRM pattern' });
+      }
     }
 
     // ── Rule 6: filterForm must have submit + reset actions ──

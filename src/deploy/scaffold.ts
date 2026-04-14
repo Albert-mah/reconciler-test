@@ -155,8 +155,8 @@ export function scaffold(
     const pageSlug = slugify(pageName);
     const pageDir = path.join(root, 'pages', modSlug, pageSlug);
     dirs.push(pageDir);
+    dirs.push(path.join(pageDir, 'js'));
     if (pageName.toLowerCase().includes('dashboard')) {
-      dirs.push(path.join(pageDir, 'js'));
       dirs.push(path.join(pageDir, 'charts'));
     } else {
       dirs.push(path.join(pageDir, 'popups'));
@@ -391,7 +391,15 @@ function generateCrudPage(
           },
           'status',
         ],
+        js_items: [
+          {
+            key: 'stats_filter',
+            desc: 'Stats Filter Block',
+            file: `./js/stats_filter.js`,
+          },
+        ],
         field_layout: [
+          ['[JS:Stats Filter Block]'],
           ['name', 'status'],
         ],
       },
@@ -415,6 +423,46 @@ function generateCrudPage(
   };
 
   fs.writeFileSync(path.join(pageDir, 'layout.yaml'), dumpYaml(layout));
+
+  // js/stats_filter.js — stats filter button group stub
+  const statsFilterJs = `// Stats Filter Block — quick filter buttons with counts
+// TODO: Replace SQL queries with real data from ${coll}
+const { useState, useEffect } = ctx.React;
+const h = ctx.React.createElement;
+
+const StatsFilter = () => {
+  const [active, setActive] = useState('all');
+  const [counts, setCounts] = useState({ all: 0, active: 0, completed: 0 });
+
+  useEffect(() => {
+    // TODO: fetch real counts via ctx.request or ctx.sql
+    setCounts({ all: 42, active: 28, completed: 14 });
+  }, []);
+
+  const buttons = [
+    { key: 'all', label: 'All', count: counts.all },
+    { key: 'active', label: 'Active', count: counts.active },
+    { key: 'completed', label: 'Completed', count: counts.completed },
+  ];
+
+  const btnStyle = (isActive) => ({
+    padding: '6px 16px', borderRadius: '6px', cursor: 'pointer', border: 'none',
+    fontWeight: isActive ? '600' : '400', fontSize: '13px',
+    background: isActive ? '#1677ff' : '#f5f5f5',
+    color: isActive ? '#fff' : '#333',
+  });
+
+  return h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
+    ...buttons.map(b => h('button', {
+      key: b.key, style: btnStyle(active === b.key),
+      onClick: () => setActive(b.key),
+    }, b.label + ' (' + b.count + ')'))
+  );
+};
+
+ctx.render(h(StatsFilter, null));
+`;
+  fs.writeFileSync(path.join(pageDir, 'js', 'stats_filter.js'), statsFilterJs);
 
   // popups/table.addNew.yaml — reference form template
   const addNewPopup = {

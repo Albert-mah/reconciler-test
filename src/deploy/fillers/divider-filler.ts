@@ -54,9 +54,25 @@ export async function deployDividers(
   }
 
   // Create dividers from field_layout "--- Label ---" rows
+  // First, read existing dividers from live grid to avoid duplicates
+  const existingDividerLabels = new Set<string>();
+  try {
+    const gridData = await nb.get({ uid: gridUid });
+    const gridItems = gridData.tree.subModels?.items;
+    const gridArr = (Array.isArray(gridItems) ? gridItems : []) as { use?: string; stepParams?: Record<string, unknown> }[];
+    for (const gi of gridArr) {
+      if (gi.use === 'DividerItemModel') {
+        const divLabel = ((gi.stepParams?.markdownItemSetting as Record<string, unknown>)?.title as Record<string, unknown>)?.label as string || '';
+        if (divLabel) existingDividerLabels.add(divLabel);
+      }
+    }
+  } catch { /* skip */ }
+
   for (const row of fieldLayout) {
     if (typeof row === 'string' && row.startsWith('---')) {
       const label = row.replace(/^-+\s*/, '').replace(/\s*-+$/, '').trim();
+      // Skip if divider with this label already exists
+      if (label && existingDividerLabels.has(label)) continue;
       try {
         if (label) {
           await nb.models.addDivider(gridUid, label);

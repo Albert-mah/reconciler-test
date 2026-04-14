@@ -51,6 +51,24 @@ export async function fillBlock(
   const coll = bs.coll || defaultColl;
   const mod = path.resolve(modDir);
 
+  // ── Ensure gridUid is populated for form/details blocks ──
+  // Blueprint/compose may not return gridUid — read it from live tree if missing.
+  if (!gridUid && ['createForm', 'editForm', 'filterForm', 'details'].includes(btype)) {
+    try {
+      const blockData = await nb.get({ uid: blockUid });
+      const innerGrid = blockData.tree.subModels?.grid;
+      if (innerGrid && !Array.isArray(innerGrid)) {
+        gridUid = (innerGrid as { uid: string }).uid || '';
+        if (gridUid) {
+          blockState.grid_uid = gridUid;
+          log(`      . resolved grid_uid for ${btype}: ${gridUid.slice(0, 8)}`);
+        }
+      }
+    } catch (e) {
+      log(`      . grid_uid lookup: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
+    }
+  }
+
   // ── Block title ──
   if (bs.title) {
     try {

@@ -555,11 +555,14 @@ async function deployGroup(
       log(`  = group: ${routeEntry.title}`);
     }
 
+    const stateFile = path.join(root, 'state.yaml');
     for (const child of routeEntry.children || []) {
       if (child.type === 'flowPage') {
         const pageInfo = pages.find(p => p.title === child.title);
         if (pageInfo) {
           await deployPageBlueprint(nb, pageInfo, state, state.group_id!, routeEntry.title, log);
+          // Save state after each page (crash recovery)
+          saveYaml(stateFile, state);
         }
       } else if (child.type === 'group') {
         const subGroupKey = `_subgroup_${slugify(child.title)}`;
@@ -576,6 +579,8 @@ async function deployGroup(
           const pageInfo = pages.find(p => p.title === sc.title);
           if (pageInfo) {
             await deployPageBlueprint(nb, pageInfo, state, subGroupId, child.title, log);
+            // Save state after each page (crash recovery)
+            saveYaml(stateFile, state);
           }
         }
       }
@@ -600,11 +605,14 @@ async function deployGroup(
     log(`  = group: ${routeEntry.title}`);
   }
 
+  const legacyStateFile = path.join(root, 'state.yaml');
   for (const child of routeEntry.children || []) {
     if (child.type === 'flowPage') {
       const pageInfo = pages.find(p => p.title === child.title);
       if (pageInfo) {
         await deployOnePage(nb, pageInfo, state, state.group_id!, force, log);
+        // Save state after each page (crash recovery)
+        saveYaml(legacyStateFile, state);
       }
     } else if (child.type === 'group') {
       const subGroupKey = `_subgroup_${slugify(child.title)}`;
@@ -621,6 +629,8 @@ async function deployGroup(
         const pageInfo = pages.find(p => p.title === sc.title);
         if (pageInfo) {
           await deployOnePage(nb, pageInfo, state, subGroupId, force, log);
+          // Save state after each page (crash recovery)
+          saveYaml(legacyStateFile, state);
         }
       }
     }
@@ -639,15 +649,54 @@ async function deployOnePage(
   let pageState = state.pages[pageKey];
 
   if (!pageState?.tab_uid) {
-    const result = await nb.createPage(pageInfo.title, parentRouteId ?? undefined, pageInfo.icon);
-    pageState = {
-      route_id: result.routeId,
-      page_uid: result.pageUid,
-      tab_uid: result.tabSchemaUid,
-      grid_uid: result.gridUid,
-      blocks: {},
-    };
-    log(`  + page: ${pageInfo.title}`);
+    // Check live routes before creating — prevents duplicates on repeated deploy
+    if (parentRouteId) {
+      try {
+        const liveRoutes = await nb.http.get(`${nb.baseUrl}/api/desktopRoutes:list`, { params: { paginate: 'false', tree: 'true' } });
+        const allGroups = (liveRoutes.data.data || []) as any[];
+        const parentGroup = allGroups.find((r: any) => r.id === parentRouteId);
+        if (parentGroup?.children) {
+          const livePage = parentGroup.children.find((c: any) => c.title === pageInfo.title && c.type !== 'tabs');
+          if (livePage?.schemaUid) {
+            // Found existing — read tab UID and reuse
+            let tabUid = '';
+            let gridUid = '';
+            try {
+              const pageData = await nb.get({ pageSchemaUid: livePage.schemaUid });
+              const tabs = pageData.tree.subModels?.tabs;
+              const tabArr = Array.isArray(tabs) ? tabs : tabs ? [tabs] : [];
+              if (tabArr.length) {
+                const firstTab = tabArr[0] as Record<string, unknown>;
+                tabUid = firstTab.uid as string || '';
+                const tabGrid = (firstTab.subModels as Record<string, unknown> | undefined)?.grid as Record<string, unknown> | undefined;
+                gridUid = (tabGrid?.uid as string) || '';
+              }
+            } catch { /* skip */ }
+            if (tabUid) {
+              pageState = {
+                route_id: livePage.id,
+                page_uid: livePage.schemaUid,
+                tab_uid: tabUid,
+                grid_uid: gridUid,
+                blocks: {},
+              };
+              log(`  = page: ${pageInfo.title} (found live)`);
+            }
+          }
+        }
+      } catch { /* skip — will create new */ }
+    }
+    if (!pageState?.tab_uid) {
+      const result = await nb.createPage(pageInfo.title, parentRouteId ?? undefined, pageInfo.icon);
+      pageState = {
+        route_id: result.routeId,
+        page_uid: result.pageUid,
+        tab_uid: result.tabSchemaUid,
+        grid_uid: result.gridUid,
+        blocks: {},
+      };
+      log(`  + page: ${pageInfo.title}`);
+    }
   } else {
     log(`  = page: ${pageInfo.title}`);
   }
@@ -796,22 +845,49 @@ async function deployPageBlueprint(
   const pageKey = slugify(pageInfo.title);
   let pageState = state.pages[pageKey];
 
-  // If not in state, check live routes for existing page (prevents duplicates)
-  if (!pageState?.page_uid) {
+  // Always check live routes for existing page — prevents duplicates on repeated deploy
+  // (covers both "not in state" and "stale state" cases)
+  const findLivePage = async (): Promise<{ id: number; schemaUid: string; tabUid: string } | null> => {
     try {
       const liveRoutes = await nb.http.get(`${nb.baseUrl}/api/desktopRoutes:list`, { params: { paginate: 'false', tree: 'true' } });
-      const liveGroup = (liveRoutes.data.data || []).find((r: any) => r.id === groupId || r.title === groupTitle);
-      const livePage = liveGroup?.children?.find((c: any) => c.title === pageInfo.title && c.type !== 'tabs');
-      if (livePage?.schemaUid) {
-        state.pages[pageKey] = { route_id: livePage.id, page_uid: livePage.schemaUid, tab_uid: '', blocks: {} };
-        pageState = state.pages[pageKey];
-        // Read tab UID
+      const allGroups = (liveRoutes.data.data || []) as any[];
+      // Search in the target group (by id or title) and also recurse into sub-groups
+      const liveGroup = allGroups.find((r: any) => r.id === groupId || (r.type === 'group' && r.title === groupTitle));
+      if (!liveGroup?.children) return null;
+      // Search direct children and sub-group children
+      const candidates: any[] = [];
+      for (const child of liveGroup.children) {
+        if (child.title === pageInfo.title && child.type !== 'tabs') candidates.push(child);
+        if (child.type === 'group' && child.children) {
+          for (const sub of child.children) {
+            if (sub.title === pageInfo.title && sub.type !== 'tabs') candidates.push(sub);
+          }
+        }
+      }
+      if (!candidates.length) return null;
+      // Use the latest one (highest id) if duplicates exist
+      candidates.sort((a: any, b: any) => (b.id || 0) - (a.id || 0));
+      const livePage = candidates[0];
+      if (!livePage?.schemaUid) return null;
+      // Read tab UID
+      let tabUid = '';
+      try {
         const pageData = await nb.get({ pageSchemaUid: livePage.schemaUid });
         const tabs = pageData.tree.subModels?.tabs;
         const tabArr = Array.isArray(tabs) ? tabs : tabs ? [tabs] : [];
-        if (tabArr.length) pageState.tab_uid = (tabArr[0] as Record<string, unknown>).uid as string || '';
-      }
-    } catch { /* skip — will create new */ }
+        if (tabArr.length) tabUid = (tabArr[0] as Record<string, unknown>).uid as string || '';
+      } catch { /* skip */ }
+      return { id: livePage.id, schemaUid: livePage.schemaUid, tabUid };
+    } catch { return null; }
+  };
+
+  if (!pageState?.page_uid) {
+    const existing = await findLivePage();
+    if (existing) {
+      state.pages[pageKey] = { route_id: existing.id, page_uid: existing.schemaUid, tab_uid: existing.tabUid, blocks: {} };
+      pageState = state.pages[pageKey];
+      log(`  = page: ${pageInfo.title} (found live)`);
+    }
   }
 
   // If page already exists in state, use replace mode
@@ -832,10 +908,18 @@ async function deployPageBlueprint(
     } catch (bpErr) {
       const msg = (bpErr as { response?: { data?: { errors?: { message: string }[] } } }).response?.data?.errors?.[0]?.message || '';
       if (isReplace && msg.includes('target not found')) {
-        // Stale page_uid — page was deleted externally. Retry as create.
-        log(`  . blueprint replace failed (stale UID), retrying as create...`);
+        // Stale page_uid — page was deleted externally. Re-check live routes before creating.
+        log(`  . blueprint replace failed (stale UID), checking live routes...`);
         delete state.pages[pageKey];
-        bpPayload = pageToBlueprint(pageInfo, { groupId, groupTitle, mode: 'create' }) as unknown as Record<string, unknown>;
+        const liveExisting = await findLivePage();
+        if (liveExisting) {
+          // Found a live page — use replace mode with the live UID
+          log(`  . found existing page in live routes, using replace mode`);
+          state.pages[pageKey] = { route_id: liveExisting.id, page_uid: liveExisting.schemaUid, tab_uid: liveExisting.tabUid, blocks: {} };
+          bpPayload = pageToBlueprint(pageInfo, { mode: 'replace', pageSchemaUid: liveExisting.schemaUid }) as unknown as Record<string, unknown>;
+        } else {
+          bpPayload = pageToBlueprint(pageInfo, { groupId, groupTitle, mode: 'create' }) as unknown as Record<string, unknown>;
+        }
         result = await nb.surfaces.applyBlueprint(bpPayload) as Record<string, unknown>;
       } else {
         throw bpErr;
@@ -908,6 +992,9 @@ async function deployPageBlueprint(
 
     // Deploy popups (same two-pass logic as deployOnePage)
     await deployPagePopups(nb, pageInfo, state, pageKey, log);
+
+    // Clean up duplicate pages (same title in same group) — keep latest
+    await cleanupDuplicatePages(nb, groupId, groupTitle, pageInfo.title, log);
 
   } catch (e) {
     const err = e as { response?: { data?: { errors?: { message: string }[] } }; message?: string };
@@ -1040,8 +1127,43 @@ function buildPopupTargetFields(popups: PopupSpec[]): Set<string> {
 }
 
 /**
- * Re-export routes.yaml from live NocoBase state after deploy.
- *
+ * Remove duplicate pages (same title) within a group — keep the latest (highest id).
+ */
+async function cleanupDuplicatePages(
+  nb: NocoBaseClient,
+  groupId: number,
+  groupTitle: string,
+  pageTitle: string,
+  log: (msg: string) => void,
+): Promise<void> {
+  try {
+    const liveRoutes = await nb.http.get(`${nb.baseUrl}/api/desktopRoutes:list`, { params: { paginate: 'false', tree: 'true' } });
+    const allGroups = (liveRoutes.data.data || []) as any[];
+    const liveGroup = allGroups.find((r: any) => r.id === groupId || (r.type === 'group' && r.title === groupTitle));
+    if (!liveGroup?.children) return;
+    // Find all children (including sub-groups) with matching title
+    const duplicates = liveGroup.children.filter(
+      (c: any) => c.title === pageTitle && c.type !== 'tabs' && c.type !== 'group',
+    );
+    if (duplicates.length <= 1) return;
+    // Sort by id descending — keep the latest
+    duplicates.sort((a: any, b: any) => (b.id || 0) - (a.id || 0));
+    for (let i = 1; i < duplicates.length; i++) {
+      const dup = duplicates[i];
+      try {
+        await nb.http.post(`${nb.baseUrl}/api/desktopRoutes:destroy`, null, {
+          params: { 'filter[id]': dup.id },
+        });
+        log(`  - removed duplicate page: ${pageTitle} (id=${dup.id})`);
+      } catch (e) {
+        log(`  ! cleanup duplicate ${pageTitle}: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
+      }
+    }
+  } catch (e) {
+    log(`  ! duplicate cleanup: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
+  }
+}
+
 /**
  * Set sortIndex on deployed routes to match routes.yaml declaration order.
  */
