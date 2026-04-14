@@ -62,9 +62,9 @@ export async function fillBlock(
   }
 
   // ── Template reference ──
-  // Compose with template param creates ReferenceBlockModel + flowModelTemplateUsages entry.
-  // That's the correct pattern — no further grid conversion needed.
-  // Only log for visibility.
+  // Two patterns in NocoBase:
+  // 1. ReferenceBlockModel — compose created entire block as reference (no grid conversion needed)
+  // 2. CreateFormModel/EditFormModel + ReferenceFormGridModel — grid proxies fields from template
   const templateRef = bs.templateRef;
   if (templateRef?.targetUid && ['createForm', 'editForm'].includes(btype)) {
     try {
@@ -73,7 +73,42 @@ export async function fillBlock(
       if (blockUse === 'ReferenceBlockModel') {
         log(`      = templateRef: ${templateRef.templateName || templateRef.templateUid} (reference block)`);
       } else {
-        log(`      = templateRef: ${templateRef.templateName || templateRef.templateUid} (block is ${blockUse}, skipped)`);
+        // Convert grid to ReferenceFormGridModel via flowModels:save
+        const formGrid = formData.tree.subModels?.grid;
+        if (formGrid && !Array.isArray(formGrid)) {
+          const gridUid2 = (formGrid as { uid: string }).uid;
+          const gridUse = (formGrid as { use?: string }).use || '';
+          if (gridUse !== 'ReferenceFormGridModel') {
+            // Clear local grid items first (they conflict with reference proxy)
+            const gridItems = (formGrid as { subModels?: Record<string, unknown> }).subModels?.items;
+            const itemArr = (Array.isArray(gridItems) ? gridItems : []) as { uid: string }[];
+            for (const item of itemArr) {
+              try { await nb.surfaces.removeNode(item.uid); } catch { /* skip */ }
+            }
+            if (itemArr.length) log(`      ~ templateRef: cleared ${itemArr.length} local items`);
+          }
+          // Get raw model and convert
+          const rawGrid = await nb.http.get(`${nb.baseUrl}/api/flowModels:get`, { params: { filterByTk: gridUid2 } });
+          const gd = rawGrid.data.data;
+          if (gd) {
+            await nb.http.post(`${nb.baseUrl}/api/flowModels:save`, {
+              uid: gridUid2, use: 'ReferenceFormGridModel',
+              parentId: blockUid, subKey: 'grid', subType: 'object',
+              sortIndex: gd.sortIndex || 0, flowRegistry: gd.flowRegistry || {},
+              stepParams: {
+                referenceSettings: {
+                  useTemplate: {
+                    templateUid: templateRef.templateUid,
+                    templateName: templateRef.templateName,
+                    targetUid: templateRef.targetUid,
+                    mode: templateRef.mode || 'reference',
+                  },
+                },
+              },
+            });
+            log(`      ~ templateRef: ${templateRef.templateName || templateRef.templateUid} (grid → ReferenceFormGridModel)`);
+          }
+        }
       }
     } catch (e) {
       log(`      ! templateRef: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
