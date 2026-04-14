@@ -331,12 +331,24 @@ async function cmdGraph(args: string[]) {
 function cmdScaffold(args: string[]) {
   const dir = args[0];
   const name = args[1];
-  if (!dir || !name) { console.error('Usage: cli.ts scaffold <dir> <module-name> [--pages P1,P2,...]'); process.exit(1); }
+  if (!dir || !name) {
+    console.error('Usage: cli.ts scaffold <dir> <module-name> [--pages P1,P2,...] [--collections C1,C2,...]');
+    console.error('\nOptions:');
+    console.error('  --pages        Comma-separated page names (default: Dashboard,Main)');
+    console.error('  --collections  Comma-separated collection names (default: auto from pages)');
+    console.error('\nExample:');
+    console.error('  cli.ts scaffold /tmp/pm PM --pages Dashboard,Projects,Tasks --collections nb_pm_projects,nb_pm_tasks');
+    process.exit(1);
+  }
   const pagesIdx = args.indexOf('--pages');
   const pages = pagesIdx >= 0 && args[pagesIdx + 1]
     ? args[pagesIdx + 1].split(',').map(s => s.trim())
     : ['Dashboard', 'Main'];
-  scaffold(dir, name, pages);
+  const collIdx = args.indexOf('--collections');
+  const collections = collIdx >= 0 && args[collIdx + 1]
+    ? args[collIdx + 1].split(',').map(s => s.trim())
+    : undefined;
+  scaffold(dir, name, pages, collections);
 }
 
 async function cmdExportProject(args: string[]) {

@@ -1,12 +1,19 @@
 /**
- * Module scaffold — generate a new module skeleton with Dashboard + pages.
+ * Module scaffold — generate NEW DSL format project skeleton.
  *
- * Usage: cli.ts scaffold <dir> <module-name> --pages Dashboard,Orders,Products
+ * Usage: cli.ts scaffold <dir> <module-name> --pages Dashboard,Projects,Tasks
+ *        --collections nb_pm_projects,nb_pm_tasks
+ *
+ * Generates:
+ *   routes.yaml, defaults.yaml, state.yaml,
+ *   collections/, templates/block/, pages/<mod>/<page>/layout.yaml + popups/
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { slugify } from '../utils/slugify';
 import { dumpYaml } from '../utils/yaml';
+
+// ── Dashboard constants (reusable templates) ──
 
 const KPI_COLORS = [
   { key: 'kpi_1', color: '#3b82f6', bg: '#eff6ff', stroke: '#bfdbfe', label: 'Total Records' },
@@ -29,110 +36,432 @@ const CHART_RENDERS: Record<string, string> = {
   line: "var data = ctx.data.objects || [];\nreturn {\n  title: { text: 'TITLE', left: 'center', textStyle: { fontSize: 14 } },\n  tooltip: { trigger: 'axis' },\n  xAxis: { type: 'category', data: data.map(function(d) { return d.label; }) },\n  yAxis: { type: 'value' },\n  series: [{ type: 'line', data: data.map(function(d) { return d.value; }), smooth: true, areaStyle: { opacity: 0.1 }, itemStyle: { color: '#1677ff' } }]\n};",
 };
 
+// ── KPI card JS template (CRM-style) ──
+
+function generateKpiJs(
+  modSlug: string,
+  index: number,
+  kpi: typeof KPI_COLORS[0],
+): string {
+  return `// KPI Card ${index + 1}: ${kpi.label}
+const { useState, useEffect } = ctx.React;
+const SQL_UID = '${modSlug}_kpi_${index + 1}';
+
+const cardStyle = {
+  borderRadius: '0', padding: '24px', position: 'relative', overflow: 'hidden',
+  border: 'none', boxShadow: 'none',
+  margin: '-24px', height: 'calc(100% + 48px)', width: 'calc(100% + 48px)',
+  display: 'flex', flexDirection: 'column', cursor: 'pointer'
+};
+const labelStyle = { fontSize: '0.875rem', fontWeight: '500', zIndex: 2 };
+const valueStyle = { fontSize: '2rem', fontWeight: '700', marginTop: 'auto', zIndex: 2, letterSpacing: '-0.03em', color: '${kpi.color}' };
+const trendStyle = { fontSize: '0.75rem', padding: '2px 8px', borderRadius: '99px', fontWeight: '600', background: '${kpi.bg}', color: '${kpi.color}' };
+const bgChartStyle = { position: 'absolute', bottom: 0, right: 0, width: '140px', height: '90px', zIndex: 1, opacity: 0.5, pointerEvents: 'none' };
+
+const KpiCard = () => {
+  const [data, setData] = useState({ value: 0, growth: 0, loading: true });
+  useEffect(() => { fetchData(); }, []);
+  const fetchData = async () => {
+    try {
+      setData(prev => ({ ...prev, loading: true }));
+      // TODO: implement SQL query via ctx.sql.runById(SQL_UID, { ... })
+      setData({ value: 0, growth: 0, loading: false });
+    } catch (e) { console.error(e); setData(prev => ({ ...prev, loading: false })); }
+  };
+
+  const fmt = (v) => v >= 1e6 ? (v/1e6).toFixed(1) + 'M' : v >= 1e3 ? (v/1e3).toFixed(1) + 'K' : String(v);
+
+  return ctx.React.createElement('div', { className: 'kpi-card-hover', style: cardStyle },
+    ctx.React.createElement('div', { style: { display:'flex', justifyContent:'space-between', alignItems:'flex-start', zIndex:2 } },
+      ctx.React.createElement('span', { style: labelStyle }, '${kpi.label}'),
+      ctx.React.createElement('span', { style: trendStyle }, data.growth >= 0 ? '+' + data.growth.toFixed(1) + '%' : data.growth.toFixed(1) + '%')
+    ),
+    ctx.React.createElement('div', { style: valueStyle }, data.loading ? '...' : fmt(data.value)),
+    ctx.React.createElement('svg', { style: bgChartStyle, viewBox:'0 0 100 50', preserveAspectRatio:'none' },
+      ctx.React.createElement('path', { d:'M0,50 L0,30 Q25,10 50,25 T100,15 L100,50 Z', fill:'${kpi.bg}', stroke:'${kpi.stroke}', strokeWidth:'2' }))
+  );
+};
+ctx.render(ctx.React.createElement(ctx.React.Fragment, null,
+  ctx.React.createElement('style', null, ':has(> .kpi-card-hover),:has(> div > .kpi-card-hover){overflow:hidden!important}.kpi-card-hover{transition:transform .2s ease;transform:scale(0.97)}.kpi-card-hover:hover{transform:scale(1)}'),
+  ctx.React.createElement(KpiCard, null)
+));
+`;
+}
+
+// ── Icon mapping for common page names ──
+
+const PAGE_ICONS: Record<string, string> = {
+  dashboard: 'dashboardoutlined',
+  analytics: 'areachartoutlined',
+  overview: 'calendaroutlined',
+  projects: 'fundprojectscreenoutlined',
+  tasks: 'checksquareoutlined',
+  milestones: 'flagoutlined',
+  members: 'teamoutlined',
+  users: 'teamoutlined',
+  timeentries: 'clockcircleoutlined',
+  time_entries: 'clockcircleoutlined',
+  bugs: 'bugoutlined',
+  issues: 'warningoutlined',
+  orders: 'shoppingcartoutlined',
+  products: 'appstoreoutlined',
+  customers: 'teamoutlined',
+  leads: 'useraddoutlined',
+  settings: 'settingoutlined',
+  reports: 'barchartoutlined',
+};
+
+function iconForPage(pageName: string): string {
+  const key = slugify(pageName);
+  return PAGE_ICONS[key] || 'fileoutlined';
+}
+
+// ── Main scaffold function ──
+
 export function scaffold(
   modDir: string,
   moduleName: string,
   pages: string[],
+  collections: string[] | undefined,
   log: (msg: string) => void = console.log,
 ): void {
-  const mod = path.resolve(modDir);
-  for (const dir of ['js', 'charts', 'popups', 'ai']) {
-    fs.mkdirSync(path.join(mod, dir), { recursive: true });
-  }
-
+  const root = path.resolve(modDir);
   const modSlug = slugify(moduleName);
-  const pageSpecs: Record<string, unknown>[] = [];
-  const enhancePopups: Record<string, unknown>[] = [];
 
-  // Find KPI template
-  const templateDirs = [
-    path.join(path.dirname(path.dirname(mod)), 'templates'),
-    path.join(path.dirname(mod), 'templates'),
-  ];
-  let kpiTemplate = '';
-  for (const td of templateDirs) {
-    const p = path.join(td, 'kpi_card.js');
-    if (fs.existsSync(p)) { kpiTemplate = fs.readFileSync(p, 'utf8'); break; }
+  // Resolve collection names: explicit list or auto-generate from pages
+  const nonDashboardPages = pages.filter(p => !p.toLowerCase().includes('dashboard'));
+  const collNames: string[] = collections && collections.length
+    ? collections
+    : nonDashboardPages.map(p => `nb_${modSlug}_${slugify(p)}`);
+
+  // Map page -> collection (skip dashboard)
+  const pageCollMap: Record<string, string> = {};
+  for (let i = 0; i < nonDashboardPages.length; i++) {
+    const pageKey = slugify(nonDashboardPages[i]);
+    pageCollMap[pageKey] = collNames[i] || `nb_${modSlug}_${pageKey}`;
   }
 
+  // ── Create directories ──
+
+  const dirs = [
+    root,
+    path.join(root, 'collections'),
+    path.join(root, 'templates', 'block'),
+    path.join(root, 'templates', 'popup'),
+  ];
+
+  // Page directories
   for (const pageName of pages) {
-    const pageKey = slugify(pageName);
-    const isDashboard = pageName.toLowerCase().includes('dashboard');
-
-    if (isDashboard) {
-      // ── Dashboard: KPI + charts ──
-      for (let i = 0; i < KPI_COLORS.length; i++) {
-        const { key, color, bg, stroke, label } = KPI_COLORS[i];
-        let js: string;
-        if (kpiTemplate) {
-          js = kpiTemplate
-            .replace("label: 'Total Employees'", `label: '${label}'`)
-            .replace("'#3b82f6'", `'${color}'`).replace("'#eff6ff'", `'${bg}'`).replace("'#bfdbfe'", `'${stroke}'`)
-            .replace("reportUid: 'hrm_kpi_employees'", `reportUid: '${modSlug}_kpi_${i + 1}'`)
-            .replace('FROM nb_hrm_employees', `FROM nb_${modSlug}_TODO  -- ← CHANGE THIS`);
-        } else {
-          js = `// KPI Card ${i + 1}: ${label}\nctx.render(ctx.React.createElement('div', null, '${label}'));`;
-        }
-        fs.writeFileSync(path.join(mod, 'js', `${key}.js`), js);
-      }
-
-      for (const { key, type, desc } of CHART_TYPES) {
-        fs.writeFileSync(path.join(mod, 'charts', `${key}.yaml`),
-          `sql_file: ./charts/${key}.sql\nrender_file: ./charts/${key}_render.js\n`);
-        fs.writeFileSync(path.join(mod, 'charts', `${key}.sql`),
-          `-- ${desc}\nSELECT 'Category A' AS label, 10 AS value\nUNION ALL SELECT 'Category B', 20\nUNION ALL SELECT 'Category C', 15\nUNION ALL SELECT 'Category D', 8\n`);
-        const renderJs = (CHART_RENDERS[type] || CHART_RENDERS.bar).replace('TITLE', desc.split(' — ')[0]);
-        fs.writeFileSync(path.join(mod, 'charts', `${key}_render.js`), renderJs);
-      }
-
-      pageSpecs.push({
-        page: pageName, icon: 'dashboardoutlined',
-        blocks: [
-          ...KPI_COLORS.map((c, i) => ({ key: c.key, type: 'jsBlock', desc: `KPI Card ${i + 1}`, file: `./js/${c.key}.js` })),
-          ...CHART_TYPES.map(c => ({ key: c.key, type: 'chart', chart_config: `./charts/${c.key}.yaml` })),
-        ],
-        layout: [
-          [{ kpi_1: 6 }, { kpi_2: 6 }, { kpi_3: 6 }, { kpi_4: 6 }],
-          [{ chart_1: 15 }, { chart_2: 9 }],
-          ['chart_3'],
-          [{ chart_4: 14 }, { chart_5: 10 }],
-        ],
-      });
+    const pageSlug = slugify(pageName);
+    const pageDir = path.join(root, 'pages', modSlug, pageSlug);
+    dirs.push(pageDir);
+    if (pageName.toLowerCase().includes('dashboard')) {
+      dirs.push(path.join(pageDir, 'js'));
+      dirs.push(path.join(pageDir, 'charts'));
     } else {
-      // ── Regular page: filterForm + table ──
-      const coll = `nb_${modSlug}_${pageKey}`;
-      pageSpecs.push({
-        page: pageName, icon: 'fileoutlined', coll,
-        blocks: [
-          { key: 'filterForm', type: 'filterForm', coll, fields: [{ field: 'name', filterPaths: ['name'] }] },
-          { key: 'table', type: 'table', coll, fields: ['name', 'status', 'createdAt'], actions: ['filter', 'refresh', 'addNew'], recordActions: ['edit', 'delete'] },
-        ],
-        layout: [['filterForm'], ['table']],
-      });
-      enhancePopups.push({
-        target: `$${pageKey}.table.actions.addNew`,
-        auto: ['edit', 'detail'], view_field: 'name', coll,
-        blocks: [{ key: 'form', type: 'createForm', resource: { binding: 'currentCollection' }, fields: ['name', 'status'], field_layout: ['--- Basic Info ---', ['name', 'status']], actions: ['submit'] }],
-      });
+      dirs.push(path.join(pageDir, 'popups'));
     }
   }
 
-  const structure = {
-    module: moduleName, icon: 'appstoreoutlined',
-    collections: Object.fromEntries(pages.map(p => {
-      const k = `nb_${modSlug}_${slugify(p)}`;
-      return [k, { title: p, fields: [{ name: 'name', interface: 'input', title: 'Name' }, { name: 'status', interface: 'select', title: 'Status', options: ['Active', 'Inactive'] }] }];
-    })),
-    pages: pageSpecs,
-  };
+  for (const d of dirs) {
+    fs.mkdirSync(d, { recursive: true });
+  }
 
-  fs.writeFileSync(path.join(mod, 'structure.yaml'), dumpYaml(structure));
-  fs.writeFileSync(path.join(mod, 'enhance.yaml'), dumpYaml({ popups: enhancePopups }));
+  // ── 1. routes.yaml ──
+
+  const routeChildren: Record<string, unknown>[] = pages.map(p => {
+    const entry: Record<string, unknown> = { title: p, icon: iconForPage(p) };
+    return entry;
+  });
+
+  const routes = [{
+    title: moduleName,
+    type: 'group',
+    icon: 'projectoutlined',
+    children: routeChildren,
+  }];
+
+  fs.writeFileSync(path.join(root, 'routes.yaml'), dumpYaml(routes));
+
+  // ── 2. defaults.yaml ──
+
+  const defaults: Record<string, Record<string, string>> = { popups: {}, forms: {} };
+  fs.writeFileSync(path.join(root, 'defaults.yaml'), dumpYaml(defaults));
+
+  // ── 3. state.yaml ──
+
+  fs.writeFileSync(path.join(root, 'state.yaml'), dumpYaml({ pages: {} }));
+
+  // ── 4. collections/*.yaml ──
+
+  for (const collName of collNames) {
+    // Derive display title from collection name
+    const shortName = collName.replace(`nb_${modSlug}_`, '');
+    const title = shortName
+      .split('_')
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
+
+    const collSpec = {
+      name: collName,
+      title,
+      fields: [
+        { name: 'name', interface: 'input', title: 'Name' },
+        { name: 'status', interface: 'select', title: 'Status' },
+        { name: 'description', interface: 'textarea', title: 'Description' },
+      ],
+    };
+
+    fs.writeFileSync(
+      path.join(root, 'collections', `${collName}.yaml`),
+      dumpYaml(collSpec),
+    );
+  }
+
+  // ── 5. templates/block/ (form templates per collection) ──
+
+  for (const collName of collNames) {
+    const shortName = collName.replace(`nb_${modSlug}_`, '');
+    const title = shortName
+      .split('_')
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
+
+    // Add new form template
+    const addNewTemplate = {
+      name: `Form (Add new): ${title}`,
+      type: 'block',
+      collectionName: collName,
+      content: {
+        key: 'createForm',
+        type: 'createForm',
+        coll: collName,
+        fields: ['name', 'status', 'description'],
+        field_layout: [
+          '--- Basic Info ---',
+          ['name', 'status'],
+          ['description'],
+        ],
+        actions: ['submit'],
+      },
+    };
+
+    fs.writeFileSync(
+      path.join(root, 'templates', 'block', `form_add_new_${collName}.yaml`),
+      dumpYaml(addNewTemplate),
+    );
+
+    // Edit form template
+    const editTemplate = {
+      name: `Form (Edit): ${title}`,
+      type: 'block',
+      collectionName: collName,
+      content: {
+        key: 'editForm',
+        type: 'editForm',
+        coll: collName,
+        fields: ['name', 'status', 'description'],
+        field_layout: [
+          '--- Basic Info ---',
+          ['name', 'status'],
+          ['description'],
+        ],
+        actions: ['submit'],
+      },
+    };
+
+    fs.writeFileSync(
+      path.join(root, 'templates', 'block', `form_edit_${collName}.yaml`),
+      dumpYaml(editTemplate),
+    );
+  }
+
+  // ── 6. pages ──
+
+  for (const pageName of pages) {
+    const pageSlug = slugify(pageName);
+    const pageDir = path.join(root, 'pages', modSlug, pageSlug);
+    const isDashboard = pageName.toLowerCase().includes('dashboard');
+
+    if (isDashboard) {
+      generateDashboardPage(pageDir, modSlug, collNames[0] || `nb_${modSlug}_TODO`);
+    } else {
+      const coll = pageCollMap[pageSlug] || `nb_${modSlug}_${pageSlug}`;
+      generateCrudPage(pageDir, pageName, coll, modSlug);
+    }
+  }
+
+  // ── Print summary ──
 
   log(`\n  Scaffold created: ${modDir}/`);
-  log(`    ${pages.length} pages: ${pages.join(', ')}`);
+  log(`  Format: NEW DSL (routes.yaml + pages/ + collections/ + templates/)`);
+  log(`  ${pages.length} pages: ${pages.join(', ')}`);
+  log(`  ${collNames.length} collections: ${collNames.join(', ')}`);
   log(`\n  Next steps:`);
-  log(`    1. Edit structure.yaml — add fields to collections + blocks`);
-  log(`    2. Edit enhance.yaml — customize addNew form fields + layout`);
-  log(`    3. Deploy: cli.ts deploy ${modDir}/`);
+  log(`    1. Edit collections/*.yaml — add fields to each collection`);
+  log(`    2. Edit pages/**/layout.yaml — customize blocks, fields, layout`);
+  log(`    3. Edit templates/block/ — customize form field_layout`);
+  log(`    4. Deploy: cli.ts deploy-project ${modDir}/ --group "${moduleName}" --blueprint`);
+}
+
+// ── Dashboard page generator ──
+
+function generateDashboardPage(
+  pageDir: string,
+  modSlug: string,
+  firstColl: string,
+): void {
+  // Generate KPI JS files
+  for (let i = 0; i < KPI_COLORS.length; i++) {
+    const kpi = KPI_COLORS[i];
+    const js = generateKpiJs(modSlug, i, kpi);
+    fs.writeFileSync(path.join(pageDir, 'js', `${kpi.key}.js`), js);
+  }
+
+  // Generate chart configs + SQL + render JS
+  for (const chart of CHART_TYPES) {
+    // Chart config YAML
+    fs.writeFileSync(
+      path.join(pageDir, 'charts', `${chart.key}.yaml`),
+      dumpYaml({
+        sql_file: `./charts/${chart.key}.sql`,
+        render_file: `./charts/${chart.key}_render.js`,
+      }),
+    );
+
+    // Chart SQL
+    fs.writeFileSync(
+      path.join(pageDir, 'charts', `${chart.key}.sql`),
+      `-- ${chart.desc}\n-- TODO: Replace with real query against ${firstColl}\nSELECT 'Category A' AS label, 10 AS value\nUNION ALL SELECT 'Category B', 20\nUNION ALL SELECT 'Category C', 15\nUNION ALL SELECT 'Category D', 8\n`,
+    );
+
+    // Chart render JS
+    const renderJs = (CHART_RENDERS[chart.type] || CHART_RENDERS.bar)
+      .replace('TITLE', chart.desc.split(' — ')[0]);
+    fs.writeFileSync(
+      path.join(pageDir, 'charts', `${chart.key}_render.js`),
+      renderJs,
+    );
+  }
+
+  // Dashboard layout.yaml
+  const layout = {
+    blocks: [
+      ...KPI_COLORS.map(kpi => ({
+        key: kpi.key,
+        js: `./js/${kpi.key}.js`,
+      })),
+      ...CHART_TYPES.map(chart => ({
+        key: chart.key,
+        type: 'chart',
+        chart_config: `./charts/${chart.key}.yaml`,
+      })),
+    ],
+    layout: [
+      [{ kpi_1: 6 }, { kpi_2: 6 }, { kpi_3: 6 }, { kpi_4: 6 }],
+      [{ chart_1: 15 }, { chart_2: 9 }],
+      ['chart_3'],
+      [{ chart_4: 14 }, { chart_5: 10 }],
+    ],
+  };
+
+  fs.writeFileSync(path.join(pageDir, 'layout.yaml'), dumpYaml(layout));
+}
+
+// ── CRUD page generator ──
+
+function generateCrudPage(
+  pageDir: string,
+  pageName: string,
+  coll: string,
+  modSlug: string,
+): void {
+  // layout.yaml
+  const layout = {
+    blocks: [
+      {
+        key: 'filterForm',
+        type: 'filterForm',
+        coll,
+        fields: [
+          {
+            field: 'name',
+            label: 'Search',
+            filterPaths: ['name', 'description'],
+          },
+          'status',
+        ],
+        field_layout: [
+          ['name', 'status'],
+        ],
+      },
+      {
+        key: 'table',
+        type: 'table',
+        coll,
+        fields: [
+          { field: 'name', popup: true },
+          'status',
+          'createdAt',
+        ],
+        actions: ['filter', 'refresh', 'addNew'],
+        recordActions: ['view', 'edit'],
+      },
+    ],
+    layout: [
+      ['filterForm'],
+      ['table'],
+    ],
+  };
+
+  fs.writeFileSync(path.join(pageDir, 'layout.yaml'), dumpYaml(layout));
+
+  // popups/table.addNew.yaml — reference form template
+  const addNewPopup = {
+    target: '$SELF.table.actions.addNew',
+    mode: 'drawer',
+    blocks: [
+      { ref: `templates/block/form_add_new_${coll}.yaml` },
+    ],
+  };
+
+  fs.writeFileSync(
+    path.join(pageDir, 'popups', 'table.addNew.yaml'),
+    dumpYaml(addNewPopup),
+  );
+
+  // popups/table.name.yaml — detail popup with tabs (view + edit)
+  const detailPopup = {
+    target: '$SELF.table.fields.name',
+    mode: 'drawer',
+    tabs: [
+      {
+        title: 'Details',
+        blocks: [
+          {
+            key: 'details',
+            type: 'details',
+            coll,
+            resource_binding: {
+              filterByTk: '{{ctx.view.inputArgs.filterByTk}}',
+            },
+            fields: ['name', 'status', 'description', 'createdAt'],
+            field_layout: [
+              '--- Basic Info ---',
+              ['name', 'status'],
+              ['description'],
+              ['createdAt'],
+            ],
+            actions: ['edit'],
+          },
+        ],
+        layout: [['details']],
+      },
+    ],
+  };
+
+  fs.writeFileSync(
+    path.join(pageDir, 'popups', 'table.name.yaml'),
+    dumpYaml(detailPopup),
+  );
 }
