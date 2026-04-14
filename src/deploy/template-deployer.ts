@@ -296,12 +296,12 @@ export async function convertPopupToTemplate(
       saveMode: 'duplicate',
     }) as Record<string, unknown>;
 
-    const templateUid = (result.uid || result.templateUid) as string;
-    const targetUid = (result.targetUid) as string;
+    const newTemplateUid = (result.uid || result.templateUid) as string;
+    const newTargetUid = (result.targetUid) as string;
 
-    if (templateUid) {
-      log(`    + popup template: ${name} (${templateUid})`);
-      return { templateUid, targetUid };
+    if (newTemplateUid) {
+      log(`    + popup template: ${name} (${newTemplateUid})`);
+      return { templateUid: newTemplateUid, targetUid: newTargetUid };
     }
   } catch (e) {
     log(`    . popup template convert: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
