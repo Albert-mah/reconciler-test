@@ -135,8 +135,7 @@ export async function deployProject(
     return;
   }
 
-  // ── 2c. Git snapshot before deploy ──
-  gitSnapshot(root, 'pre-deploy', log);
+  // ── 2c. Save state only (no git auto-commit — baseline stays clean) ──
 
   // ── 3. Connect + deploy ──
   const nb = await NocoBaseClient.create();
@@ -257,27 +256,43 @@ export async function deployProject(
     log(`  ! Graph rebuild: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
   }
 
-  // ── Post-deploy: re-export + git diff ──
+  // ── Post-deploy: re-export to worktree + diff ──
   const targetGroup = opts.group || routes.find(r => r.type === 'group')?.title || '';
-  if (targetGroup) {
+  if (targetGroup && fs.existsSync(path.join(root, '.git'))) {
     try {
-      // Save routes.yaml before re-export (re-export overwrites it with target group routes)
-      const routesBackup = fs.readFileSync(routesFile, 'utf8');
-
       const { exportProject } = await import('../export');
       log('\n  ── Re-export for diff ──');
-      await exportProject(nb, { outDir: root, group: targetGroup });
 
-      // Restore original routes.yaml (source structure, not target)
-      fs.writeFileSync(routesFile, routesBackup);
+      // Create worktree for clean re-export
+      const wtBranch = '_deploy_export';
+      const wtDir = path.join(root, '..', `${path.basename(root)}_export`);
+      try { execSync(`git worktree remove "${wtDir}" --force`, { cwd: root, stdio: 'pipe' }); } catch { /* ok */ }
+      try { execSync(`git branch -D ${wtBranch}`, { cwd: root, stdio: 'pipe' }); } catch { /* ok */ }
+      execSync(`git worktree add "${wtDir}" -b ${wtBranch} HEAD`, { cwd: root, stdio: 'pipe' });
 
-      const diff = gitDiff(root, log);
-      if (diff) {
-        log(`\n  ── Deploy diff (${diff.files} files changed) ──`);
-        log(diff.summary);
+      // Copy state.yaml to worktree (has deployed UIDs)
+      fs.copyFileSync(path.join(root, 'state.yaml'), path.join(wtDir, 'state.yaml'));
+
+      // Re-export into worktree
+      await exportProject(nb, { outDir: wtDir, group: targetGroup });
+
+      // Diff worktree vs baseline (exclude metadata)
+      const diffStat = execSync(
+        `git diff HEAD ${wtBranch} --stat -- pages/ ':(exclude)**/page.yaml' ':(exclude)**/_refs.yaml'`,
+        { cwd: root, encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 },
+      ).trim();
+
+      if (diffStat) {
+        const lines = diffStat.split('\n');
+        log(`\n  ── Deploy diff (${lines.length - 1} files changed) ──`);
+        log(diffStat);
       } else {
-        log('  ✓ No diff — deploy matches export');
+        log('  ✓ No diff — deploy matches baseline');
       }
+
+      // Cleanup worktree
+      try { execSync(`git worktree remove "${wtDir}" --force`, { cwd: root, stdio: 'pipe' }); } catch { /* ok */ }
+      try { execSync(`git branch -D ${wtBranch}`, { cwd: root, stdio: 'pipe' }); } catch { /* ok */ }
     } catch (e) {
       log(`  ! Re-export failed: ${e instanceof Error ? e.message.slice(0, 80) : e}`);
     }
@@ -378,40 +393,7 @@ function extractBlockState(
 
 // ── Git helpers ──
 
-function gitSnapshot(dir: string, label: string, log: (msg: string) => void): void {
-  try {
-    // Init if needed
-    if (!fs.existsSync(path.join(dir, '.git'))) {
-      execSync('git init', { cwd: dir, stdio: 'pipe' });
-      execSync('git add -A', { cwd: dir, stdio: 'pipe' });
-      execSync(`git commit -m "init" --allow-empty`, { cwd: dir, stdio: 'pipe' });
-    }
-    // Commit current state
-    execSync('git add -A', { cwd: dir, stdio: 'pipe' });
-    const status = execSync('git status --porcelain', { cwd: dir, encoding: 'utf8' }).trim();
-    if (status) {
-      execSync(`git commit -m "${label}" --allow-empty`, { cwd: dir, stdio: 'pipe' });
-      log(`  git: ${label} snapshot committed`);
-    }
-  } catch { /* skip — git not required */ }
-}
-
-function gitDiff(dir: string, log: (msg: string) => void): { files: number; summary: string } | null {
-  try {
-    if (!fs.existsSync(path.join(dir, '.git'))) return null;
-    execSync('git add -A', { cwd: dir, stdio: 'pipe' });
-    const status = execSync('git status --porcelain', { cwd: dir, encoding: 'utf8' }).trim();
-    if (!status) return null;
-    const lines = status.split('\n').filter(Boolean);
-    const summary = lines.slice(0, 20).map(l => `    ${l}`).join('\n')
-      + (lines.length > 20 ? `\n    ... and ${lines.length - 20} more` : '');
-    // Commit post-deploy state
-    execSync('git commit -m "post-deploy"', { cwd: dir, stdio: 'pipe' });
-    // Show diff summary
-    const diffStat = execSync('git diff HEAD~1 --stat', { cwd: dir, encoding: 'utf8' }).trim();
-    return { files: lines.length, summary: diffStat || summary };
-  } catch { return null; }
-}
+// (gitSnapshot / gitDiff removed — using worktree-based diff now)
 
 async function deployGroup(
   nb: NocoBaseClient,
