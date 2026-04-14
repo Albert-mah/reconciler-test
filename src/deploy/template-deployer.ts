@@ -273,12 +273,22 @@ async function createBlockTemplate(
  */
 export async function convertPopupToTemplate(
   nb: NocoBaseClient,
-  fieldUid: string,
+  targetUid: string,
   name: string,
   collName: string,
   log: (msg: string) => void = console.log,
 ): Promise<{ templateUid: string; targetUid: string } | undefined> {
   try {
+    // targetUid might be a column wrapper — need to find the field model inside
+    let fieldUid = targetUid;
+    try {
+      const data = await nb.get({ uid: targetUid });
+      const field = data.tree.subModels?.field;
+      if (field && !Array.isArray(field)) {
+        fieldUid = (field as Record<string, unknown>).uid as string || targetUid;
+      }
+    } catch { /* use targetUid as-is */ }
+
     const result = await nb.surfaces.saveTemplate({
       target: { uid: fieldUid },
       name,
