@@ -1035,6 +1035,7 @@ async function syncRoutesYaml(
   try {
     nb.routes.clearCache();
     const liveRoutes = await nb.routes.list();
+    const seenTopLevel = new Set<string>();
     const routeTree = liveRoutes
       .filter(r => {
         if (r.type === 'group' && r.title === groupTitle) return true;
@@ -1042,15 +1043,35 @@ async function syncRoutesYaml(
         return false;
       })
       .filter(r => r.type !== 'tabs')
+      .filter(r => {
+        const key = `${r.type}:${r.title || ''}`;
+        if (seenTopLevel.has(key)) return false;
+        seenTopLevel.add(key);
+        return true;
+      })
       .map(r => {
         const entry: Record<string, unknown> = { title: r.title, type: r.type };
         if (r.icon) entry.icon = r.icon;
+        const seenChildren = new Set<string>();
         const children = (r.children || [])
           .filter(c => c.type !== 'tabs')
+          .filter(c => {
+            if (seenChildren.has(c.title || '')) return false;
+            seenChildren.add(c.title || '');
+            return true;
+          })
           .map(c => {
             const ce: Record<string, unknown> = { title: c.title, type: c.type };
             if (c.icon) ce.icon = c.icon;
-            const sub = (c.children || []).filter(s => s.type !== 'tabs').map(s => ({ title: s.title, type: s.type }));
+            const seenSub = new Set<string>();
+            const sub = (c.children || [])
+              .filter(s => s.type !== 'tabs')
+              .filter(s => {
+                if (seenSub.has(s.title || '')) return false;
+                seenSub.add(s.title || '');
+                return true;
+              })
+              .map(s => ({ title: s.title, type: s.type }));
             if (sub.length) ce.children = sub;
             return ce;
           });

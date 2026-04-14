@@ -134,6 +134,10 @@ export interface BlockSpec {
   tableSettings?: Record<string, unknown>;
   popups?: PopupSpec[];
   tabs?: TabSpec[];
+  // ── Linkage / reaction rules ──
+  fieldValueRules?: Record<string, unknown>[];   // form field conditional value rules
+  blockLinkageRules?: Record<string, unknown>[];  // block conditional visibility rules
+  fieldLinkageRules?: Record<string, unknown>[];  // form field conditional display/required/value
 }
 
 // ── Popup spec ──

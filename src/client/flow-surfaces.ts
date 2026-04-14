@@ -147,7 +147,11 @@ export class FlowSurfacesApi {
     return this.call('saveTemplate', template);
   }
 
-  // ── Linkage rules ──
+  // ── Linkage / reaction rules ──
+
+  async setFieldValueRules(targetUid: string, rules: Record<string, unknown>[]) {
+    return this.call('setFieldValueRules', { target: { uid: targetUid }, rules });
+  }
 
   async setFieldLinkageRules(targetUid: string, rules: Record<string, unknown>[]) {
     return this.call('setFieldLinkageRules', { target: { uid: targetUid }, rules });

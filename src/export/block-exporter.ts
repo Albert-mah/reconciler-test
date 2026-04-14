@@ -569,6 +569,45 @@ export function exportBlock(
     if (eventFlows.length) spec.event_flows = eventFlows;
   }
 
+  // ── Linkage / reaction rules ──
+  // blockLinkage: stored on block stepParams.cardSettings.linkageRules
+  const blockLinkageRules = (sp.cardSettings as Record<string, unknown>)?.linkageRules;
+  if (Array.isArray(blockLinkageRules) && blockLinkageRules.length) {
+    spec.blockLinkageRules = blockLinkageRules;
+  }
+
+  // fieldValueRules + fieldLinkageRules: different storage depending on block type.
+  // Forms: fieldValue + fieldLinkage stored on the grid node.
+  // Details: fieldLinkage stored on the block node itself.
+  if (['createForm', 'editForm'].includes(btype)) {
+    const gridNode = item.subModels?.grid;
+    if (gridNode && !Array.isArray(gridNode)) {
+      const gridSp = ((gridNode as FlowModelNode).stepParams || {}) as Record<string, unknown>;
+      // fieldValueRules: grid.stepParams.formModelSettings.assignRules.value
+      const formModelSettings = gridSp.formModelSettings as Record<string, unknown> | undefined;
+      const assignRules = formModelSettings?.assignRules as Record<string, unknown> | undefined;
+      const fieldValueRules = assignRules?.value;
+      if (Array.isArray(fieldValueRules) && fieldValueRules.length) {
+        spec.fieldValueRules = fieldValueRules;
+      }
+      // fieldLinkageRules: grid.stepParams.eventSettings.linkageRules.value
+      const eventSettings = gridSp.eventSettings as Record<string, unknown> | undefined;
+      const linkageRulesContainer = eventSettings?.linkageRules as Record<string, unknown> | undefined;
+      const fieldLinkageRules = linkageRulesContainer?.value;
+      if (Array.isArray(fieldLinkageRules) && fieldLinkageRules.length) {
+        spec.fieldLinkageRules = fieldLinkageRules;
+      }
+    }
+  } else if (btype === 'details') {
+    // fieldLinkageRules: block.stepParams.detailsSettings.linkageRules.value
+    const detailsSettings = sp.detailsSettings as Record<string, unknown> | undefined;
+    const linkageRulesContainer = detailsSettings?.linkageRules as Record<string, unknown> | undefined;
+    const fieldLinkageRules = linkageRulesContainer?.value;
+    if (Array.isArray(fieldLinkageRules) && fieldLinkageRules.length) {
+      spec.fieldLinkageRules = fieldLinkageRules;
+    }
+  }
+
   // ── Apply block-level simplifications ──
 
   // jsBlock → js shorthand

@@ -356,4 +356,35 @@ export async function fillBlock(
     // No field_layout → reorder items via moveNode to match spec declaration
     await syncGridItemsOrder(nb, gridUid, bs, log);
   }
+
+  // ── Linkage / reaction rules ──
+  // blockLinkageRules: conditional visibility on the block itself
+  if (bs.blockLinkageRules?.length) {
+    try {
+      await nb.surfaces.setBlockLinkageRules(blockUid, bs.blockLinkageRules);
+      log(`      ~ blockLinkageRules: ${bs.blockLinkageRules.length} rules`);
+    } catch (e) {
+      log(`      ! blockLinkageRules: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
+    }
+  }
+
+  // fieldValueRules: apply on form blocks only (target = block UID)
+  if (['createForm', 'editForm'].includes(btype) && bs.fieldValueRules?.length) {
+    try {
+      await nb.surfaces.setFieldValueRules(blockUid, bs.fieldValueRules);
+      log(`      ~ fieldValueRules: ${bs.fieldValueRules.length} rules`);
+    } catch (e) {
+      log(`      ! fieldValueRules: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
+    }
+  }
+
+  // fieldLinkageRules: apply on form + details blocks (target = block UID)
+  if (['createForm', 'editForm', 'details'].includes(btype) && bs.fieldLinkageRules?.length) {
+    try {
+      await nb.surfaces.setFieldLinkageRules(blockUid, bs.fieldLinkageRules);
+      log(`      ~ fieldLinkageRules: ${bs.fieldLinkageRules.length} rules`);
+    } catch (e) {
+      log(`      ! fieldLinkageRules: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
+    }
+  }
 }
