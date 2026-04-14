@@ -196,10 +196,17 @@ export async function deployProject(
   // For pending popup templates: expand their content inline into the first referencing popup
   // (sugar.ts handles popup: templates/popup/xxx.yaml → inline blocks if template doesn't exist yet)
 
+  // Build name→uid map from live templates for ref: blocks without UIDs
+  let templateNameMap = new Map<string, string>();
+  try {
+    const resp = await nb.http.get(`${nb.baseUrl}/api/flowModelTemplates:list`, { params: { pageSize: 200 } });
+    for (const t of resp.data?.data || []) {
+      if (t.name && t.uid) templateNameMap.set(t.name, t.uid);
+    }
+  } catch { /* skip */ }
+
   // Rewrite template UIDs in page specs (old exported UIDs → new deployed UIDs)
-  if (templateUidMap.size) {
-    rewriteTemplateUids(pages, templateUidMap);
-  }
+  rewriteTemplateUids(pages, templateUidMap, templateNameMap);
 
   // Routes + pages
   // --group overrides the target group name (e.g. deploy "Main" pages as "CRM Copy")
@@ -460,36 +467,51 @@ function extractBlockState(
  *   1. templateRef.templateUid — block reference specs (from ref: sugar)
  *   2. popupSettings.popupTemplateUid — field popup specs (from popup: sugar)
  */
-function rewriteTemplateUids(pages: PageInfo[], uidMap: TemplateUidMap): void {
+function rewriteTemplateUids(pages: PageInfo[], uidMap: TemplateUidMap, nameMap: Map<string, string> = new Map()): void {
   for (const page of pages) {
-    rewriteInBlocks(page.layout.blocks || [], uidMap);
+    rewriteInBlocks(page.layout.blocks || [], uidMap, nameMap);
     if (page.layout.tabs) {
       for (const tab of page.layout.tabs) {
-        rewriteInBlocks((tab as any).blocks || [], uidMap);
+        rewriteInBlocks((tab as any).blocks || [], uidMap, nameMap);
       }
     }
     for (const popup of page.popups) {
-      rewriteInBlocks((popup as any).blocks || [], uidMap);
+      rewriteInBlocks((popup as any).blocks || [], uidMap, nameMap);
       if ((popup as any).tabs) {
         for (const tab of (popup as any).tabs) {
-          rewriteInBlocks((tab as any).blocks || [], uidMap);
+          rewriteInBlocks((tab as any).blocks || [], uidMap, nameMap);
         }
       }
     }
   }
 }
 
-function rewriteInBlocks(blocks: any[], uidMap: TemplateUidMap): void {
+function rewriteInBlocks(blocks: any[], uidMap: TemplateUidMap, nameMap: Map<string, string> = new Map()): void {
   for (const block of blocks) {
-    // Case 1: templateRef.templateUid (reference blocks)
-    if (block.templateRef?.templateUid) {
-      const newUid = uidMap.get(block.templateRef.templateUid);
-      if (newUid) block.templateRef.templateUid = newUid;
-      // Also rewrite targetUid if present
+    // Case 1: templateRef (reference blocks)
+    if (block.templateRef) {
+      // Rewrite by UID map
+      if (block.templateRef.templateUid) {
+        const newUid = uidMap.get(block.templateRef.templateUid);
+        if (newUid) block.templateRef.templateUid = newUid;
+      }
+      // If templateUid still empty, look up by name from live templates
+      if (!block.templateRef.templateUid && block.templateRef.templateName) {
+        const byName = nameMap.get(block.templateRef.templateName);
+        if (byName) block.templateRef.templateUid = byName;
+      }
+      // Also try _refName (from sugar expansion)
+      if (!block.templateRef.templateUid && block._refName) {
+        const byName = nameMap.get(block._refName);
+        if (byName) block.templateRef.templateUid = byName;
+      }
+      // Rewrite targetUid
       if (block.templateRef.targetUid) {
         const newTarget = uidMap.get(block.templateRef.targetUid);
         if (newTarget) block.templateRef.targetUid = newTarget;
       }
+      delete block._refName;
+      delete block._refColl;
     }
 
     // Case 2: fields with popupSettings.popupTemplateUid

@@ -347,15 +347,19 @@ function expandRefSugar(
 
   try {
     const template = loadYaml<Record<string, unknown>>(absPath);
+    const tplName = (template.templateName || template.name || '') as string;
+    const tplUid = (template.templateUid || template.uid || '') as string;
     return {
       key: (template.key as string) || 'reference',
       type: 'reference',
       templateRef: {
-        templateUid: template.templateUid || template.uid || '',
-        templateName: template.templateName || template.name || '',
-        targetUid: template.targetUid || '',
-        mode: template.mode || 'reference',
+        templateUid: tplUid,
+        templateName: tplName,
+        targetUid: (template.targetUid || '') as string,
+        mode: (template.mode || 'reference') as string,
       },
+      // Track name for UID lookup when templateUid is empty (new templates)
+      ...((!tplUid && tplName) ? { _refName: tplName, _refColl: template.collectionName || '' } : {}),
     };
   } catch {
     return {

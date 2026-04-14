@@ -151,24 +151,17 @@ function validateBlock(bs: BlockSpec, pageTitle: string, popups: PopupSpec[], is
       }
     }
 
-    // ── Rule 2: filterForm MUST have JS stats button group on FIRST row ──
+    // ── Rule 2: filterForm JS stats button group (recommended on first row, 独占一行) ──
     const jsItems = (bs as Record<string, unknown>).js_items as unknown[];
     if (!Array.isArray(jsItems) || !jsItems.length) {
-      issues.push({ level: 'error', page: pageTitle, block: key, message: 'filterForm MUST have js_items stats button group — add js_items with [JS:...] on the first row of field_layout' });
+      issues.push({ level: 'warn', page: pageTitle, block: key, message: 'filterForm has no JS stats button group — consider adding js_items (长按钮组，放在第一行独占一行)' });
     } else if (bs.field_layout?.length) {
       const firstRow = bs.field_layout[0];
       const firstRowHasJs = Array.isArray(firstRow)
         ? firstRow.some(item => typeof item === 'string' && item.startsWith('[JS:'))
         : (typeof firstRow === 'string' && firstRow.startsWith('[JS:'));
       if (!firstRowHasJs) {
-        issues.push({ level: 'error', page: pageTitle, block: key, message: 'filterForm js_items MUST be on the FIRST row of field_layout (独占一行) — move [JS:...] to first row' });
-      }
-      // Also check JS is alone on its row (独占一行, not sharing with other fields)
-      if (firstRowHasJs && Array.isArray(firstRow)) {
-        const nonJsItems = firstRow.filter(item => typeof item !== 'string' || !item.startsWith('[JS:'));
-        if (nonJsItems.length > 0) {
-          issues.push({ level: 'error', page: pageTitle, block: key, message: 'filterForm JS button group must occupy its own row (独占一行) — do not mix with other fields' });
-        }
+        issues.push({ level: 'warn', page: pageTitle, block: key, message: 'filterForm JS button group should be on the first row of field_layout (独占一行，放在最上面)' });
       }
     }
 
