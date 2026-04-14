@@ -340,6 +340,13 @@ export async function deploySurface(
     }
   }
 
+  // Apply column settings (width, ellipsis) for ALL table blocks
+  for (const bs of blocksSpec) {
+    if (bs.type !== 'table' || !blocksState[bs.key || bs.type]?.uid) continue;
+    if ((bs.key || bs.type) in existing) continue; // already applied in sync path
+    await applyColumnSettings(nb, blocksState[bs.key || bs.type].uid, bs.fields || []);
+  }
+
   // Apply layout
   const layoutSpec = (spec as { layout?: LayoutRow[] }).layout;
   if (layoutSpec && gridUid) {

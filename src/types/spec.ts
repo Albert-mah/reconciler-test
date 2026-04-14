@@ -18,18 +18,19 @@ export type ActionType =
 // ── Field reference ──
 
 export interface FieldRef {
-  field: string;
-  label?: string;
-  filterPaths?: string[];
-  fieldPath?: string;
-  clickToOpen?: boolean;
-  width?: number;       // Column width (default 150, only export if non-default)
-  ellipsis?: boolean;   // Ellipsis on overflow (default true, only export if false)
+  field: string;                  // Field path (e.g. 'name', 'customer.name')
+  fieldPath?: string;             // @deprecated — use `field` instead
+  label?: string;                 // Display label (filterForm fields)
+  filterPaths?: string[];         // Target filter paths (filterForm fields)
+  clickToOpen?: boolean;          // Enable click-to-open popup
+  width?: number;                 // Column width (default: auto/150, only export if non-default)
+  ellipsis?: boolean;             // Ellipsis on overflow (default: true, only export if false)
   popupSettings?: {
     collectionName?: string;
     mode?: string;
     size?: string;
     filterByTk?: string;
+    popupTemplateUid?: string;    // Popup template reference
   };
 }
 
@@ -139,10 +140,8 @@ export interface BlockSpec {
 
 export interface PopupSpec {
   target: string;
-  mode?: 'drawer' | 'dialog';
+  mode?: 'drawer' | 'dialog';  // default: drawer
   coll?: string;
-  auto?: ('edit' | 'detail' | 'view')[];
-  view_field?: string;
   blocks?: BlockSpec[];
   tabs?: TabSpec[];
   layout?: LayoutRow[];
