@@ -247,13 +247,11 @@ function expandSingleBlock(
     result.recordActions = expandActionList(result.recordActions);
   }
 
-  // ── Auto-fix: filterForm auto-append filter + reset if missing ──
+  // ── filterForm: NocoBase does NOT support filter/reset actions on FilterFormBlockModel ──
+  // (compose and blueprint both reject these → 400 / "not allowed under FilterFormBlockModel")
+  // filterForm is auto-search by default; no action buttons needed.
   if (result.type === 'filterForm') {
-    if (!result.actions) result.actions = [];
-    const acts = result.actions as (string | Record<string, unknown>)[];
-    const actTypes = acts.map(a => typeof a === 'string' ? a : (a as Record<string, unknown>).type as string);
-    if (!actTypes.includes('filter') && !actTypes.includes('submit')) acts.push('filter');
-    if (!actTypes.includes('reset')) acts.push('reset');
+    delete result.actions;
   }
 
   // Expand filter sugar

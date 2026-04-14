@@ -157,15 +157,7 @@ function validateBlock(bs: BlockSpec, pageTitle: string, popups: PopupSpec[], is
       issues.push({ level: 'warn', page: pageTitle, block: key, message: 'filterForm has no JS stats button group — consider adding js_items for quick filter stats' });
     }
 
-    // ── Rule 6: filterForm must have filter + reset actions ──
-    const actions = bs.actions || [];
-    const actionTypes = actions.map(a => typeof a === 'string' ? a : (a as Record<string, unknown>).type as string);
-    if (!actionTypes.includes('filter') && !actionTypes.includes('submit')) {
-      issues.push({ level: 'warn', page: pageTitle, block: key, message: 'filterForm missing filter/submit action — auto-added' });
-    }
-    if (!actionTypes.includes('reset')) {
-      issues.push({ level: 'warn', page: pageTitle, block: key, message: 'filterForm missing reset action — auto-added' });
-    }
+    // filterForm: NocoBase auto-handles filter/reset internally, no action buttons needed
   }
 
   // ── Rule 4: createForm/editForm MUST have field_layout with sections ──
