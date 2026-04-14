@@ -257,8 +257,10 @@ export async function deploySurface(
       if (bs.title) stepParams.cardSettings = { titleDescription: { title: bs.title } };
 
       // Reference block: set useTemplate pointing to the template
-      const ref = (bs as unknown as Record<string, unknown>)._reference as Record<string, unknown>;
-      if (bs.type === 'reference' && ref?.targetUid) {
+      // Template reference — set stepParams + create usage record
+      const ref = (bs as unknown as Record<string, unknown>)._reference as Record<string, unknown>
+        || bs.templateRef as Record<string, unknown>;
+      if (bs.type === 'reference' && ref?.templateUid) {
         stepParams.referenceSettings = {
           useTemplate: {
             templateUid: ref.templateUid,
@@ -279,6 +281,15 @@ export async function deploySurface(
         stepParams,
         flowRegistry: {},
       });
+
+      // Create template usage record for reference blocks
+      if (bs.type === 'reference' && ref?.templateUid) {
+        try {
+          await nb.http.post(`${nb.baseUrl}/api/flowModelTemplateUsages:create`, {
+            values: { templateUid: ref.templateUid, modelUid: newUid },
+          });
+        } catch { /* usage may already exist */ }
+      }
 
       blocksState[key] = { uid: newUid, type: bs.type, grid_uid: '' };
       log(`    + save_model: ${key} (${modelName})`);
