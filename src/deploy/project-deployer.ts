@@ -170,6 +170,11 @@ export async function deployProject(
     templateUidMap = await deployTemplates(nb, root, log);
   }
 
+  // Rewrite template UIDs in page specs (old exported UIDs → new deployed UIDs)
+  if (templateUidMap.size) {
+    rewriteTemplateUids(pages, templateUidMap);
+  }
+
   // Routes + pages
   // --group overrides the target group name (e.g. deploy "Main" pages as "CRM Copy")
   const deployedGroups = new Set<string>();
@@ -393,6 +398,76 @@ function extractBlockState(
   }
 
   return existing;
+}
+
+// ── Template UID rewriting ──
+
+/**
+ * Rewrite old exported template UIDs in page specs to match deployed UIDs.
+ * Handles two cases:
+ *   1. templateRef.templateUid — block reference specs (from ref: sugar)
+ *   2. popupSettings.popupTemplateUid — field popup specs (from popup: sugar)
+ */
+function rewriteTemplateUids(pages: PageInfo[], uidMap: TemplateUidMap): void {
+  for (const page of pages) {
+    rewriteInBlocks(page.layout.blocks || [], uidMap);
+    if (page.layout.tabs) {
+      for (const tab of page.layout.tabs) {
+        rewriteInBlocks((tab as any).blocks || [], uidMap);
+      }
+    }
+    for (const popup of page.popups) {
+      rewriteInBlocks((popup as any).blocks || [], uidMap);
+      if ((popup as any).tabs) {
+        for (const tab of (popup as any).tabs) {
+          rewriteInBlocks((tab as any).blocks || [], uidMap);
+        }
+      }
+    }
+  }
+}
+
+function rewriteInBlocks(blocks: any[], uidMap: TemplateUidMap): void {
+  for (const block of blocks) {
+    // Case 1: templateRef.templateUid (reference blocks)
+    if (block.templateRef?.templateUid) {
+      const newUid = uidMap.get(block.templateRef.templateUid);
+      if (newUid) block.templateRef.templateUid = newUid;
+      // Also rewrite targetUid if present
+      if (block.templateRef.targetUid) {
+        const newTarget = uidMap.get(block.templateRef.targetUid);
+        if (newTarget) block.templateRef.targetUid = newTarget;
+      }
+    }
+
+    // Case 2: fields with popupSettings.popupTemplateUid
+    if (Array.isArray(block.fields)) {
+      for (const f of block.fields) {
+        if (typeof f !== 'object' || !f) continue;
+        const ps = f.popupSettings;
+        if (ps?.popupTemplateUid) {
+          const newUid = uidMap.get(ps.popupTemplateUid);
+          if (newUid) ps.popupTemplateUid = newUid;
+        }
+      }
+    }
+
+    // Case 3: popupTemplate on blocks (e.g. popup-deployer path)
+    if ((block as any).popupTemplate?.uid) {
+      const newUid = uidMap.get((block as any).popupTemplate.uid);
+      if (newUid) (block as any).popupTemplate.uid = newUid;
+    }
+
+    // Recurse into nested blocks (tabs, popups)
+    if (Array.isArray(block.blocks)) {
+      rewriteInBlocks(block.blocks, uidMap);
+    }
+    if (Array.isArray(block.tabs)) {
+      for (const tab of block.tabs) {
+        rewriteInBlocks((tab as any).blocks || [], uidMap);
+      }
+    }
+  }
 }
 
 // ── Git helpers ──
