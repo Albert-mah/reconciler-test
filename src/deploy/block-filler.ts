@@ -548,7 +548,7 @@ async function enableM2oClickToOpen(
           mode: 'drawer', size: 'large',
           popupTemplateUid: tplInfo.templateUid,
           ...(tplInfo.targetUid ? { uid: tplInfo.targetUid } : {}),
-          popupTemplateHasFilterByTk: false,
+          popupTemplateHasFilterByTk: true,
           popupTemplateHasSourceId: false,
         },
       };

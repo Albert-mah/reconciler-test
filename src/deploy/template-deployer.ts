@@ -500,11 +500,13 @@ export async function convertPopupToTemplate(
     const newTargetUid = (result.targetUid) as string;
 
     if (newTemplateUid) {
-      // Ensure collectionName is correct (saveTemplate may derive from field context)
+      // Ensure collectionName + filterByTk are correct
+      // filterByTk tells the popup framework to inject current record context
       if (collName) {
         try {
           await nb.http.post(`${nb.baseUrl}/api/flowModelTemplates:update?filterByTk=${newTemplateUid}`, {
             collectionName: collName,
+            filterByTk: '{{ ctx.record.id }}',
           });
         } catch { /* best effort */ }
       }
