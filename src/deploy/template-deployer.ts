@@ -575,31 +575,33 @@ async function convertPopupBlocksToTemplates(
   };
 
   try {
-    const fm = await nb.http.get(`${nb.baseUrl}/api/flowModels:get`, { params: { filterByTk: popupTargetUid } });
-    if (!fm.data?.data) return;
-
-    // Walk descendants to find blocks + their parent grid
-    // Use flowSurfaces:get won't work on popup template targets, so walk via flowModels
-    const visited = new Set<string>();
-    const blocks: { uid: string; use: string; parentId: string; sortIndex: number }[] = [];
-
-    async function walkChildren(parentUid: string): Promise<void> {
-      if (visited.has(parentUid)) return;
-      visited.add(parentUid);
-      try {
-        const resp = await nb.http.get(`${nb.baseUrl}/api/flowModels:list`, {
-          params: { paginate: false, 'filter[parentId]': parentUid },
-        });
-        for (const child of (resp.data?.data || [])) {
-          if (BLOCK_USES.has(child.use)) {
-            blocks.push({ uid: child.uid, use: child.use, parentId: child.parentId, sortIndex: child.sortIndex || 0 });
-          }
-          await walkChildren(child.uid);
-        }
-      } catch { /* skip — some models don't support list by parentId */ }
+    // Get popup template target tree — try flowSurfaces:get first, fallback to flowModels:get
+    let tree: any;
+    try {
+      const data = await nb.get({ uid: popupTargetUid });
+      tree = data.tree;
+    } catch {
+      // flowSurfaces:get may not work for detached template targets
+      const fm = await nb.http.get(`${nb.baseUrl}/api/flowModels:get`, { params: { filterByTk: popupTargetUid } });
+      tree = fm.data?.data;
     }
+    if (!tree) return;
 
-    await walkChildren(popupTargetUid);
+    // Walk tree to find blocks + their parent grid
+    const blocks: { uid: string; use: string; parentId: string; sortIndex: number }[] = [];
+    function walkTree(node: any, gridUid: string | null) {
+      if (!node || typeof node !== 'object') return;
+      const curGrid = node.use === 'BlockGridModel' ? node.uid : gridUid;
+      if (BLOCK_USES.has(node.use) && curGrid) {
+        blocks.push({ uid: node.uid, use: node.use, parentId: curGrid, sortIndex: node.sortIndex || 0 });
+      }
+      const subs = node.subModels;
+      if (subs) for (const v of Object.values(subs)) {
+        if (Array.isArray(v)) (v as any[]).forEach(i => walkTree(i, curGrid));
+        else if (v && typeof v === 'object') walkTree(v, curGrid);
+      }
+    }
+    walkTree(tree, null);
     if (!blocks.length) return;
 
     for (const block of blocks) {
