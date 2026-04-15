@@ -6,3 +6,5 @@
       icon: projectoutlined
     - title: Tasks
       icon: profileoutlined
+    - title: Milestones
+      icon: flagoutlined

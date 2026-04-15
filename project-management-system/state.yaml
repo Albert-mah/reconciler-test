@@ -232,4 +232,101 @@ pages:
             actions:
               submit:
                 uid: u8160qnbut3
+  milestones:
+    route_id: 0
+    page_uid: 6kno3tz0qzu
+    tab_uid: ylj6l5dk8kg
+    blocks:
+      filter:
+        uid: va2n5svnig2
+        type: filterForm
+        grid_uid: 8jt82emfyrq
+        fields:
+          name:
+            wrapper: 59nhzorve1j
+            field: ''
+          status:
+            wrapper: pbr0hijlrd7
+            field: ''
+          project:
+            wrapper: o78tob27tvw
+            field: ''
+          owner:
+            wrapper: 2h6nr3891ny
+            field: ''
+        actions:
+          filterFormSubmit:
+            uid: hiygs6oi3vp
+          filterFormReset:
+            uid: qlwnswdyin9
+          submit:
+            uid: 8kwlodbqvmx
+          reset:
+            uid: 0gxvcakn1by
+      table:
+        uid: om4tbcgbumz
+        type: table
+        grid_uid: ''
+        fields:
+          name:
+            wrapper: 1h8zpjyunms
+            field: ''
+          project:
+            wrapper: y33vnlva57q
+            field: ''
+          owner:
+            wrapper: 2acgo9ft4c5
+            field: ''
+          planned_date:
+            wrapper: pzidottgewc
+            field: ''
+          completed_date:
+            wrapper: ia35qh2kbzb
+            field: ''
+          status:
+            wrapper: uyrwwgovss9
+            field: ''
+        actions:
+          filter:
+            uid: qene49nzmin
+          refresh:
+            uid: civtu8e9kgd
+          addNew:
+            uid: ra819cedoj3
+          export:
+            uid: 5lk4oa4tz4m
+        record_actions:
+          edit:
+            uid: hphx0c214sm
+          view:
+            uid: bbierwmild9
+          delete:
+            uid: bjyc6qtgn64
+    popups:
+      table.actions.addNew:
+        target_uid: ra819cedoj3
+        blocks:
+          form:
+            uid: ot6ock3ixad
+            type: createForm
+            grid_uid: dhbxsc8v44k
+            fields:
+              name:
+                wrapper: ez0ymow9xcl
+                field: ''
+              owner:
+                wrapper: of8u0z9ejjp
+                field: ''
+              status:
+                wrapper: h8y5d172mg6
+                field: ''
+              description:
+                wrapper: q74k3y0ffij
+                field: ''
+              project:
+                wrapper: c3re9tozw2d
+                field: ''
+            actions:
+              submit:
+                uid: k7fu170cjuy
 group_id: 359119394373632
