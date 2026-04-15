@@ -60,20 +60,14 @@ curl -X POST "$NB_URL/api/nb_myapp_products:create" \
 
 ### 第三轮：JS 区块 + 事件流
 
-填充业务逻辑：
-
-**JS 区块** — 参考 `templates/crm/js/` 里的 CRM 组件，复制并修改：
-- KPI 卡片：`analytics_jsBlock_6~9.js`（ctx.sql.save + runById 模式）
+**JS 区块** — 从 `templates/crm/js/` 复制模板并修改 CONFIG 参数：
+- KPI：`analytics_jsBlock_6~9.js`
 - Stats Filter：`customers_filterForm_1_*.js`
-- 表格列：`leads_table_0_col_*.js`
-- 详情组件：`customers_popup_name_tab0_details_*.js`
+- 表格列/详情组件：`leads_table_0_col_*.js` / `customers_popup_name_tab0_details_*.js`
 
-**SQL 执行规范**：必须用 `ctx.sql.save({ uid, sql })` + `ctx.sql.runById(uid)` 两步流程，不能直接 `ctx.sql("SELECT...")`。
+> SQL 必须用 `ctx.sql.save() + runById()` 两步，不能直接 `ctx.sql()`。
 
-**事件流（Workflow）** — 业务自动化：
-- 状态变更触发通知
-- 库存不足自动创建采购单
-- 审批流程
+**事件流（Workflow）** — 业务自动化
 
 ## What Scaffold Generates
 
@@ -209,7 +203,7 @@ layout:
 
 1. **Design first** — never build without user confirmation
 2. **Scaffold first** — always start with `scaffold`, then edit generated files
-3. **filterForm** — max 2-3 fields + must have js_items stats block on first row
+3. **filterForm** — 必须有搜索框（filterPaths 连接多字段）+ status 筛选 + js_items stats block
 4. **No manual actions on filterForm** — NocoBase auto-creates submit/reset
 5. **Default actions auto-added** — table gets [filter,refresh,addNew] + [edit,delete]; details gets [edit]; forms get [submit]
 6. **Edit 3 block templates together** — addNew, edit, detail share same field_layout baseline
