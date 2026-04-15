@@ -156,17 +156,23 @@ export async function deployPopup(
   }
 
   // Set click-to-open settings
+  // Determine if this popup needs current record context:
+  //   - recordActions (edit/view) and field click (name) need filterByTk
+  //   - toolbar actions (addNew) don't need it
+  const needsRecordContext = targetRef.includes('.recordActions.') || targetRef.includes('.fields.');
+  const openViewSettings: Record<string, unknown> = {
+    collectionName: coll,
+    dataSourceKey: 'main',
+    mode,
+    size: 'large',
+    pageModelClass: 'ChildPageModel',
+    uid: targetUid,
+  };
+  if (needsRecordContext) {
+    openViewSettings.filterByTk = '{{ ctx.record.id }}';
+  }
   await nb.updateModel(targetUid, {
-    popupSettings: {
-      openView: {
-        collectionName: coll,
-        dataSourceKey: 'main',
-        mode,
-        size: 'large',
-        pageModelClass: 'ChildPageModel',
-        uid: targetUid,
-      },
-    },
+    popupSettings: { openView: openViewSettings },
     displayFieldSettings: {
       clickToOpen: { clickToOpen: true },
     },
