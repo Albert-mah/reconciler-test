@@ -1,1 +1,117 @@
-pages: {}
+pages:
+  projects:
+    route_id: 0
+    page_uid: ah8o6wjspga
+    tab_uid: ogap3wpahxc
+    blocks:
+      filter:
+        uid: k5wo29ml85w
+        type: filterForm
+        grid_uid: epomsoze85s
+        fields:
+          name:
+            wrapper: 9t2rumfm4cq
+            field: ''
+          status:
+            wrapper: tqfjsdql30h
+            field: ''
+          priority:
+            wrapper: mmhqhr01x94
+            field: ''
+          owner:
+            wrapper: fmquve5otes
+            field: ''
+        actions:
+          filterFormSubmit:
+            uid: jixg2nefwv6
+          filterFormReset:
+            uid: lxabs1d9qlc
+          submit:
+            uid: nx17gja8102
+          reset:
+            uid: uxbyoj7cpr0
+      table:
+        uid: iwqust5lf8p
+        type: table
+        grid_uid: ''
+        fields:
+          name:
+            wrapper: tr7i0u48k1r
+            field: ''
+          code:
+            wrapper: 02dgf05xuk4
+            field: ''
+          owner:
+            wrapper: 7vtum5llo0r
+            field: ''
+          client_name:
+            wrapper: c1948yb8d4b
+            field: ''
+          end_date:
+            wrapper: ua5mfp07b10
+            field: ''
+          progress:
+            wrapper: vn1lyziehsx
+            field: ''
+          priority:
+            wrapper: cpp7fhfm2g0
+            field: ''
+          status:
+            wrapper: 6ynpr34kcve
+            field: ''
+        actions:
+          filter:
+            uid: axoxdbrmli7
+          refresh:
+            uid: qpry339p05o
+          addNew:
+            uid: 4c1oc4clsn3
+          export:
+            uid: ufe0nzkl91p
+        record_actions:
+          edit:
+            uid: 62dixrhbdxt
+          view:
+            uid: kvseujvgopr
+          delete:
+            uid: qdejdj8b3a1
+    popups:
+      table.actions.addNew:
+        target_uid: 4c1oc4clsn3
+        blocks:
+          form:
+            uid: 71qnvrau66p
+            type: createForm
+            grid_uid: chx0xk82wh2
+            fields:
+              name:
+                wrapper: 1synhjvcdri
+                field: ''
+              owner:
+                wrapper: hdrchpb9q98
+                field: ''
+              client_name:
+                wrapper: ynvu0m8v2g3
+                field: ''
+              budget:
+                wrapper: 6ex8c9uhi2s
+                field: ''
+              progress:
+                wrapper: 732j9yddrs2
+                field: ''
+              description:
+                wrapper: yzo6pigqqjp
+                field: ''
+              code:
+                wrapper: hfxg6gn3uqi
+                field: ''
+              priority:
+                wrapper: zk5ju8sqhzl
+                field: ''
+              status:
+                wrapper: 0r8elx5px1l
+                field: ''
+            actions:
+              submit:
+                uid: 85htuh870fw
+group_id: 359119394373632
