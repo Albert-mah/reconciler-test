@@ -33,11 +33,13 @@ function toApplyField(fd: FieldDef): Record<string, unknown> {
   // Default value
   if (fd.default !== undefined) field.defaultValue = fd.default;
 
-  // Select/enum options
+  // Select/enum options (support both fd.options and fd.uiSchema.enum)
   if (fd.options) {
     field.enum = fd.options.map(o =>
       typeof o === 'string' ? { value: o, label: o } : o,
     );
+  } else if (fd.uiSchema?.enum?.length) {
+    field.uiSchema = { ...(field.uiSchema || {}), enum: fd.uiSchema.enum };
   }
 
   // Description
