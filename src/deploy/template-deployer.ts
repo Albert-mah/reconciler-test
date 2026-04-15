@@ -511,8 +511,8 @@ export async function convertPopupToTemplate(
       return undefined;
     }
 
-    // Find the actual block (DetailsBlockModel, EditFormModel, CreateFormModel)
-    const BLOCK_USES = new Set(['DetailsBlockModel', 'EditFormModel', 'CreateFormModel', 'TableBlockModel']);
+    // Find the actual block in the popup grid
+    const BLOCK_USES = new Set(['DetailsBlockModel', 'EditFormModel', 'CreateFormModel', 'TableBlockModel', 'ReferenceBlockModel']);
     const items = Array.isArray(grid.subModels?.children) ? grid.subModels.children
       : Array.isArray(grid.subModels?.items) ? grid.subModels.items : [];
     const block = items.find((item: any) => BLOCK_USES.has(item?.use));
@@ -522,9 +522,41 @@ export async function convertPopupToTemplate(
       return undefined;
     }
 
-    // Step 1: Register the block as a template (detachParent removes it from grid)
+    // If block is already a ReferenceBlockModel, it already references a block template.
+    // The popup template just needs to be registered — no detach needed.
+    if (block.use === 'ReferenceBlockModel') {
+      const ref = block.stepParams?.referenceSettings?.useTemplate;
+      if (ref?.templateUid) {
+        // Block template already exists. Create a popup-level template pointing to the same target.
+        const templateUid = generateUid();
+        const blockTargetUid = ref.targetUid || block.uid;
+        // Determine useModel from the referenced template
+        let useModel = 'DetailsBlockModel';
+        try {
+          const tplResp = await nb.http.get(`${nb.baseUrl}/api/flowModelTemplates:get`, { params: { filterByTk: ref.templateUid } });
+          useModel = tplResp.data?.data?.useModel || useModel;
+        } catch { /* fallback */ }
+        const needsFilterByTk = useModel !== 'CreateFormModel';
+        await nb.http.post(`${nb.baseUrl}/api/flowModelTemplates:create`, {
+          uid: templateUid,
+          name,
+          description: name,
+          targetUid: blockTargetUid,
+          useModel,
+          type: 'block',
+          dataSourceKey: 'main',
+          collectionName: collName,
+          filterByTk: needsFilterByTk ? '{{ctx.view.inputArgs.filterByTk}}' : null,
+          sourceId: null,
+        });
+        log(`    + popup template: ${name} (${templateUid}, via existing ref)`);
+        return { templateUid, targetUid: blockTargetUid };
+      }
+    }
+
+    // Block is a real block (not reference) — detach it as a template
     const templateUid = generateUid();
-    const needsFilterByTk = block.use !== 'CreateFormModel'; // addNew doesn't need record context
+    const needsFilterByTk = block.use !== 'CreateFormModel';
     await nb.http.post(`${nb.baseUrl}/api/flowModelTemplates:create`, {
       uid: templateUid,
       name,
@@ -539,7 +571,7 @@ export async function convertPopupToTemplate(
       detachParent: true,
     });
 
-    // Step 2: Create ReferenceBlockModel in the same grid position
+    // Replace with ReferenceBlockModel
     const refUid = generateUid();
     await nb.http.post(`${nb.baseUrl}/api/flowModels:save`, {
       uid: refUid,
