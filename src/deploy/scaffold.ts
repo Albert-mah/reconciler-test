@@ -10,11 +10,8 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { slugify } from '../utils/slugify';
 import { dumpYaml } from '../utils/yaml';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ── Dashboard constants (reusable templates) ──
 
@@ -476,14 +473,9 @@ function generateCrudPage(
 
   fs.writeFileSync(path.join(pageDir, 'layout.yaml'), dumpYaml(layout));
 
-  // js/stats_filter.js — copy from template + fill parameters
-  const tplRoot = path.join(__dirname, '..', '..', 'templates', 'js');
-  const { fillTemplate } = await import('../utils/template-filler');
-  const statsFilterTpl = path.join(tplRoot, 'stats-filter.js');
-  const statsFilterJs = fs.existsSync(statsFilterTpl)
-    ? fillTemplate(fs.readFileSync(statsFilterTpl, 'utf8'), { COLLECTION: coll })
-    : `// stats-filter template not found\nctx.render(null);`;
-  fs.writeFileSync(path.join(pageDir, 'js', 'stats_filter.js'), statsFilterJs);
+  // js/stats_filter.js — stub (AI fills in round 3, referencing CRM export examples)
+  fs.writeFileSync(path.join(pageDir, 'js', 'stats_filter.js'),
+    `// TODO: Stats Filter Block for ${coll}\n// Reference: exports/crm-v2/js/ for SQL and component patterns\nctx.render(null);\n`);
 
   // popups — reference popup templates
   fs.writeFileSync(
