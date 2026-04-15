@@ -456,18 +456,21 @@ async function createBlockTemplate(
 }
 
 // ── Popup template: deferred creation ──
-// Popup templates can't be created from scratch via API.
-// Instead, deploy popup as inline content first, then convert to template.
+// Deploy popup as inline content first, then convert the block to a template.
+//
+// Two-step flow (matches NocoBase UI behavior):
+//   1. flowModelTemplates:create — register the existing block as template (detachParent: true)
+//   2. flowModels:save — create ReferenceBlockModel in the same grid position
 
 /**
- * Convert an already-deployed inline popup into a popup template.
- * Called AFTER page deployment, when a field has popup content that
- * should become a reusable template.
+ * Convert an already-deployed inline popup block into a reusable template.
  *
- * @param fieldUid - The field model UID that has the deployed popup
+ * Finds the actual block (DetailsBlockModel/EditFormModel) inside the popup,
+ * detaches it as a template, and replaces it with a ReferenceBlockModel.
+ *
+ * @param targetUid - The popup host field/action UID (from state.popups.target_uid)
  * @param name - Template name
  * @param collName - Collection name
- * @returns templateUid + targetUid if successful
  */
 export async function convertPopupToTemplate(
   nb: NocoBaseClient,
@@ -477,42 +480,91 @@ export async function convertPopupToTemplate(
   log: (msg: string) => void = console.log,
 ): Promise<{ templateUid: string; targetUid: string } | undefined> {
   try {
-    // targetUid might be a column wrapper — need to find the field model inside
-    let fieldUid = targetUid;
-    try {
-      const data = await nb.get({ uid: targetUid });
-      const field = data.tree.subModels?.field;
-      if (field && !Array.isArray(field)) {
-        fieldUid = (field as Record<string, unknown>).uid as string || targetUid;
-      }
-    } catch { /* use targetUid as-is */ }
+    // Navigate from host field → popup page → tab → grid → block
+    const hostData = await nb.get({ uid: targetUid });
+    const hostTree = hostData.tree;
 
-    const result = await nb.surfaces.saveTemplate({
-      target: { uid: fieldUid },
+    // Find the field model (might be wrapped in a column)
+    let fieldNode = hostTree;
+    if (hostTree.subModels?.field && !Array.isArray(hostTree.subModels.field)) {
+      fieldNode = hostTree.subModels.field as Record<string, unknown>;
+    }
+
+    // Find popup page (ChildPageModel)
+    const popupPage = (fieldNode as any).subModels?.page;
+    if (!popupPage?.uid) {
+      log(`    . popup convert ${name}: no popup page found`);
+      return undefined;
+    }
+
+    // Navigate: ChildPageModel → tabs[0] → grid → children/items
+    const tabs = popupPage.subModels?.tabs;
+    const tabArr = Array.isArray(tabs) ? tabs : tabs ? [tabs] : [];
+    if (!tabArr.length) {
+      log(`    . popup convert ${name}: no tabs in popup`);
+      return undefined;
+    }
+
+    const grid = tabArr[0].subModels?.grid;
+    if (!grid?.uid) {
+      log(`    . popup convert ${name}: no grid in popup tab`);
+      return undefined;
+    }
+
+    // Find the actual block (DetailsBlockModel, EditFormModel, CreateFormModel)
+    const BLOCK_USES = new Set(['DetailsBlockModel', 'EditFormModel', 'CreateFormModel', 'TableBlockModel']);
+    const items = Array.isArray(grid.subModels?.children) ? grid.subModels.children
+      : Array.isArray(grid.subModels?.items) ? grid.subModels.items : [];
+    const block = items.find((item: any) => BLOCK_USES.has(item?.use));
+
+    if (!block?.uid) {
+      log(`    . popup convert ${name}: no block found in popup grid`);
+      return undefined;
+    }
+
+    // Step 1: Register the block as a template (detachParent removes it from grid)
+    const templateUid = generateUid();
+    const needsFilterByTk = block.use !== 'CreateFormModel'; // addNew doesn't need record context
+    await nb.http.post(`${nb.baseUrl}/api/flowModelTemplates:create`, {
+      uid: templateUid,
       name,
       description: name,
-      collectionName: collName,
+      targetUid: block.uid,
+      useModel: block.use,
+      type: 'block',
       dataSourceKey: 'main',
-      saveMode: 'convert',
-    }) as Record<string, unknown>;
+      collectionName: collName,
+      filterByTk: needsFilterByTk ? '{{ctx.view.inputArgs.filterByTk}}' : null,
+      sourceId: null,
+      detachParent: true,
+    });
 
-    const newTemplateUid = (result.uid || result.templateUid) as string;
-    const newTargetUid = (result.targetUid) as string;
+    // Step 2: Create ReferenceBlockModel in the same grid position
+    const refUid = generateUid();
+    await nb.http.post(`${nb.baseUrl}/api/flowModels:save`, {
+      uid: refUid,
+      use: 'ReferenceBlockModel',
+      parentId: grid.uid,
+      subKey: 'items',
+      subType: 'array',
+      stepParams: {
+        referenceSettings: {
+          target: { targetUid: block.uid, mode: 'reference' },
+          useTemplate: {
+            templateUid,
+            templateName: name,
+            templateDescription: name,
+            targetUid: block.uid,
+            mode: 'reference',
+          },
+        },
+      },
+      sortIndex: block.sortIndex || 0,
+      flowRegistry: {},
+    });
 
-    if (newTemplateUid) {
-      // Ensure collectionName + filterByTk are correct
-      // filterByTk tells the popup framework to inject current record context
-      if (collName) {
-        try {
-          await nb.http.post(`${nb.baseUrl}/api/flowModelTemplates:update?filterByTk=${newTemplateUid}`, {
-            collectionName: collName,
-            filterByTk: '{{ ctx.record.id }}',
-          });
-        } catch { /* best effort */ }
-      }
-      log(`    + popup template: ${name} (${newTemplateUid}, coll: ${collName})`);
-      return { templateUid: newTemplateUid, targetUid: newTargetUid };
-    }
+    log(`    + popup template: ${name} (${templateUid}, coll: ${collName})`);
+    return { templateUid, targetUid: block.uid };
   } catch (e) {
     log(`    . popup template convert: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
   }
