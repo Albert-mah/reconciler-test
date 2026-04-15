@@ -11,6 +11,74 @@ import type { BlockSpec } from '../../types/spec';
 import type { BlockState } from '../../types/state';
 import type { LogFn } from './types';
 
+interface FilterFieldMeta {
+  name: string;
+  title?: string;
+  interface?: string;
+  type?: string;
+  target?: string;
+  targetKey?: string;
+  uiSchema?: Record<string, unknown>;
+  filterable?: unknown;
+  [key: string]: unknown;
+}
+
+interface NormalizedFilterFieldSpec {
+  fieldPath: string;
+  label: string;
+  filterPaths?: string[];
+}
+
+function normalizeFilterFieldSpec(raw: string | Record<string, unknown>): NormalizedFilterFieldSpec | null {
+  if (typeof raw === 'string') {
+    return { fieldPath: raw, label: '' };
+  }
+
+  const fieldPath = (raw.field as string) || (raw.fieldPath as string) || '';
+  if (!fieldPath) return null;
+
+  const filterPaths = Array.isArray(raw.filterPaths)
+    ? raw.filterPaths.filter((path): path is string => typeof path === 'string' && !!path)
+    : undefined;
+
+  return {
+    fieldPath,
+    label: (raw.label as string) || '',
+    filterPaths,
+  };
+}
+
+function buildFilterFieldMeta(
+  fieldPath: string,
+  label: string,
+  meta?: FilterFieldMeta,
+): Record<string, unknown> {
+  const fallbackTitle = label
+    || meta?.title
+    || ((meta?.uiSchema as Record<string, unknown> | undefined)?.title as string)
+    || fieldPath;
+
+  if (!meta) {
+    return {
+      name: fieldPath,
+      title: fallbackTitle,
+      interface: 'input',
+      type: 'string',
+    };
+  }
+
+  return {
+    name: meta.name || fieldPath,
+    title: meta.title || fallbackTitle,
+    interface: meta.interface || 'input',
+    type: meta.type || 'string',
+    target: meta.target,
+    targetKey: meta.targetKey,
+    uiSchema: meta.uiSchema,
+    filterable: meta.filterable,
+  };
+}
+
 export async function configureFilter(
   nb: NocoBaseClient,
   bs: BlockSpec,
@@ -24,27 +92,59 @@ export async function configureFilter(
   // Find target table/reference UIDs
   const targetUids: string[] = [];
   for (const [, binfo] of Object.entries(allBlocksState)) {
-    if (binfo.type === 'table' || binfo.type === 'reference') {
-      if (binfo.uid) targetUids.push(binfo.uid);
+    if ((binfo.type === 'table' || binfo.type === 'reference') && binfo.uid) {
+      targetUids.push(binfo.uid);
     }
   }
   const defaultTarget = targetUids[0] || '';
+  const fieldSpecs = (bs.fields || [])
+    .map(f => typeof f === 'string' ? normalizeFilterFieldSpec(f) : normalizeFilterFieldSpec(f as unknown as Record<string, unknown>))
+    .filter((f): f is NormalizedFilterFieldSpec => !!f);
+
+  const collectionResp = await nb.http.get(`${nb.baseUrl}/api/collections:get`, {
+    params: { filterByTk: coll, appends: ['fields'] },
+  });
+  const collectionData = (collectionResp.data?.data || {}) as Record<string, unknown>;
+  const collectionFields = Array.isArray(collectionData.fields)
+    ? (collectionData.fields as FilterFieldMeta[])
+    : [];
+  const fieldMetaByName = new Map(collectionFields.map(f => [f.name, f]));
+  const targetFilterKeyCache = new Map<string, string>();
+
+  const getAssociationFilterTargetKey = async (fieldMeta?: FilterFieldMeta): Promise<string> => {
+    if (!fieldMeta?.target) {
+      return fieldMeta?.targetKey || 'id';
+    }
+    if (targetFilterKeyCache.has(fieldMeta.target)) {
+      return targetFilterKeyCache.get(fieldMeta.target) || 'id';
+    }
+
+    try {
+      const resp = await nb.http.get(`${nb.baseUrl}/api/collections:get`, {
+        params: { filterByTk: fieldMeta.target },
+      });
+      const rawKey = resp.data?.data?.filterTargetKey;
+      const key = Array.isArray(rawKey) ? rawKey[0] : rawKey;
+      const normalizedKey = typeof key === 'string' && key ? key : fieldMeta.targetKey || 'id';
+      targetFilterKeyCache.set(fieldMeta.target, normalizedKey);
+      return normalizedKey;
+    } catch {
+      return fieldMeta.targetKey || 'id';
+    }
+  };
 
   // 1. Set label + defaultTargetUid on each FilterFormItem
   const fieldStates = blockState.fields || {};
-  for (const f of bs.fields || []) {
-    if (typeof f !== 'object') continue;
-    const fp = f.field || f.fieldPath || '';
-    const label = f.label || '';
-    if (!fp) continue;
-
+  for (const f of fieldSpecs) {
+    const fp = f.fieldPath;
+    const label = f.label;
     const wrapperUid = fieldStates[fp]?.wrapper;
     if (!wrapperUid) continue;
 
     const settings: Record<string, unknown> = {};
     if (defaultTarget) {
       settings.init = {
-        filterField: { name: fp, title: label || fp, interface: 'input', type: 'string' },
+        filterField: buildFilterFieldMeta(fp, label, fieldMetaByName.get(fp)),
         defaultTargetUid: defaultTarget,
       };
     }
@@ -73,49 +173,72 @@ export async function configureFilter(
       ? ((grid as unknown as Record<string, unknown>).subModels as Record<string, unknown>)?.items
       : [];
     const items = (Array.isArray(gridItems) ? gridItems : []) as Record<string, unknown>[];
+    const liveFilterUidByFieldPath = new Map<string, string>();
 
-    const fmEntries: Record<string, unknown>[] = [];
-    for (const f of bs.fields || []) {
-      if (typeof f !== 'object' || !f.filterPaths?.length) continue;
-      const fp = f.field || '';
-      if (!fp) continue;
-
-      // Find FilterFormItem UID in live grid
-      for (const item of items) {
-        const itemFp = ((item.stepParams as Record<string, unknown>)?.fieldSettings as Record<string, unknown>)
-          ?.init as Record<string, unknown>;
-        if ((itemFp?.fieldPath as string) === fp) {
-          for (const tid of targetUids) {
-            fmEntries.push({
-              filterId: item.uid,
-              targetId: tid,
-              filterPaths: f.filterPaths,
-            });
-          }
-          log(`      filter ${fp} → ${JSON.stringify(f.filterPaths)} (${targetUids.length} targets)`);
-          break;
-        }
+    for (const item of items) {
+      const fieldInit = ((item.stepParams as Record<string, unknown>)?.fieldSettings as Record<string, unknown>)
+        ?.init as Record<string, unknown> | undefined;
+      const itemFieldPath = fieldInit?.fieldPath as string | undefined;
+      const itemUid = item.uid as string | undefined;
+      if (itemFieldPath && itemUid) {
+        liveFilterUidByFieldPath.set(itemFieldPath, itemUid);
       }
     }
 
-    if (fmEntries.length) {
-      // Save filterManager on page-level grid
-      const pgResp = await nb.http.get(`${nb.baseUrl}/api/flowModels:get`, {
-        params: { filterByTk: pageGridUid },
-      });
-      const pgData = pgResp.data?.data || {};
-      await nb.http.post(`${nb.baseUrl}/api/flowModels:save`, {
-        uid: pageGridUid,
-        use: pgData.use || 'BlockGridModel',
-        parentId: pgData.parentId || '',
-        subKey: 'grid',
-        subType: 'object',
-        sortIndex: 0,
-        stepParams: pgData.stepParams || {},
-        flowRegistry: pgData.flowRegistry || {},
-        filterManager: fmEntries,
-      });
+    const currentFilterIds = new Set<string>();
+    const fmEntries: Record<string, unknown>[] = [];
+
+    for (const f of fieldSpecs) {
+      const fp = f.fieldPath;
+      const filterId = liveFilterUidByFieldPath.get(fp);
+      if (!filterId) continue;
+      currentFilterIds.add(filterId);
+
+      const fieldMeta = fieldMetaByName.get(fp);
+      const filterPaths = f.filterPaths?.length
+        ? f.filterPaths
+        : (fieldMeta?.target && !fp.includes('.'))
+          ? [`${fp}.${await getAssociationFilterTargetKey(fieldMeta)}`]
+          : [fp];
+
+      for (const tid of targetUids) {
+        fmEntries.push({
+          filterId,
+          targetId: tid,
+          filterPaths,
+        });
+      }
+      log(`      filter ${fp} → ${JSON.stringify(filterPaths)} (${targetUids.length} targets)`);
     }
+
+    const pgResp = await nb.http.get(`${nb.baseUrl}/api/flowModels:get`, {
+      params: { filterByTk: pageGridUid },
+    });
+    const pgData = pgResp.data?.data || {};
+    const existingEntries = Array.isArray(pgData.filterManager)
+      ? (pgData.filterManager as Record<string, unknown>[])
+      : [];
+    const preservedEntries = existingEntries.filter(entry => {
+      const filterId = entry.filterId as string | undefined;
+      return !filterId || !currentFilterIds.has(filterId);
+    });
+    const nextEntries = [...preservedEntries, ...fmEntries];
+
+    if (!nextEntries.length && !currentFilterIds.size) {
+      return;
+    }
+
+    await nb.http.post(`${nb.baseUrl}/api/flowModels:save`, {
+      uid: pageGridUid,
+      use: pgData.use || 'BlockGridModel',
+      parentId: pgData.parentId || '',
+      subKey: pgData.subKey || 'grid',
+      subType: pgData.subType || 'object',
+      sortIndex: pgData.sortIndex ?? 0,
+      stepParams: pgData.stepParams || {},
+      flowRegistry: pgData.flowRegistry || {},
+      filterManager: nextEntries,
+    });
   } catch (e) {
     log(`      ! filterManager: ${e instanceof Error ? e.message : e}`);
   }
