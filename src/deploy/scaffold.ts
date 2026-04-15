@@ -473,53 +473,14 @@ function generateCrudPage(
 
   fs.writeFileSync(path.join(pageDir, 'layout.yaml'), dumpYaml(layout));
 
-  // js/stats_filter.js — stats filter with live SQL counts
-  const statsFilterJs = `/**
- * Stats Filter Block
- *
- * @type JSItemModel
- * @collection ${coll}
- */
-const { useState, useEffect } = ctx.React;
-const h = ctx.React.createElement;
-
-const StatsFilter = () => {
-  const [active, setActive] = useState('all');
-  const [stats, setStats] = useState([]);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const total = await ctx.sql('SELECT count(*) AS cnt FROM ${coll}');
-        const byStatus = await ctx.sql("SELECT COALESCE(status, 'unknown') AS status, count(*) AS cnt FROM ${coll} GROUP BY status ORDER BY cnt DESC");
-        const items = [{ key: 'all', label: 'All', count: total?.[0]?.cnt || 0 }];
-        for (const row of (byStatus || [])) {
-          items.push({ key: row.status, label: row.status, count: row.cnt });
-        }
-        setStats(items);
-      } catch {
-        setStats([{ key: 'all', label: 'All', count: '-' }]);
-      }
-    })();
-  }, []);
-
-  const btnStyle = (isActive) => ({
-    padding: '6px 16px', borderRadius: '6px', cursor: 'pointer', border: 'none',
-    fontWeight: isActive ? '600' : '400', fontSize: '13px',
-    background: isActive ? '#1677ff' : '#f5f5f5',
-    color: isActive ? '#fff' : '#333',
-  });
-
-  return h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
-    ...stats.map(b => h('button', {
-      key: b.key, style: btnStyle(active === b.key),
-      onClick: () => setActive(b.key),
-    }, b.label + ' (' + b.count + ')'))
-  );
-};
-
-ctx.render(h(StatsFilter, null));
-`;
+  // js/stats_filter.js — copy from template + fill parameters
+  const tplRoot = path.join(__dirname, '..', '..', 'templates', 'js');
+  const statsFilterTpl = path.join(tplRoot, 'stats-filter.js');
+  const statsFilterJs = fs.existsSync(statsFilterTpl)
+    ? fs.readFileSync(statsFilterTpl, 'utf8')
+        .replace(/\{\{COLLECTION\}\}/g, coll)
+        .replace(/\{\{GROUP_FIELD\|\|status\}\}/g, 'status')
+    : `// stats-filter template not found at ${statsFilterTpl}\nctx.render(null);`;
   fs.writeFileSync(path.join(pageDir, 'js', 'stats_filter.js'), statsFilterJs);
 
   // popups — reference popup templates
