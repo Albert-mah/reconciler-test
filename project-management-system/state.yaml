@@ -550,4 +550,116 @@ pages:
             actions:
               submit:
                 uid: 7e7bcjokhmo
+  dashboard:
+    route_id: 359119511814146
+    page_uid: ujl1lkwhqso
+    tab_uid: w5hktbdqetc
+    grid_uid: xn0ksac259c
+    blocks:
+      project_overview_kpi:
+        uid: j4ao4c3ehst
+        type: jsBlock
+        grid_uid: ''
+        fields: {}
+      chart_projects_status:
+        uid: 03dl2earsns
+        type: chart
+        grid_uid: ''
+        fields: {}
+      chart_tasks_status:
+        uid: e5tu96plqqg
+        type: chart
+        grid_uid: ''
+        fields: {}
+      chart_milestones_status:
+        uid: abz42kwekt2
+        type: chart
+        grid_uid: ''
+        fields: {}
+      chart_member_status:
+        uid: 33t0a0i768n
+        type: chart
+        grid_uid: ''
+        fields: {}
+      chart_time_entries_billable:
+        uid: mu08544i4yw
+        type: chart
+        grid_uid: ''
+        fields: {}
+      active_projects:
+        uid: ji03rod66ix
+        type: table
+        grid_uid: ''
+        fields:
+          name:
+            wrapper: 63r9qsfjj7y
+            field: rwepue52d35
+          owner:
+            wrapper: 8i3ue5qojd4
+            field: 9myy5mj4ste
+          client_name:
+            wrapper: 6bce7vocqgc
+            field: ekmf57cs0ho
+          end_date:
+            wrapper: lioocgagzrp
+            field: dqfk4t8kbej
+          progress:
+            wrapper: ipno79bgi8z
+            field: x9szb7y0fle
+          status:
+            wrapper: cjxgknvjg4s
+            field: p3tn0myo0f0
+        actions:
+          refresh:
+            uid: hcdsxvzpeng
+      my_tasks:
+        uid: ux1pkidltqe
+        type: table
+        grid_uid: ''
+        fields:
+          title:
+            wrapper: r2ocf3isp8u
+            field: 9plq938wt61
+          project:
+            wrapper: b9jfskz3smc
+            field: cl83qoqpu38
+          assignee:
+            wrapper: vhgfmc77ctq
+            field: lq2mreppkym
+          due_date:
+            wrapper: oyy7d1qv7bg
+            field: x8aqk8l0rqi
+          priority:
+            wrapper: qnwrt1rht22
+            field: 6p7hxuaoql9
+          status:
+            wrapper: bsvq15m1lmf
+            field: pwiu9wd7xox
+        actions:
+          refresh:
+            uid: 2astm0g5m4q
+      upcoming_milestones:
+        uid: cztc2y0ol04
+        type: table
+        grid_uid: ''
+        fields:
+          name:
+            wrapper: 8zvuv93vmpr
+            field: o2zay2xvkcy
+          project:
+            wrapper: m8imok362af
+            field: ry4r7y2mtcu
+          owner:
+            wrapper: jake02ovq9j
+            field: bkzawn6rbll
+          planned_date:
+            wrapper: r3qzqrm1xjh
+            field: rk4zkpgg0qo
+          status:
+            wrapper: qgk4uz7c7t9
+            field: dguwjvzw2n5
+        actions:
+          refresh:
+            uid: yqk9hzasbcs
+    popups: {}
 group_id: 359119394373632

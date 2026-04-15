@@ -73,7 +73,7 @@ export const dashboardPage = page('Dashboard', {
         'progress',
         'status',
       ],
-      actions: ['refresh'],
+      actions: ['refresh', 'addNew'],
       dataScope: { status: 'active' },
       pageSize: 8,
     }),
@@ -87,7 +87,7 @@ export const dashboardPage = page('Dashboard', {
         'priority',
         'status',
       ],
-      actions: ['refresh'],
+      actions: ['refresh', 'addNew'],
       dataScope: {
         status: {
           $in: ['todo', 'in_progress', 'blocked'],
@@ -104,7 +104,7 @@ export const dashboardPage = page('Dashboard', {
         'planned_date',
         'status',
       ],
-      actions: ['refresh'],
+      actions: ['refresh', 'addNew'],
       dataScope: {
         status: {
           $in: ['pending', 'in_progress', 'delayed'],
