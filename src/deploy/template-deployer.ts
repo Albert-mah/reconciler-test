@@ -463,10 +463,11 @@ async function createBlockTemplate(
 //   2. flowModels:save — create ReferenceBlockModel in the same grid position
 
 /**
- * Convert an already-deployed inline popup block into a reusable template.
+ * Convert an already-deployed inline popup into a reusable popup template.
  *
- * Finds the actual block (DetailsBlockModel/EditFormModel) inside the popup,
- * detaches it as a template, and replaces it with a ReferenceBlockModel.
+ * Two-step flow (matches NocoBase UI):
+ *   1. flowModels:duplicate — copy the host's popup tree (creates independent copy)
+ *   2. flowModelTemplates:create — register as popup template (type:'popup', useModel from host)
  *
  * @param targetUid - The popup host field/action UID (from state.popups.target_uid)
  * @param name - Template name
@@ -480,123 +481,51 @@ export async function convertPopupToTemplate(
   log: (msg: string) => void = console.log,
 ): Promise<{ templateUid: string; targetUid: string } | undefined> {
   try {
-    // Navigate from host field → popup page → tab → grid → block
-    const hostData = await nb.get({ uid: targetUid });
-    const hostTree = hostData.tree;
-
-    // Find the field model (might be wrapped in a column)
-    let fieldNode = hostTree;
-    if (hostTree.subModels?.field && !Array.isArray(hostTree.subModels.field)) {
-      fieldNode = hostTree.subModels.field as Record<string, unknown>;
-    }
-
-    // Find popup page (ChildPageModel)
-    const popupPage = (fieldNode as any).subModels?.page;
-    if (!popupPage?.uid) {
-      log(`    . popup convert ${name}: no popup page found`);
-      return undefined;
-    }
-
-    // Navigate: ChildPageModel → tabs[0] → grid → children/items
-    const tabs = popupPage.subModels?.tabs;
-    const tabArr = Array.isArray(tabs) ? tabs : tabs ? [tabs] : [];
-    if (!tabArr.length) {
-      log(`    . popup convert ${name}: no tabs in popup`);
-      return undefined;
-    }
-
-    const grid = tabArr[0].subModels?.grid;
-    if (!grid?.uid) {
-      log(`    . popup convert ${name}: no grid in popup tab`);
-      return undefined;
-    }
-
-    // Find the actual block in the popup grid
-    const BLOCK_USES = new Set(['DetailsBlockModel', 'EditFormModel', 'CreateFormModel', 'TableBlockModel', 'ReferenceBlockModel']);
-    const items = Array.isArray(grid.subModels?.children) ? grid.subModels.children
-      : Array.isArray(grid.subModels?.items) ? grid.subModels.items : [];
-    const block = items.find((item: any) => BLOCK_USES.has(item?.use));
-
-    if (!block?.uid) {
-      log(`    . popup convert ${name}: no block found in popup grid`);
-      return undefined;
-    }
-
-    // If block is already a ReferenceBlockModel, it already references a block template.
-    // The popup template just needs to be registered — no detach needed.
-    if (block.use === 'ReferenceBlockModel') {
-      const ref = block.stepParams?.referenceSettings?.useTemplate;
-      if (ref?.templateUid) {
-        // Block template already exists. Create a popup-level template pointing to the same target.
-        const templateUid = generateUid();
-        const blockTargetUid = ref.targetUid || block.uid;
-        // Determine useModel from the referenced template
-        let useModel = 'DetailsBlockModel';
-        try {
-          const tplResp = await nb.http.get(`${nb.baseUrl}/api/flowModelTemplates:get`, { params: { filterByTk: ref.templateUid } });
-          useModel = tplResp.data?.data?.useModel || useModel;
-        } catch { /* fallback */ }
-        const needsFilterByTk = useModel !== 'CreateFormModel';
-        await nb.http.post(`${nb.baseUrl}/api/flowModelTemplates:create`, {
-          uid: templateUid,
-          name,
-          description: name,
-          targetUid: blockTargetUid,
-          useModel,
-          type: 'block',
-          dataSourceKey: 'main',
-          collectionName: collName,
-          filterByTk: needsFilterByTk ? '{{ctx.view.inputArgs.filterByTk}}' : null,
-          sourceId: null,
-        });
-        log(`    + popup template: ${name} (${templateUid}, via existing ref)`);
-        return { templateUid, targetUid: blockTargetUid };
+    // Find the actual host field/action model (might be wrapped in a column)
+    let hostUid = targetUid;
+    try {
+      const data = await nb.get({ uid: targetUid });
+      const field = data.tree.subModels?.field;
+      if (field && !Array.isArray(field)) {
+        hostUid = (field as Record<string, unknown>).uid as string || targetUid;
       }
+    } catch { /* use targetUid as-is */ }
+
+    // Get host model to determine useModel
+    const hostResp = await nb.http.get(`${nb.baseUrl}/api/flowModels:get`, { params: { filterByTk: hostUid } });
+    const hostModel = hostResp.data?.data;
+    if (!hostModel) {
+      log(`    . popup convert ${name}: host model not found`);
+      return undefined;
     }
 
-    // Block is a real block (not reference) — detach it as a template
+    // Step 1: Duplicate the host's popup tree
+    const dupResp = await nb.http.post(`${nb.baseUrl}/api/flowModels:duplicate`, {}, {
+      params: { uid: hostUid },
+    });
+    const dupUid = dupResp.data?.data?.uid;
+    if (!dupUid) {
+      log(`    . popup convert ${name}: duplicate failed`);
+      return undefined;
+    }
+
+    // Step 2: Register as popup template
     const templateUid = generateUid();
-    const needsFilterByTk = block.use !== 'CreateFormModel';
+    const needsFilterByTk = !hostModel.use?.includes('AddNew');
     await nb.http.post(`${nb.baseUrl}/api/flowModelTemplates:create`, {
       uid: templateUid,
       name,
-      description: name,
-      targetUid: block.uid,
-      useModel: block.use,
-      type: 'block',
+      description: '',
+      targetUid: dupUid,
+      useModel: hostModel.use,     // e.g. EditActionModel, DisplayTextFieldModel
+      type: 'popup',               // popup template, not block
       dataSourceKey: 'main',
       collectionName: collName,
       filterByTk: needsFilterByTk ? '{{ctx.view.inputArgs.filterByTk}}' : null,
-      sourceId: null,
-      detachParent: true,
-    });
-
-    // Replace with ReferenceBlockModel
-    const refUid = generateUid();
-    await nb.http.post(`${nb.baseUrl}/api/flowModels:save`, {
-      uid: refUid,
-      use: 'ReferenceBlockModel',
-      parentId: grid.uid,
-      subKey: 'items',
-      subType: 'array',
-      stepParams: {
-        referenceSettings: {
-          target: { targetUid: block.uid, mode: 'reference' },
-          useTemplate: {
-            templateUid,
-            templateName: name,
-            templateDescription: name,
-            targetUid: block.uid,
-            mode: 'reference',
-          },
-        },
-      },
-      sortIndex: block.sortIndex || 0,
-      flowRegistry: {},
     });
 
     log(`    + popup template: ${name} (${templateUid}, coll: ${collName})`);
-    return { templateUid, targetUid: block.uid };
+    return { templateUid, targetUid: dupUid };
   } catch (e) {
     log(`    . popup template convert: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
   }
