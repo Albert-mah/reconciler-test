@@ -304,7 +304,7 @@ export async function deployProject(
   }
 
   // Ensure popup template blocks have binding: 'currentRecord' (for edit/detail popups)
-  await ensurePopupBindings(nb, log);
+  await ensurePopupBindings(nb, state, log);
 
   // SQL verify
   const sqlResult = await verifySqlFromPages(nb, pages);
@@ -1415,57 +1415,52 @@ async function enablePageTabs(
 }
 
 /**
- * Post-deploy: ensure popup template blocks have binding:'currentRecord'.
+ * Post-deploy: ensure popup action/field hosts have filterByTk in openView.
  *
- * Popup templates with filterByTk (context-bound) need their internal blocks
- * to have binding='currentRecord' so the popup framework injects the record.
- * Generic templates (no filterByTk) are left as-is.
+ * Checks all deployed popups in state:
+ * - recordActions.* and fields.* → must have filterByTk='{{ ctx.record.id }}'
+ * - actions.* (addNew) → no filterByTk needed
  */
 async function ensurePopupBindings(
   nb: NocoBaseClient,
+  state: ModuleState,
   log: (msg: string) => void,
 ): Promise<void> {
+  let fixed = 0;
   try {
-    const resp = await nb.http.get(`${nb.baseUrl}/api/flowModelTemplates:list`, { params: { paginate: false } });
-    const popups = ((resp.data?.data || []) as Record<string, unknown>[])
-      .filter(t => t.type === 'popup' && t.filterByTk);
+    for (const [, pageState] of Object.entries(state.pages || {})) {
+      const ps = pageState as Record<string, unknown>;
+      const popups = (ps.popups || {}) as Record<string, Record<string, unknown>>;
+      for (const [popupKey, popupState] of Object.entries(popups)) {
+        // Only recordActions and fields need filterByTk
+        const needsRecord = popupKey.includes('recordActions.') || popupKey.includes('fields.');
+        if (!needsRecord) continue;
 
-    let fixed = 0;
-    for (const tpl of popups) {
-      const data = await nb.get({ uid: tpl.targetUid as string });
-      // Walk tree to find block models
-      const blocks: { uid: string; use: string; stepParams: Record<string, unknown> }[] = [];
-      function scan(node: any) {
-        if (!node || typeof node !== 'object') return;
-        if (['EditFormModel', 'DetailsBlockModel'].includes(node.use)) {
-          blocks.push(node);
-        }
-        const subs = node.subModels;
-        if (subs) for (const v of Object.values(subs)) {
-          if (Array.isArray(v)) v.forEach(scan);
-          else if (v && typeof v === 'object') scan(v);
-        }
-      }
-      scan(data.tree);
+        const targetUid = popupState.target_uid as string;
+        if (!targetUid) continue;
 
-      for (const b of blocks) {
-        const init = b.stepParams?.resourceSettings as Record<string, unknown>;
-        const resInit = (init?.init || {}) as Record<string, unknown>;
-        if (resInit.binding === 'currentRecord') continue;
-        await nb.updateModel(b.uid, {
-          resourceSettings: {
-            init: {
-              ...resInit,
-              binding: 'currentRecord',
-              collectionName: resInit.collectionName || tpl.collectionName,
-              dataSourceKey: resInit.dataSourceKey || 'main',
-            },
-          },
-        });
-        fixed++;
+        try {
+          const fm = await nb.http.get(`${nb.baseUrl}/api/flowModels:get`, { params: { filterByTk: targetUid } });
+          const data = fm.data?.data;
+          if (!data) continue;
+          const ov = data.stepParams?.popupSettings?.openView;
+          if (!ov) continue;
+
+          // Fix missing filterByTk on host
+          if (!ov.filterByTk) {
+            ov.filterByTk = '{{ ctx.record.id }}';
+            await nb.http.post(`${nb.baseUrl}/api/flowModels:save`, {
+              uid: targetUid, use: data.use, parentId: data.parentId,
+              subKey: data.subKey, subType: data.subType,
+              sortIndex: data.sortIndex || 0, flowRegistry: data.flowRegistry || {},
+              stepParams: data.stepParams,
+            });
+            fixed++;
+          }
+        } catch { /* skip */ }
       }
     }
-    if (fixed) log(`  popup bindings: ${fixed} blocks fixed`);
+    if (fixed) log(`  popup filterByTk: ${fixed} hosts fixed`);
   } catch (e) {
     log(`  ! popup bindings: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
   }
