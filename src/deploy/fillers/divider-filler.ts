@@ -68,6 +68,29 @@ export async function deployDividers(
     }
   } catch { /* skip */ }
 
+  // Collect spec divider labels
+  const specDividerLabels = new Set<string>();
+  for (const row of fieldLayout) {
+    if (typeof row === 'string' && row.startsWith('---')) {
+      const l = row.replace(/^-+\s*/, '').replace(/\s*-+$/, '').trim();
+      if (l) specDividerLabels.add(l);
+    }
+  }
+
+  // Remove dividers not in spec
+  try {
+    const gridData2 = await nb.get({ uid: gridUid });
+    const gridArr2 = (Array.isArray(gridData2.tree.subModels?.items) ? gridData2.tree.subModels.items : []) as any[];
+    for (const gi of gridArr2) {
+      if (gi.use !== 'DividerItemModel' || !gi.uid) continue;
+      const divLabel = gi.stepParams?.markdownItemSetting?.title?.label as string || '';
+      if (divLabel && !specDividerLabels.has(divLabel)) {
+        await nb.http.post(`${nb.baseUrl}/api/flowModels:destroy`, {}, { params: { filterByTk: gi.uid } }).catch(() => {});
+        log(`      - divider: ${divLabel}`);
+      }
+    }
+  } catch { /* skip */ }
+
   for (const row of fieldLayout) {
     if (typeof row === 'string' && row.startsWith('---')) {
       const label = row.replace(/^-+\s*/, '').replace(/\s*-+$/, '').trim();
