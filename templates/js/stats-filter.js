@@ -1,88 +1,75 @@
 /**
- * Stats Filter Block — status distribution with clickable buttons
+ * Stats Filter Block — status distribution buttons with live counts
  *
  * @type JSItemModel
  * @template stats-filter
- * @collection {{COLLECTION}}
  *
- * === Parameters ===
- * COLLECTION  : data table name (e.g. nb_erp_products)
- * GROUP_FIELD : field to group by (default: status)
- * REPORT_UID  : unique ID for SQL registration
+ * Copy this file to your page's js/ directory, then modify CONFIG.
+ *
+ * SQL flow: ctx.sql.save({ uid, sql }) → ctx.sql.runById(uid, { type: 'selectRows' })
  */
 
 // ─── CONFIG: modify here ─────────────────────────────────────
-const CONFIG = {
+var CONFIG = {
   dataSourceKey: 'main',
-  reportUid: '{{REPORT_UID||{{COLLECTION}}_stats}}',
-  collection: '{{COLLECTION}}',
-  groupField: '{{GROUP_FIELD||status}}',
-  sql: `SELECT COALESCE({{GROUP_FIELD||status}}, 'N/A') AS label, count(*) AS cnt FROM {{COLLECTION}} GROUP BY {{GROUP_FIELD||status}} ORDER BY cnt DESC`,
-  totalSql: `SELECT count(*) AS cnt FROM {{COLLECTION}}`,
+  reportUid: 'my_collection_stats',
+  totalSql: 'SELECT count(*) AS cnt FROM my_collection',
+  groupSql: "SELECT COALESCE(status, 'N/A') AS label, count(*) AS cnt FROM my_collection GROUP BY status ORDER BY cnt DESC",
 };
 // ─── END CONFIG ──────────────────────────────────────────────
 
-const { useState, useEffect } = ctx.React;
-const { Space, Button, Badge, Spin } = ctx.antd;
-const T = ctx.themeToken || {};
+var React = ctx.React;
+var useState = React.useState;
+var useEffect = React.useEffect;
+var Space = ctx.antd.Space, Button = ctx.antd.Button, Badge = ctx.antd.Badge, Spin = ctx.antd.Spin;
 
 function useStats() {
-  const [stats, setStats] = useState([]);
-  const [loading, setLoading] = useState(true);
+  var _s = useState([]), stats = _s[0], setStats = _s[1];
+  var _l = useState(true), loading = _l[0], setLoading = _l[1];
 
-  useEffect(() => {
-    const init = async () => {
-      // Register SQL templates
+  useEffect(function() {
+    var init = async function() {
       if (ctx.flowSettingsEnabled) {
         try {
           await ctx.sql.save({ uid: CONFIG.reportUid + '_total', sql: CONFIG.totalSql.trim(), dataSourceKey: CONFIG.dataSourceKey });
-          await ctx.sql.save({ uid: CONFIG.reportUid + '_group', sql: CONFIG.sql.trim(), dataSourceKey: CONFIG.dataSourceKey });
-        } catch (e) { console.error('SQL save error:', e); }
+          await ctx.sql.save({ uid: CONFIG.reportUid + '_group', sql: CONFIG.groupSql.trim(), dataSourceKey: CONFIG.dataSourceKey });
+        } catch(e) {}
       }
-      setLoading(true);
       try {
-        const [totalRows, groupRows] = await Promise.all([
-          ctx.sql.runById(CONFIG.reportUid + '_total', { type: 'selectRows', dataSourceKey: CONFIG.dataSourceKey }),
-          ctx.sql.runById(CONFIG.reportUid + '_group', { type: 'selectRows', dataSourceKey: CONFIG.dataSourceKey }),
-        ]);
-        const items = [{ key: 'all', label: 'All', count: Number(totalRows?.[0]?.cnt) || 0 }];
-        for (const row of (groupRows || [])) {
+        var totalRows = await ctx.sql.runById(CONFIG.reportUid + '_total', { type: 'selectRows', dataSourceKey: CONFIG.dataSourceKey });
+        var groupRows = await ctx.sql.runById(CONFIG.reportUid + '_group', { type: 'selectRows', dataSourceKey: CONFIG.dataSourceKey });
+        var items = [{ key: 'all', label: 'All', count: Number(totalRows?.[0]?.cnt) || 0 }];
+        (groupRows || []).forEach(function(row) {
           items.push({ key: String(row.label), label: String(row.label), count: Number(row.cnt) || 0 });
-        }
+        });
         setStats(items);
-      } catch (e) {
-        console.error('Stats query error:', e);
+      } catch(e) {
         setStats([{ key: 'all', label: 'All', count: '-' }]);
-      } finally {
-        setLoading(false);
       }
+      setLoading(false);
     };
     init();
   }, []);
 
-  return { stats, loading };
+  return { stats: stats, loading: loading };
 }
 
-const StatsFilter = () => {
-  const [active, setActive] = useState('all');
-  const { stats, loading } = useStats();
+var Comp = function() {
+  var _a = useState('all'), active = _a[0], setActive = _a[1];
+  var r = useStats();
 
-  if (loading) return <Spin size="small" />;
+  if (r.loading) return React.createElement(Spin, { size: 'small' });
 
-  return (
-    <Space wrap>
-      {stats.map(b => (
-        <Button
-          key={b.key}
-          type={active === b.key ? 'primary' : 'default'}
-          size="small"
-          onClick={() => setActive(b.key)}
-        >
-          {b.label} <Badge count={b.count} showZero style={{ marginLeft: 6, backgroundColor: active === b.key ? '#fff' : '#1677ff', color: active === b.key ? '#1677ff' : '#fff' }} />
-        </Button>
-      ))}
-    </Space>
+  return React.createElement(Space, { wrap: true },
+    r.stats.map(function(b) {
+      return React.createElement(Button, {
+        key: b.key,
+        type: active === b.key ? 'primary' : 'default',
+        size: 'small',
+        onClick: function() { setActive(b.key); },
+      }, b.label + ' (' + b.count + ')');
+    })
   );
 };
 
-ctx.render(<StatsFilter />);
+ctx.render(React.createElement(Comp));
