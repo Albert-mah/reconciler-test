@@ -495,8 +495,8 @@ export async function convertPopupToTemplate(
 
     // Check if host already has a popup template
     const hostResp = await nb.http.get(`${nb.baseUrl}/api/flowModels:get`, { params: { filterByTk: hostUid } });
-    const existingTplUid = hostResp.data?.data?.stepParams?.popupSettings?.openView?.popupTemplateUid;
-    if (existingTplUid) {
+    const existingTplUid = hostResp.data?.data?.stepParams?.popupSettings?.openView?.popupTemplateUid as string | undefined;
+    if (existingTplUid && typeof existingTplUid === 'string' && existingTplUid.length > 5) {
       // Verify the template still exists
       try {
         await nb.http.get(`${nb.baseUrl}/api/flowModelTemplates:get`, { params: { filterByTk: existingTplUid } });
