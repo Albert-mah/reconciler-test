@@ -4,3 +4,5 @@
   children:
     - title: Projects
       icon: projectoutlined
+    - title: Tasks
+      icon: profileoutlined

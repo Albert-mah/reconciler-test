@@ -114,4 +114,122 @@ pages:
             actions:
               submit:
                 uid: 85htuh870fw
+  tasks:
+    route_id: 0
+    page_uid: n2zjpg4whqi
+    tab_uid: 4n8d70vd8ow
+    blocks:
+      filter:
+        uid: guosm5m4nnn
+        type: filterForm
+        grid_uid: yf3pn1uf4et
+        fields:
+          title:
+            wrapper: 4yi4nnt0x1d
+            field: ''
+          status:
+            wrapper: 7r8em635q66
+            field: ''
+          priority:
+            wrapper: 382a4jzo6wk
+            field: ''
+          project:
+            wrapper: 2hb9fymkjs9
+            field: ''
+          assignee:
+            wrapper: cgojuvdqcoj
+            field: ''
+        actions:
+          filterFormSubmit:
+            uid: fidt83pjdjn
+          filterFormReset:
+            uid: rniqfyncgr2
+          submit:
+            uid: 5lvznpr3s08
+          reset:
+            uid: g51h269zpcb
+      table:
+        uid: 2qapavep3up
+        type: table
+        grid_uid: ''
+        fields:
+          title:
+            wrapper: 9dgue0hqi8z
+            field: ''
+          task_no:
+            wrapper: v6p9cf7tbf0
+            field: ''
+          project:
+            wrapper: oy9qrjfqcji
+            field: ''
+          assignee:
+            wrapper: d58xgx71vou
+            field: ''
+          due_date:
+            wrapper: ywlf3d8sqhr
+            field: ''
+          planned_hours:
+            wrapper: 7n6wuel0iza
+            field: ''
+          actual_hours:
+            wrapper: skz4xh1nnlv
+            field: ''
+          status:
+            wrapper: n4jbtbmyvj7
+            field: ''
+        actions:
+          filter:
+            uid: i9ov77yo1n8
+          refresh:
+            uid: 0zb0iqrv7qf
+          addNew:
+            uid: g6nc8ousyh1
+          export:
+            uid: hwzr3nuc4ku
+        record_actions:
+          edit:
+            uid: rga3kvoc7ks
+          view:
+            uid: paqyipt1dyz
+          delete:
+            uid: iqau3kesrr1
+    popups:
+      table.actions.addNew:
+        target_uid: g6nc8ousyh1
+        blocks:
+          form:
+            uid: lviuzmlolp2
+            type: createForm
+            grid_uid: 8lkxnuws4oy
+            fields:
+              task_no:
+                wrapper: ryjha5hpq5y
+                field: ''
+              title:
+                wrapper: d3kezjdlkol
+                field: ''
+              assignee:
+                wrapper: zawv9ui6daw
+                field: ''
+              planned_hours:
+                wrapper: gu4nzecgixz
+                field: ''
+              actual_hours:
+                wrapper: 91jy34w9ik0
+                field: ''
+              priority:
+                wrapper: 21b506t0epq
+                field: ''
+              status:
+                wrapper: fwfh43pkcqc
+                field: ''
+              description:
+                wrapper: 5gcnxq0ldjw
+                field: ''
+              project:
+                wrapper: 2ffb77fkswc
+                field: ''
+            actions:
+              submit:
+                uid: u8160qnbut3
 group_id: 359119394373632
