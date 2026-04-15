@@ -17,7 +17,8 @@
  * - Popup templates: host is a field-like node with ChildPage, not a page grid
  * - Block templates: compose on a temp page grid, then saveTemplate on the block UID
  * - Template deployer is idempotent (safe to run multiple times)
- * - Never modify existing template content — only create new ones
+ * - Block templates: syncTemplateContent() reconciles fields + layout on reuse
+ * - Popup templates: deferred — deploy inline first, then convertPopupToTemplate()
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -70,6 +71,151 @@ function discoverTemplates(tplDir: string): TemplateIndex[] {
     }
   }
   return result;
+}
+
+/**
+ * Incrementally sync a block template's live content with spec.
+ *
+ * Template target structure (determines sync strategy):
+ *   - block 模板 (form/edit/details): target = CreateFormModel/EditFormModel/DetailsBlockModel → has grid.items
+ *   - popup 模板: target = DisplayTextFieldModel → no grid, content in deeper ChildPage (skipped here)
+ *   - table 模板: target = TableBlockModel → has columns, not grid.items (skipped here)
+ *
+ * Only block templates with grid.items are synced here. Popup/table templates have
+ * different structures that are handled by their own deploy paths.
+ *
+ * Sync logic:
+ *   Fields changed → compose on temp page → deep-copy grid tree into target
+ *   Fields unchanged → only apply field_layout + dividers
+ */
+async function syncTemplateContent(
+  nb: NocoBaseClient,
+  targetUid: string,
+  collName: string,
+  content: Record<string, unknown>,
+  log: (msg: string) => void,
+  indent: string,
+): Promise<void> {
+  const specFields = ((content.fields as unknown[]) || [])
+    .map((f: any) => typeof f === 'string' ? f : (f.field || f.fieldPath || ''))
+    .filter(Boolean);
+
+  // Get live tree
+  const targetData = await nb.get({ uid: targetUid });
+  const targetUse = (targetData.tree.use || '') as string;
+
+  // Table blocks have columns, not grid.items — skip field sync for tables
+  if (targetUse.includes('Table')) return;
+
+  const grid = targetData.tree.subModels?.grid as any;
+  const gridUid = grid?.uid as string | undefined;
+
+  // Collect live field paths
+  const liveItems = (Array.isArray(grid?.subModels?.items) ? grid.subModels.items : []) as any[];
+  const liveFields = liveItems
+    .map((item: any) => item.stepParams?.fieldSettings?.init?.fieldPath as string)
+    .filter(Boolean);
+
+  // Check if fields changed
+  const fieldsMatch = specFields.length > 0 && specFields.length === liveFields.length &&
+    specFields.every((f, i) => f === liveFields[i]);
+
+  if (!fieldsMatch && specFields.length > 0) {
+    // Fields changed — rebuild via compose on temp page, then deep-copy
+    const { resource_binding, ...contentForCompose } = content;
+    const composeBlock = toComposeBlock(contentForCompose as any, collName);
+    if (!composeBlock) {
+      log(`${indent}! cannot compose template block type`);
+      return;
+    }
+
+    const tempPage = await createTempPage(nb);
+    if (!tempPage) return;
+
+    try {
+      // Compose fresh block on temp page — this creates a full FlowModel tree
+      const result = await nb.surfaces.compose(tempPage.tabUid, [composeBlock], 'replace');
+      const newBlockUid = result.blocks?.[0]?.uid;
+      if (!newBlockUid) { log(`${indent}! compose returned no block`); return; }
+
+      // Read the composed block's full tree
+      const newBlockData = await nb.get({ uid: newBlockUid });
+      const newGrid = newBlockData.tree.subModels?.grid as any;
+      if (!newGrid?.uid) { log(`${indent}! composed block has no grid`); return; }
+
+      // Destroy old grid under target (cascade deletes children)
+      if (gridUid) {
+        await nb.http.post(`${nb.baseUrl}/api/flowModels:destroy`, {}, { params: { filterByTk: gridUid } }).catch(() => {});
+      }
+
+      // Deep-copy: recreate entire grid tree under target (node by node)
+      async function deepCopy(srcNode: any, newParentId: string, subKey: string, subType: string): Promise<void> {
+        const newUid = generateUid();
+        await nb.http.post(`${nb.baseUrl}/api/flowModels:save`, {
+          uid: newUid,
+          use: srcNode.use,
+          parentId: newParentId,
+          subKey,
+          subType,
+          sortIndex: srcNode.sortIndex || 0,
+          flowRegistry: srcNode.flowRegistry || {},
+          stepParams: srcNode.stepParams || {},
+          props: srcNode.props,
+        });
+        // Recurse into subModels
+        const subs = srcNode.subModels;
+        if (subs && typeof subs === 'object') {
+          for (const [sk, sv] of Object.entries(subs)) {
+            if (Array.isArray(sv)) {
+              for (const item of sv) {
+                if (item && typeof item === 'object' && item.uid) {
+                  await deepCopy(item, newUid, sk, 'array');
+                }
+              }
+            } else if (sv && typeof sv === 'object' && (sv as any).uid) {
+              await deepCopy(sv, newUid, sk, 'object');
+            }
+          }
+        }
+      }
+
+      await deepCopy(newGrid, targetUid, 'grid', 'object');
+
+      // Log
+      const added = specFields.filter(f => !liveFields.includes(f));
+      const removed = liveFields.filter(f => !specFields.includes(f));
+      if (removed.length) log(`${indent}- fields: ${removed.join(', ')}`);
+      if (added.length) log(`${indent}+ fields: ${added.join(', ')}`);
+      log(`${indent}~ template content rebuilt (${specFields.length} fields)`);
+
+      // Re-read target to get the new grid UID, then apply layout
+      const refreshed = await nb.get({ uid: targetUid });
+      const newTargetGrid = refreshed.tree.subModels?.grid as any;
+      const newGridUid = newTargetGrid?.uid as string;
+      if (newGridUid) {
+        const fieldLayout = content.field_layout as unknown[];
+        if (fieldLayout?.length) {
+          const { deployDividers } = await import('./fillers/divider-filler');
+          const { applyFieldLayout } = await import('./fillers/field-layout');
+          await deployDividers(nb, newGridUid, content as any, {}, log);
+          await applyFieldLayout(nb, newGridUid, fieldLayout, log, content as any);
+        }
+      }
+    } finally {
+      await deleteTempPage(nb, tempPage);
+    }
+  } else {
+    // Fields unchanged — only sync layout
+    if (gridUid) {
+      const fieldLayout = content.field_layout as unknown[];
+      if (fieldLayout?.length) {
+        const { deployDividers } = await import('./fillers/divider-filler');
+        const { applyFieldLayout } = await import('./fillers/field-layout');
+        await deployDividers(nb, gridUid, content as any, {}, log);
+        await applyFieldLayout(nb, gridUid, fieldLayout, log, content as any);
+      }
+    }
+  }
 }
 
 /**
@@ -143,21 +289,14 @@ export async function deployTemplates(
       if (tpl.targetUid && existingEntry.targetUid) {
         uidMap.set(tpl.targetUid, existingEntry.targetUid);
       }
-      // Update template target content (field_layout, dividers) if spec has it
+      // Sync block template content (fields + layout). Popup templates have different structure.
       const tplContent = tplSpec.content as Record<string, unknown>;
-      const fieldLayout = tplContent?.field_layout as unknown[];
-      if (fieldLayout?.length && existingEntry.targetUid) {
+      if (tpl.type === 'block' && existingEntry.targetUid && tplContent) {
         try {
-          const targetData = await nb.get({ uid: existingEntry.targetUid });
-          const targetGrid = targetData.tree.subModels?.grid;
-          const targetGridUid = (targetGrid as Record<string, unknown>)?.uid as string;
-          if (targetGridUid) {
-            const { deployDividers } = await import('./fillers/divider-filler');
-            const { applyFieldLayout } = await import('./fillers/field-layout');
-            await deployDividers(nb, targetGridUid, tplContent as any, {}, log);
-            await applyFieldLayout(nb, targetGridUid, fieldLayout, log, tplContent as any);
-          }
-        } catch { /* best effort */ }
+          await syncTemplateContent(nb, existingEntry.targetUid, collName, tplContent, log, `      `);
+        } catch (e) {
+          log(`  ! template sync ${tpl.name}: ${e instanceof Error ? e.message.slice(0, 80) : e}`);
+        }
       }
       reused++;
       continue;
@@ -169,6 +308,23 @@ export async function deployTemplates(
       log(`  ! template ${tpl.name}: no content in spec`);
       skipped++;
       continue;
+    }
+
+    // Validate fields against collection metadata
+    if (collName && content.fields) {
+      try {
+        const fResp = await nb.http.get(`${nb.baseUrl}/api/collections/${collName}/fields:list`, { params: { paginate: false } });
+        const liveFields = new Set((fResp.data.data || []).map((f: any) => f.name as string));
+        if (liveFields.size) {
+          const specFields = ((content.fields as unknown[]) || []).map((f: any) => typeof f === 'string' ? f : (f.field || f.fieldPath || '')).filter(Boolean);
+          const missing = specFields.filter(f => !liveFields.has(f));
+          if (missing.length) {
+            log(`  ✗ template ${tpl.name}: fields not in ${collName}: ${missing.join(', ')}`);
+            skipped++;
+            continue;
+          }
+        }
+      } catch { /* skip validation if API fails */ }
     }
 
     try {
@@ -335,6 +491,8 @@ export async function convertPopupToTemplate(
       target: { uid: fieldUid },
       name,
       description: name,
+      collectionName: collName,
+      dataSourceKey: 'main',
       saveMode: 'duplicate',
     }) as Record<string, unknown>;
 
@@ -342,7 +500,15 @@ export async function convertPopupToTemplate(
     const newTargetUid = (result.targetUid) as string;
 
     if (newTemplateUid) {
-      log(`    + popup template: ${name} (${newTemplateUid})`);
+      // Ensure collectionName is correct (saveTemplate may derive from field context)
+      if (collName) {
+        try {
+          await nb.http.post(`${nb.baseUrl}/api/flowModelTemplates:update?filterByTk=${newTemplateUid}`, {
+            collectionName: collName,
+          });
+        } catch { /* best effort */ }
+      }
+      log(`    + popup template: ${name} (${newTemplateUid}, coll: ${collName})`);
       return { templateUid: newTemplateUid, targetUid: newTargetUid };
     }
   } catch (e) {

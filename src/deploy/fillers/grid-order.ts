@@ -3,6 +3,9 @@
  *
  * In YAML, the order of js_items, fields, dividers determines display order.
  * This reads live grid items, builds desired order from spec, then moveNode.
+ *
+ * DSL 声明什么顺序，页面就呈现什么顺序。部署器不改变顺序。
+ * JS 位置由设计阶段（scaffold / AI 写 DSL）决定。
  */
 import type { NocoBaseClient } from '../../client';
 import type { BlockSpec } from '../../types/spec';
@@ -44,10 +47,9 @@ export async function syncGridItemsOrder(
     const fieldLayout = bs.field_layout || [];
 
     if (fieldLayout.length) {
-      // Follow field_layout declaration order
+      // Follow field_layout declaration order exactly
       for (const row of fieldLayout) {
         if (typeof row === 'string') {
-          // Divider
           const u = uidByFieldPath.get(row) || [...uidByFieldPath.entries()].find(([, v]) => v === row)?.[1];
           if (u && !desiredUids.includes(u)) desiredUids.push(u);
         } else if (Array.isArray(row)) {
@@ -56,7 +58,6 @@ export async function syncGridItemsOrder(
             if (typeof item === 'string') {
               names = [item];
             } else if (item && typeof item === 'object') {
-              // Handle {col: [...], size: N} format
               const col = (item as Record<string, unknown>).col;
               if (Array.isArray(col)) {
                 names = col as string[];
@@ -65,9 +66,7 @@ export async function syncGridItemsOrder(
               }
             }
             for (const name of names) {
-              if (name.startsWith('[JS:')) {
-                // Find JS item by desc
-                const desc = name.replace(/^\[JS:/, '').replace(/\]$/, '');
+              if (name.startsWith('[JS:') || name === '[JS]') {
                 const jsUids = uidByUse.get('JSItemModel') || [];
                 for (const uid of jsUids) {
                   if (!desiredUids.includes(uid)) { desiredUids.push(uid); break; }

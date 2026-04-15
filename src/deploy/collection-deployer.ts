@@ -58,13 +58,19 @@ export async function ensureCollection(
 ): Promise<void> {
   const fields = def.fields.map(toApplyField);
 
+  // Auto-detect titleField: first 'name' or 'title' field, or explicit from def
+  const titleField = def.titleField
+    || (def.fields.some(f => f.name === 'name') ? 'name' : undefined)
+    || (def.fields.some(f => f.name === 'title') ? 'title' : undefined);
+
   try {
     await nb.collections.apply({
       name,
       title: def.title,
       fields,
+      ...(titleField ? { titleField } : {}),
     });
-    log(`  = collection: ${name}`);
+    log(`  = collection: ${name}${titleField ? ` (titleField: ${titleField})` : ''}`);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     // Fallback: if apply fails (404=older NocoBase, 500=upsert issue), use legacy
@@ -93,6 +99,16 @@ async function ensureCollectionLegacy(
     log(`  + collection: ${name}`);
   }
 
+  // Set titleField
+  const tf = def.titleField
+    || (def.fields.some(f => f.name === 'name') ? 'name' : undefined)
+    || (def.fields.some(f => f.name === 'title') ? 'title' : undefined);
+  if (tf) {
+    try {
+      await nb.http.post(`${nb.baseUrl}/api/collections:update?filterByTk=${name}`, { titleField: tf });
+    } catch { /* best effort */ }
+  }
+
   for (const fd of def.fields) {
     try {
       const meta = await nb.collections.fieldMeta(name);
@@ -108,6 +124,7 @@ async function ensureCollectionLegacy(
 
 /**
  * Ensure all collections from structure.yaml exist.
+ * After creation, validates that m2o target collections have titleField set.
  */
 export async function ensureAllCollections(
   nb: NocoBaseClient,
@@ -116,5 +133,35 @@ export async function ensureAllCollections(
 ): Promise<void> {
   for (const [name, def] of Object.entries(collections)) {
     await ensureCollection(nb, name, def, log);
+  }
+
+  // Post-create validation + repair for m2o fields
+  for (const [name, def] of Object.entries(collections)) {
+    for (const fd of def.fields) {
+      if (fd.interface !== 'm2o' || !fd.target) continue;
+
+      // Ensure FK field is registered in metadata (collections:apply may not auto-create it)
+      const fkName = fd.foreignKey || `${fd.name}Id`;
+      try {
+        const fieldsResp = await nb.http.get(`${nb.baseUrl}/api/collections/${name}/fields:list`, { params: { paginate: false } });
+        const existingFields = ((fieldsResp.data?.data || []) as Record<string, unknown>[]).map(f => f.name as string);
+        if (!existingFields.includes(fkName)) {
+          await nb.http.post(`${nb.baseUrl}/api/collections/${name}/fields:create`, {
+            name: fkName, type: 'bigInt', interface: 'integer', isForeignKey: true,
+            uiSchema: { title: fkName, 'x-component': 'InputNumber' },
+          });
+          log(`    + ${name}.${fkName} (auto-created FK for ${fd.name})`);
+        }
+      } catch { /* best effort */ }
+
+      // Validate target collection has titleField
+      try {
+        const resp = await nb.http.get(`${nb.baseUrl}/api/collections:list`, { params: { 'filter[name]': fd.target } });
+        const coll = ((resp.data?.data || []) as Record<string, unknown>[])[0];
+        if (coll && !coll.titleField) {
+          log(`    ⚠ ${name}.${fd.name} → ${fd.target} has no titleField (relation will show ID)`);
+        }
+      } catch { /* skip */ }
+    }
   }
 }

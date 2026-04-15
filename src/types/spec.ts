@@ -192,6 +192,7 @@ export interface FieldDef {
 
 export interface CollectionDef {
   title: string;
+  titleField?: string;
   fields: FieldDef[];
 }
 

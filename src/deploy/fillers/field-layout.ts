@@ -130,11 +130,34 @@ export async function applyFieldLayout(
       }
     }
 
-    // Append uncovered (safety net)
+    // Append uncovered (safety net — DSL should cover all items)
     for (const u of allUids) {
       if (!covered.has(u)) {
         const rk = `r${ri}`;
         rows[rk] = [[u]]; sizes[rk] = [24]; ri++;
+      }
+    }
+
+    // Debug: log unmatched field_layout entries
+    if (process.env.NB_DEBUG && log) {
+      const allNames = new Set<string>();
+      for (const row of fieldLayout) {
+        if (typeof row === 'string' && row.startsWith('---')) {
+          allNames.add(row.replace(/^-+\s*/, '').replace(/\s*-+$/, '').trim());
+        } else if (Array.isArray(row)) {
+          for (const item of row) {
+            if (typeof item === 'string') allNames.add(item);
+            else if (item && typeof item === 'object') {
+              const obj = item as Record<string, unknown>;
+              if (Array.isArray(obj.col)) for (const n of obj.col as string[]) allNames.add(n);
+              else for (const k of Object.keys(obj).filter(k => k !== 'col' && k !== 'size')) allNames.add(k);
+            }
+          }
+        }
+      }
+      const unmatched = [...allNames].filter(n => !uidMap.has(n));
+      if (unmatched.length) {
+        log(`      [debug] field_layout unmatched: ${unmatched.join(', ')}`);
       }
     }
 

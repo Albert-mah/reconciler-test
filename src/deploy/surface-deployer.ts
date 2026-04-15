@@ -139,6 +139,32 @@ export async function deploySurface(
     return blocksState;
   }
 
+  // ── Pre-compose: validate fields against collection metadata ──
+  const collFieldsCache = new Map<string, Set<string>>();
+  async function getCollFields(collName: string): Promise<Set<string>> {
+    if (!collName) return new Set<string>();
+    if (collFieldsCache.has(collName)) return collFieldsCache.get(collName)!;
+    try {
+      const resp = await nb.http.get(`${nb.baseUrl}/api/collections/${collName}/fields:list`, { params: { paginate: false } });
+      const names = new Set<string>((resp.data.data || []).map((f: any) => f.name as string));
+      collFieldsCache.set(collName, names);
+      return names;
+    } catch { return new Set<string>(); }
+  }
+
+  for (const bs of blocksSpec) {
+    const blockColl = bs.coll || coll;
+    if (!blockColl || !bs.fields?.length) continue;
+    const liveFields = await getCollFields(blockColl);
+    if (!liveFields.size) continue;
+    const specFields = (bs.fields || []).map(f => typeof f === 'string' ? f : (f.field || f.fieldPath || '')).filter(Boolean);
+    const missing = specFields.filter(f => !liveFields.has(f));
+    if (missing.length) {
+      const key = bs.key || bs.type;
+      throw new Error(`Block "${key}" references fields not in ${blockColl}: ${missing.join(', ')}`);
+    }
+  }
+
   // ── Step 1: Compose missing block shells ──
   const composeBlocks: Record<string, unknown>[] = [];
   for (const bs of blocksSpec) {
@@ -202,8 +228,9 @@ export async function deploySurface(
         if (!blocksState[key]) continue;
         await fillBlock(nb, blocksState[key].uid, blocksState[key].grid_uid || '', bs, coll, modDir, blocksState[key], blocksState, gridUid, log, undefined, popupTargetFields);
       }
-    } catch (e) {
-      log(`    ! compose: ${e instanceof Error ? e.message : e}`);
+    } catch (e: any) {
+      const detail = e?.response?.data?.errors?.[0]?.message || e?.response?.data || '';
+      log(`    ! compose: ${e instanceof Error ? e.message : e}${detail ? ' — ' + detail : ''}`);
     }
   }
 

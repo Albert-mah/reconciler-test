@@ -26,8 +26,10 @@ export async function deployJsItems(
   const jsItems = bs.js_items || [];
   if (!jsItems.length || !gridUid) return;
 
+  const specKeys = new Set<string>();
   for (const jsSpec of jsItems) {
     if (!jsSpec.file) continue;
+    specKeys.add(jsSpec.key);
     const jsPath = path.join(modDir, jsSpec.file);
     if (!fs.existsSync(jsPath)) continue;
 
@@ -52,6 +54,21 @@ export async function deployJsItems(
       blockState.js_items[jsSpec.key] = { uid: newUid };
     }
     log(`      ~ JS item: ${jsSpec.desc || jsSpec.key}`);
+  }
+
+  // Clean up orphaned JS items (state keys not in current spec)
+  if (blockState.js_items) {
+    for (const [key, entry] of Object.entries(blockState.js_items)) {
+      if (specKeys.has(key)) continue;
+      const uid = (entry as { uid?: string })?.uid;
+      if (uid) {
+        try {
+          await nb.http.post(`${nb.baseUrl}/api/flowModels:destroy`, {}, { params: { filterByTk: uid } });
+          log(`      - JS item orphan removed: ${key}`);
+        } catch { /* skip */ }
+      }
+      delete blockState.js_items[key];
+    }
   }
 }
 

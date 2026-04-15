@@ -23,7 +23,7 @@ import type { StructureSpec, PageSpec, BlockSpec, PopupSpec, CollectionDef, Enha
 import { loadYaml, saveYaml, dumpYaml } from '../utils/yaml';
 import { buildGraph } from '../graph/graph-builder';
 import { slugify } from '../utils/slugify';
-import { ensureCollection } from './collection-deployer';
+import { ensureAllCollections } from './collection-deployer';
 import { deploySurface } from './surface-deployer';
 import { deployPopup } from './popup-deployer';
 import { expandPopups } from './popup-expander';
@@ -179,9 +179,7 @@ export async function deployProject(
 
   // Collections (skip if deploying single page — safety)
   if (!opts.page) {
-    for (const [name, def] of Object.entries(collDefs)) {
-      await ensureCollection(nb, name, def, log);
-    }
+    await ensureAllCollections(nb, collDefs, log);
   }
 
   // Deploy templates (before pages, so popupTemplateUid can be mapped)
@@ -270,13 +268,24 @@ export async function deployProject(
 
   // Convert pending popup templates (inline popups → templates)
   if (pendingPopups.length) {
+    // Build pageKey → collection mapping from pageInfo
+    const pageCollMap = new Map<string, string>();
+    for (const pi of pages) {
+      const blocks = (pi.layout as any)?.blocks || [];
+      const firstColl = blocks.find((b: any) => b.coll)?.coll || '';
+      if (firstColl) pageCollMap.set(pi.slug, firstColl);
+    }
+
     for (const pp of pendingPopups) {
-      // Find a deployed field that has popup content matching this template
-      for (const [, ps] of Object.entries(state.pages)) {
+      // Find a deployed popup on the page whose collection matches the template's collection
+      for (const [pageKey, ps] of Object.entries(state.pages)) {
+        // Match by collection — derive from pageInfo
+        const pageColl = pageCollMap.get(pageKey) || '';
+        if (pp.collName && pageColl && pageColl !== pp.collName) continue;
+
         const pageState = ps as Record<string, unknown>;
         const popups = (pageState.popups || {}) as Record<string, Record<string, unknown>>;
         for (const [popupKey, popupState] of Object.entries(popups)) {
-          // Match by collection name in the popup target
           if (!popupKey.includes('.fields.')) continue;
           const targetUid = popupState.target_uid as string;
           if (!targetUid) continue;
@@ -578,12 +587,19 @@ async function deployGroup(
     }
 
     const stateFile = path.join(root, 'state.yaml');
-    for (const child of routeEntry.children || []) {
+    const children = routeEntry.children || [];
+    for (let ci = 0; ci < children.length; ci++) {
+      const child = children[ci];
       if (child.type === 'flowPage') {
         const pageInfo = pages.find(p => p.title === child.title);
         if (pageInfo) {
           await deployPageBlueprint(nb, pageInfo, state, state.group_id!, routeEntry.title, log);
-          // Save state after each page (crash recovery)
+          // Set sortIndex to match declaration order
+          const pageKey = slugify(pageInfo.title);
+          const routeId = (state.pages[pageKey] as Record<string, unknown>)?.route_id as number | undefined;
+          if (routeId) {
+            await nb.http.post(`${nb.baseUrl}/api/desktopRoutes:update`, { sortIndex: ci + 1 }, { params: { 'filter[id]': routeId } }).catch(() => {});
+          }
           saveYaml(stateFile, state);
         }
       } else if (child.type === 'group') {
@@ -597,11 +613,20 @@ async function deployGroup(
         } else {
           log(`  = sub-group: ${child.title}`);
         }
-        for (const sc of child.children || []) {
+        // Set sortIndex on sub-group to match declaration order
+        await nb.http.post(`${nb.baseUrl}/api/desktopRoutes:update`, { sortIndex: ci + 1 }, { params: { 'filter[id]': subGroupId } }).catch(() => {});
+        const subChildren = child.children || [];
+        for (let si = 0; si < subChildren.length; si++) {
+          const sc = subChildren[si];
           const pageInfo = pages.find(p => p.title === sc.title);
           if (pageInfo) {
             await deployPageBlueprint(nb, pageInfo, state, subGroupId, child.title, log);
-            // Save state after each page (crash recovery)
+            // Set sortIndex on sub-group child
+            const pageKey = slugify(pageInfo.title);
+            const routeId = (state.pages[pageKey] as Record<string, unknown>)?.route_id as number | undefined;
+            if (routeId) {
+              await nb.http.post(`${nb.baseUrl}/api/desktopRoutes:update`, { sortIndex: si + 1 }, { params: { 'filter[id]': routeId } }).catch(() => {});
+            }
             saveYaml(stateFile, state);
           }
         }
@@ -628,12 +653,19 @@ async function deployGroup(
   }
 
   const legacyStateFile = path.join(root, 'state.yaml');
-  for (const child of routeEntry.children || []) {
+  const legacyChildren = routeEntry.children || [];
+  for (let ci = 0; ci < legacyChildren.length; ci++) {
+    const child = legacyChildren[ci];
     if (child.type === 'flowPage') {
       const pageInfo = pages.find(p => p.title === child.title);
       if (pageInfo) {
         await deployOnePage(nb, pageInfo, state, state.group_id!, force, log);
-        // Save state after each page (crash recovery)
+        // Set sortIndex to match declaration order
+        const pageKey = slugify(pageInfo.title);
+        const routeId = (state.pages[pageKey] as Record<string, unknown>)?.route_id as number | undefined;
+        if (routeId) {
+          await nb.http.post(`${nb.baseUrl}/api/desktopRoutes:update`, { sortIndex: ci + 1 }, { params: { 'filter[id]': routeId } }).catch(() => {});
+        }
         saveYaml(legacyStateFile, state);
       }
     } else if (child.type === 'group') {
@@ -647,11 +679,20 @@ async function deployGroup(
       } else {
         log(`  = sub-group: ${child.title}`);
       }
-      for (const sc of child.children || []) {
+      // Set sortIndex on sub-group
+      await nb.http.post(`${nb.baseUrl}/api/desktopRoutes:update`, { sortIndex: ci + 1 }, { params: { 'filter[id]': subGroupId } }).catch(() => {});
+      const subChildren = child.children || [];
+      for (let si = 0; si < subChildren.length; si++) {
+        const sc = subChildren[si];
         const pageInfo = pages.find(p => p.title === sc.title);
         if (pageInfo) {
           await deployOnePage(nb, pageInfo, state, subGroupId, force, log);
-          // Save state after each page (crash recovery)
+          // Set sortIndex on sub-group child
+          const pageKey = slugify(pageInfo.title);
+          const routeId = (state.pages[pageKey] as Record<string, unknown>)?.route_id as number | undefined;
+          if (routeId) {
+            await nb.http.post(`${nb.baseUrl}/api/desktopRoutes:update`, { sortIndex: si + 1 }, { params: { 'filter[id]': routeId } }).catch(() => {});
+          }
           saveYaml(legacyStateFile, state);
         }
       }
@@ -1134,16 +1175,19 @@ async function deployPagePopups(
 }
 
 /**
- * Extract field paths from popup specs that target fields in this page's blocks.
- * Used to prevent click-to-open from creating default details when a popup YAML handles the content.
+ * Extract popup targets from popup specs — both fields and recordActions.
+ * Used to prevent auto-fill from creating default content when a popup YAML handles it.
+ *
+ * Returns: Set containing field paths ("name") and recordAction markers ("recordAction:edit").
  */
 function buildPopupTargetFields(popups: PopupSpec[]): Set<string> {
   const result = new Set<string>();
   for (const ps of popups) {
     const target = ps.target || '';
-    // Match $SELF.<blockKey>.fields.<fieldPath> or nested patterns
-    const m = target.match(/\.fields\.([^.]+)$/);
-    if (m) result.add(m[1]);
+    const mf = target.match(/\.fields\.([^.]+)$/);
+    if (mf) result.add(mf[1]);
+    const mr = target.match(/\.recordActions\.([^.]+)$/);
+    if (mr) result.add(`recordAction:${mr[1]}`);
   }
   return result;
 }
@@ -1196,28 +1240,13 @@ async function syncMenuOrder(
   log: (msg: string) => void,
 ): Promise<void> {
   try {
-    // Find deployed group
-    const groupEntry = routes.find(r => r.type === 'group');
-    if (!groupEntry?.children?.length) return;
+    const groupEntries = routes.filter(r => r.type === 'group');
+    if (!groupEntries.length) return;
 
     const allRoutes = await nb.http.get(`${nb.baseUrl}/api/desktopRoutes:list`, { params: { paginate: 'false', tree: 'true' } });
     const liveGroups = (allRoutes.data.data || []).filter((r: any) => r.type === 'group');
-
-    // Find by state route_id or title match
-    let liveGroup = liveGroups.find((g: any) => {
-      for (const [, ps] of Object.entries(state.pages)) {
-        const pg = ps as Record<string, unknown>;
-        if (pg.route_id && g.children?.some((c: any) => c.id === pg.route_id)) return true;
-      }
-      return false;
-    });
-    if (!liveGroup) liveGroup = liveGroups.find((g: any) => g.title === groupEntry.title);
-    if (!liveGroup?.children?.length) return;
-
-    const liveChildren = liveGroup.children as { id: number; title: string; type: string; sortIndex?: number; children?: any[] }[];
     let changed = 0;
 
-    // Sync sortIndex, icon, hidden on top-level pages/sub-groups
     const syncRoute = async (spec: RouteEntry, live: any, sortIdx: number) => {
       const patch: Record<string, unknown> = {};
       if (live.sortIndex !== sortIdx) patch.sortIndex = sortIdx;
@@ -1229,17 +1258,34 @@ async function syncMenuOrder(
       }
     };
 
-    for (let i = 0; i < groupEntry.children.length; i++) {
-      const specChild = groupEntry.children[i];
-      const liveChild = liveChildren.find(c => c.title === specChild.title);
-      if (!liveChild) continue;
-      await syncRoute(specChild, liveChild, i + 1);
-      // Sub-group children
-      if (specChild.type === 'group' && specChild.children?.length && liveChild.children?.length) {
-        for (let j = 0; j < specChild.children.length; j++) {
-          const specSub = specChild.children[j];
-          const liveSub = liveChild.children.find((c: any) => c.title === specSub.title);
-          if (liveSub) await syncRoute(specSub, liveSub, j + 1);
+    for (const groupEntry of groupEntries) {
+      if (!groupEntry.children?.length) continue;
+
+      // Find live group by state route_id match or title match
+      let liveGroup = liveGroups.find((g: any) => {
+        for (const [, ps] of Object.entries(state.pages)) {
+          const pg = ps as Record<string, unknown>;
+          if (pg.route_id && g.children?.some((c: any) => c.id === pg.route_id)) return true;
+        }
+        return false;
+      });
+      if (!liveGroup) liveGroup = liveGroups.find((g: any) => g.title === groupEntry.title);
+      if (!liveGroup?.children?.length) continue;
+
+      const liveChildren = liveGroup.children as { id: number; title: string; type: string; sortIndex?: number; children?: any[] }[];
+
+      for (let i = 0; i < groupEntry.children.length; i++) {
+        const specChild = groupEntry.children[i];
+        const liveChild = liveChildren.find(c => c.title === specChild.title);
+        if (!liveChild) continue;
+        await syncRoute(specChild, liveChild, i + 1);
+        // Sub-group children
+        if (specChild.type === 'group' && specChild.children?.length && liveChild.children?.length) {
+          for (let j = 0; j < specChild.children.length; j++) {
+            const specSub = specChild.children[j];
+            const liveSub = liveChild.children.find((c: any) => c.title === specSub.title);
+            if (liveSub) await syncRoute(specSub, liveSub, j + 1);
+          }
         }
       }
     }
@@ -1263,50 +1309,63 @@ async function syncRoutesYaml(
   try {
     nb.routes.clearCache();
     const liveRoutes = await nb.routes.list();
-    const seenTopLevel = new Set<string>();
-    const routeTree = liveRoutes
-      .filter(r => {
-        if (r.type === 'group' && r.title === groupTitle) return true;
-        if (r.type === 'flowPage' && !r.parentId) return true; // top-level pages
-        return false;
-      })
-      .filter(r => r.type !== 'tabs')
-      .filter(r => {
-        const key = `${r.type}:${r.title || ''}`;
-        if (seenTopLevel.has(key)) return false;
-        seenTopLevel.add(key);
-        return true;
-      })
-      .map(r => {
-        const entry: Record<string, unknown> = { title: r.title, type: r.type };
-        if (r.icon) entry.icon = r.icon;
-        const seenChildren = new Set<string>();
-        const children = (r.children || [])
-          .filter(c => c.type !== 'tabs')
-          .filter(c => {
-            if (seenChildren.has(c.title || '')) return false;
-            seenChildren.add(c.title || '');
-            return true;
-          })
-          .map(c => {
-            const ce: Record<string, unknown> = { title: c.title, type: c.type };
-            if (c.icon) ce.icon = c.icon;
-            const seenSub = new Set<string>();
-            const sub = (c.children || [])
-              .filter(s => s.type !== 'tabs')
-              .filter(s => {
-                if (seenSub.has(s.title || '')) return false;
-                seenSub.add(s.title || '');
-                return true;
-              })
-              .map(s => ({ title: s.title, type: s.type }));
-            if (sub.length) ce.children = sub;
-            return ce;
-          });
-        if (children.length) entry.children = children;
-        return entry;
-      });
-    fs.writeFileSync(path.join(root, 'routes.yaml'), dumpYaml(routeTree));
+
+    // Find the deployed group in live routes
+    const liveGroup = liveRoutes.find(r => r.type === 'group' && r.title === groupTitle);
+    if (!liveGroup) { log('\n  routes.yaml sync: group not found in live'); return; }
+
+    // Build updated entry from live state
+    const buildEntry = (r: any): Record<string, unknown> => {
+      const entry: Record<string, unknown> = { title: r.title };
+      if (r.type === 'group') entry.type = 'group';
+      if (r.icon) entry.icon = r.icon;
+      const seenChildren = new Set<string>();
+      const children = (r.children || [])
+        .filter((c: any) => c.type !== 'tabs')
+        .filter((c: any) => {
+          if (seenChildren.has(c.title || '')) return false;
+          seenChildren.add(c.title || '');
+          return true;
+        })
+        .map((c: any) => {
+          const ce: Record<string, unknown> = { title: c.title };
+          if (c.type === 'group') ce.type = 'group';
+          if (c.icon) ce.icon = c.icon;
+          const seenSub = new Set<string>();
+          const sub = (c.children || [])
+            .filter((s: any) => s.type !== 'tabs')
+            .filter((s: any) => {
+              if (seenSub.has(s.title || '')) return false;
+              seenSub.add(s.title || '');
+              return true;
+            })
+            .map((s: any) => {
+              const se: Record<string, unknown> = { title: s.title };
+              if (s.type === 'group') se.type = 'group';
+              if (s.icon) se.icon = s.icon;
+              return se;
+            });
+          if (sub.length) ce.children = sub;
+          return ce;
+        });
+      if (children.length) entry.children = children;
+      return entry;
+    };
+
+    // Read existing routes.yaml, update only the deployed group entry
+    const routesFile = path.join(root, 'routes.yaml');
+    let existing: Record<string, unknown>[] = [];
+    try { existing = loadYaml<Record<string, unknown>[]>(routesFile) || []; } catch { /* fresh */ }
+
+    const updatedEntry = buildEntry(liveGroup);
+    const idx = existing.findIndex(e => e.title === groupTitle && e.type === 'group');
+    if (idx >= 0) {
+      existing[idx] = updatedEntry;
+    } else {
+      existing.push(updatedEntry);
+    }
+
+    fs.writeFileSync(routesFile, dumpYaml(existing));
     log('\n  routes.yaml synced');
   } catch (e) {
     log(`\n  ! routes sync: ${e instanceof Error ? e.message.slice(0, 60) : e}`);

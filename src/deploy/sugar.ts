@@ -84,11 +84,35 @@ export function expandPopupSugar(
   spec: Record<string, unknown>,
   projectRoot: string,
 ): Record<string, unknown> {
-  const result = { ...spec };
+  let result = { ...spec };
 
   const defaults = loadDefaults(projectRoot);
 
-  // Expand blocks
+  // popup: templates/popup/xxx.yaml → read template, inline its content
+  if (typeof result.popup === 'string') {
+    const absPath = path.resolve(projectRoot, result.popup as string);
+    if (fs.existsSync(absPath)) {
+      try {
+        const tpl = loadYaml<Record<string, unknown>>(absPath);
+        const content = tpl.content as Record<string, unknown>;
+        if (content) {
+          // Merge template content into this popup spec (blocks, tabs, mode, etc.)
+          const { popup: _, target, ...rest } = result;
+          result = {
+            target,
+            ...rest,
+            mode: rest.mode || 'drawer',
+            ...content,
+            _popupTemplateName: tpl.name,
+            _popupTemplateColl: tpl.collectionName,
+          };
+        }
+      } catch { /* fall through */ }
+    }
+    delete result.popup;
+  }
+
+  // Expand blocks (including ref: inside popup template content)
   if (Array.isArray(result.blocks)) {
     result.blocks = expandBlockList(result.blocks, projectRoot, result.coll as string | undefined, defaults);
   }
@@ -247,22 +271,16 @@ function expandSingleBlock(
     result.recordActions = expandActionList(result.recordActions);
   }
 
-  // ── filterForm: ensure correct action types ──
-  // FilterFormBlockModel uses submit/reset/collapse (NOT filter/refresh which are table actions)
-  if (result.type === 'filterForm') {
+  // ── filterForm: strip invalid action types ──
+  // FilterFormBlockModel uses submit/reset/collapse (NOT filter/refresh which are table actions).
+  // Don't auto-add submit/reset — NocoBase compose creates them as defaults.
+  if (result.type === 'filterForm' && result.actions) {
     const validFilterActions = new Set(['submit', 'reset', 'collapse']);
-    if (result.actions) {
-      // Remove invalid actions (filter/refresh are table actions, not filterForm)
-      result.actions = (result.actions as unknown[]).filter(a => {
-        const t = typeof a === 'string' ? a : (a as Record<string, unknown>).type as string;
-        return validFilterActions.has(t) || t === 'ai'; // keep AI buttons too
-      });
-    }
-    // Auto-add submit + reset if missing
-    if (!result.actions) result.actions = [];
-    const actTypes = (result.actions as unknown[]).map(a => typeof a === 'string' ? a : (a as Record<string, unknown>).type as string);
-    if (!actTypes.includes('submit')) (result.actions as unknown[]).push('submit');
-    if (!actTypes.includes('reset')) (result.actions as unknown[]).push('reset');
+    result.actions = (result.actions as unknown[]).filter(a => {
+      const t = typeof a === 'string' ? a : (a as Record<string, unknown>).type as string;
+      return validFilterActions.has(t) || t === 'ai';
+    });
+    if (!(result.actions as unknown[]).length) delete result.actions;
   }
 
   // Expand filter sugar

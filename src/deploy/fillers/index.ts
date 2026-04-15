@@ -3,7 +3,7 @@ export { configureFilter } from './filter-config';
 export { applyFieldLayout } from './field-layout';
 export { syncGridItemsOrder } from './grid-order';
 export { deployChart } from './chart-filler';
-export { deployNonComposeActions } from './action-filler';
+export { deployActions } from './action-filler';
 export { deployJsItems, deployJsColumns } from './js-filler';
 export { deployEventFlows } from './event-flow-filler';
 export { deployDividers } from './divider-filler';

@@ -280,15 +280,85 @@ async function cmdExport(args: string[]) {
 
 async function cmdDeployProject(args: string[]) {
   const dir = args[0];
-  if (!dir) { console.error('Usage: cli.ts deploy-project <dir> [--force] [--plan] [--group X] [--page X] [--blueprint]'); process.exit(1); }
+  if (!dir) { console.error('Usage: cli.ts deploy-project <dir> [--force] [--plan] [--group X] [--page X] [--blueprint] [--no-sync]'); process.exit(1); }
   const force = args.includes('--force');
   const planOnly = args.includes('--plan');
   const blueprint = args.includes('--blueprint');
+  const skipSync = args.includes('--no-sync');
   const groupIdx = args.indexOf('--group');
   const group = groupIdx >= 0 ? args[groupIdx + 1] : undefined;
   const pageIdx = args.indexOf('--page');
   const page = pageIdx >= 0 ? args[pageIdx + 1] : undefined;
-  await deployProject(dir, { force, planOnly, group, page, blueprint });
+
+  const absDir = path.resolve(dir);
+  const { execSync } = await import('node:child_process');
+
+  // Check if git repo
+  const isGit = (() => { try { execSync('git rev-parse --git-dir', { cwd: absDir, stdio: 'pipe' }); return true; } catch { return false; } })();
+
+  // ── Pre-deploy: commit current state ──
+  if (!planOnly && !skipSync && isGit) {
+    try {
+      execSync('git add -A', { cwd: absDir, stdio: 'pipe' });
+      const status = execSync('git status --porcelain', { cwd: absDir, stdio: 'pipe' }).toString().trim();
+      if (status) {
+        execSync('git commit -m "pre-deploy snapshot"', { cwd: absDir, stdio: 'pipe' });
+        console.log('  git: pre-deploy commit saved');
+      }
+    } catch { /* skip */ }
+  }
+
+  // ── Deploy ──
+  await deployProject(absDir, { force, planOnly, group, page, blueprint });
+
+  // ── Post-deploy: export to worktree branch for safe comparison ──
+  if (!planOnly && !skipSync && group && isGit) {
+    try {
+      const nb = await NocoBaseClient.create();
+      const branch = 'deploy-sync';
+      const wtDir = absDir + '-worktree';
+
+      // Clean up previous worktree
+      try { execSync(`git worktree remove --force "${wtDir}"`, { cwd: absDir, stdio: 'pipe' }); } catch { /* ok */ }
+      try { execSync(`git branch -D ${branch}`, { cwd: absDir, stdio: 'pipe' }); } catch { /* ok */ }
+
+      // Create worktree on new branch from current HEAD
+      execSync(`git worktree add "${wtDir}" -b ${branch}`, { cwd: absDir, stdio: 'pipe' });
+
+      // Export live state into worktree
+      console.log('\n  ── Sync back (worktree) ──');
+      await exportProject(nb, { outDir: wtDir, group });
+
+      // Commit export result in worktree
+      execSync('git add -A', { cwd: wtDir, stdio: 'pipe' });
+      const wtStatus = execSync('git status --porcelain', { cwd: wtDir, stdio: 'pipe' }).toString().trim();
+      if (wtStatus) {
+        execSync('git commit -m "post-deploy export"', { cwd: wtDir, stdio: 'pipe' });
+      }
+
+      // Show diff: main vs deploy-sync
+      const mainBranch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: absDir, stdio: 'pipe' }).toString().trim();
+      const diff = execSync(`git diff --stat ${mainBranch}..${branch}`, { cwd: absDir, stdio: 'pipe' }).toString().trim();
+
+      if (diff) {
+        console.log(`\n  Diff (${mainBranch} → ${branch}):`);
+        console.log(diff.split('\n').map(l => '    ' + l).join('\n'));
+        console.log(`\n  To review:  git diff ${mainBranch}..${branch}`);
+        console.log(`  To merge:   git merge ${branch}`);
+        console.log(`  To discard: git branch -D ${branch}`);
+      } else {
+        console.log('  ✓ No diff — DSL matches live state');
+        // Clean up if no changes
+        try { execSync(`git worktree remove --force "${wtDir}"`, { cwd: absDir, stdio: 'pipe' }); } catch { /* ok */ }
+        try { execSync(`git branch -D ${branch}`, { cwd: absDir, stdio: 'pipe' }); } catch { /* ok */ }
+      }
+
+      // Always remove worktree (branch stays for review)
+      try { execSync(`git worktree remove --force "${wtDir}"`, { cwd: absDir, stdio: 'pipe' }); } catch { /* ok */ }
+    } catch (e) {
+      console.log('  ! sync back failed: ' + (e instanceof Error ? e.message.slice(0, 80) : e));
+    }
+  }
 }
 
 async function cmdGraph(args: string[]) {

@@ -1,405 +1,222 @@
-# NocoBase Reconciler — AI 搭建指南
+# NocoBase Application Builder
 
-## 快速开始
+## How to Respond
 
-### 0. 用 scaffold 生成骨架（推荐）
+| User says | Do this |
+|-----------|---------|
+| "Build me a XXX system" | **Build Mode** → design → confirm → scaffold → edit → deploy |
+| "Modify / add a field" | Edit collections/*.yaml + templates/block/*.yaml → redeploy `--force` |
+| "Export pages" | `npx tsx src/cli/cli.ts export-project "Group" outdir/` |
+
+## Build Mode
+
+### Step 1 — Design (show plan, ask to confirm)
+
+```
+Module: Project Management
+Pages: Projects, Tasks, Milestones, Members, TimeEntries
+
+Collections:
+  nb_pm_projects: name, code, status(select), priority(select), start_date, end_date, budget(number), owner(m2o→members)
+  nb_pm_tasks: name, status(select), priority(select), project(m2o), assignee(m2o), due_date, estimated_hours(number)
+  nb_pm_members: name, email, role(select), department
+
+Each page: JS stats filter + search + table + addNew/edit/detail popups (auto-generated)
+
+Shall I start building?
+```
+
+### Step 2 — Scaffold + Edit + Deploy
 
 ```bash
+# 1. Scaffold (auto-generates everything)
+cd /path/to/nocobase-reconciler
 npx tsx src/cli/cli.ts scaffold /tmp/my-app MyApp \
-  --pages Dashboard,Orders,Products,Customers \
-  --collections nb_myapp_orders,nb_myapp_products,nb_myapp_customers
+  --pages Projects,Tasks,Members \
+  --collections nb_myapp_projects,nb_myapp_tasks,nb_myapp_members
+
+# 2. Edit collections — add business fields
+# 3. Edit templates/block — update field_layout to match new fields
+# 4. Deploy
+cd src && NB_USER=admin@nocobase.com NB_PASSWORD=admin123 \
+  npx tsx cli/cli.ts deploy-project /tmp/my-app --group "My App" --blueprint
+
+# 5. Insert test data (5-8 records per table)
+# 6. Force update after edits
+npx tsx cli/cli.ts deploy-project /tmp/my-app --group "My App" --force
 ```
 
-自动生成：routes.yaml + collections/ + pages/（含 Dashboard KPI + 5 charts）+ templates/ + popups/
+Report each step result. Ask before continuing.
 
-然后编辑生成的文件，添加业务字段和自定义逻辑。
-
-### 1. 项目目录结构
-
-```bash
-# scaffold 自动生成，或手动创建：
-mkdir -p /tmp/my-app/{collections,pages/my_app,templates}
-```
+## What Scaffold Generates
 
 ```
 /tmp/my-app/
-├── routes.yaml           # 菜单结构（入口）
-├── defaults.yaml          # 全局默认（popup/form 模板绑定）
-├── collections/           # 数据表定义
-│   ├── nb_xxx_orders.yaml
-│   └── nb_xxx_products.yaml
-├── templates/             # 可复用模板（popup/block）
-│   ├── popup/
-│   └── block/
-├── pages/                 # 页面定义
-│   └── my_app/
-│       ├── orders/
-│       │   ├── layout.yaml
-│       │   └── popups/
-│       └── products/
-│           ├── layout.yaml
-│           └── popups/
-└── state.yaml             # 部署状态（自动生成，不要手动编辑）
+├── routes.yaml              # Menu structure
+├── defaults.yaml            # Auto-binds popup templates to m2o fields
+├── collections/*.yaml       # Table definitions (edit these: add fields)
+├── templates/
+│   ├── block/               # Form/detail content (edit these: field_layout)
+│   │   ├── form_add_new_xxx.yaml
+│   │   ├── form_edit_xxx.yaml
+│   │   └── detail_xxx.yaml
+│   └── popup/               # Whole-drawer templates (don't edit)
+│       ├── add_new_xxx.yaml
+│       ├── edit_xxx.yaml
+│       └── detail_xxx.yaml
+├── pages/<mod>/<page>/
+│   ├── layout.yaml          # Page layout (filterForm + table)
+│   ├── js/stats_filter.js   # Stats button group stub
+│   └── popups/              # Popup refs (don't edit)
+└── state.yaml               # Deploy state (auto-managed)
 ```
 
-### 2. 定义菜单 routes.yaml
+> **Only edit**: `collections/*.yaml` (fields) + `templates/block/*.yaml` (form layout)
+> Everything else is auto-generated and auto-wired.
+
+## Collection Template
 
 ```yaml
-- title: My App
-  type: group
-  icon: appstoreoutlined
-  children:
-    - title: Orders
-      icon: shoppingcartoutlined
-    - title: Products
-      icon: appstoreoutlined
-```
-
-> `type: flowPage` 是默认值，可以省略。只有子组需要写 `type: group`。
-
-### 3. 定义数据表 collections/
-
-```yaml
-# collections/nb_xxx_orders.yaml
-name: nb_xxx_orders
+name: nb_myapp_orders
 title: Orders
 fields:
-  - name: order_no
+  - name: name
     interface: input
-    title: Order No
-  - name: customer
-    interface: m2o
-    title: Customer
-    target: nb_xxx_customers
-  - name: total_amount
-    interface: number
-    title: Total Amount
+    title: Name
   - name: status
     interface: select
     title: Status
     uiSchema:
       enum:
         - { label: Draft, value: draft }
-        - { label: Confirmed, value: confirmed }
-        - { label: Shipped, value: shipped }
+        - { label: Active, value: active }
+        - { label: Done, value: done }
+  - name: customer
+    interface: m2o
+    title: Customer
+    target: nb_myapp_customers
+  - name: total
+    interface: number
+    title: Total Amount
+  - name: due_date
+    interface: dateOnly
+    title: Due Date
 ```
 
-### 4. 定义页面 pages/
+> titleField auto-set to `name` or `title`. FK fields auto-created for m2o.
+
+## Block Template (form/detail layout)
 
 ```yaml
-# pages/my_app/orders/layout.yaml
-blocks:
-  - key: filterForm
-    type: filterForm
-    coll: nb_xxx_orders
-    fields:
-      - field: order_no
-        label: Search
-        filterPaths: [order_no, customer.name]
-      - status
-  - key: table
-    type: table
-    coll: nb_xxx_orders
-    filter:                              # 简写语法
-      status.$ne: cancelled
-    fields:
-      - field: order_no
-        popup: true                      # 点击弹出详情
-      - customer                         # 关联字段，defaults 自动绑 popup
-      - total_amount
-      - status
-    actions:
-      - filter
-      - refresh
-      - addNew
-    recordActions:
-      - view
-      - edit
-layout:
-  - - filterForm
-  - - table
-```
-
-### 5. 定义弹窗 popups/
-
-```yaml
-# pages/my_app/orders/popups/table.addNew.yaml
-target: $SELF.table.actions.addNew
-mode: drawer
-blocks:
-  - key: createForm
-    type: createForm
-    coll: nb_xxx_orders
-    fields:
-      - order_no
-      - customer
-      - total_amount
-      - status
-    field_layout:
-      - '--- Basic Info ---'
-      - - order_no
-        - customer
-      - - total_amount
-        - status
-    actions:
-      - submit
-```
-
-### 6. 部署
-
-```bash
-export NB_USER=admin@nocobase.com NB_PASSWORD=admin123 NB_URL=http://localhost:14000
-npx tsx src/cli/cli.ts deploy-project /tmp/my-app --group "My App" --blueprint
-```
-
----
-
-## YAML Sugar 语法速查
-
-### 区块简写
-
-```yaml
-# JS 区块
-- js: ./js/dashboard.js
-- js: { file: ./js/calendar.js, desc: Activity Calendar }
-
-# 模板引用
-- ref: templates/block/form_orders.yaml
-```
-
-### 字段简写
-
-```yaml
-fields:
-  - order_no                              # 纯字符串 = 普通字段
-  - field: name
-    popup: true                           # 默认弹窗（drawer + large）
-  - field: name
-    popup: templates/popup/order_view.yaml  # 引用 popup 模板
-  - field: amount
-    width: 100                            # 列宽
-```
-
-### Action 简写
-
-```yaml
-actions:
-  - filter                                # 纯字符串
-  - refresh
-  - addNew
-  - link: { title: View All, icon: arrowrightoutlined, url: /admin/xxx }
-  - ai: viz                               # AI 员工
-  - ai: { employee: dex, tasks: ./ai/tasks.yaml }
-
-recordActions:
-  - view
-  - edit
-  - delete
-  - updateRecord:                         # 行内更新
-      key: mark_done
-      icon: checkoutlined
-      tooltip: Done
-      assign:
-        status: done
-      hiddenWhen:                         # 条件隐藏
-        status: done
-```
-
-### 筛选简写
-
-```yaml
-# Sugar（推荐）
-filter:
-  status.$in: [new, working]
-  score.$gte: 75
-
-# 完整格式（也支持）
-dataScope:
-  logic: $and
-  items:
-    - path: status
-      operator: $in
-      value: [new, working]
-```
-
-### 布局
-
-```yaml
-layout:
-  - - filterForm                          # 第1行：全宽
-  - - sidebar: 5                          # 第2行：两列 5:19
-    - table: 19
-  - - chart1: 12                          # 第3行：两列 12:12
-    - chart2: 12
-```
-
-### 表单字段布局
-
-```yaml
-field_layout:
-  - '--- Section Title ---'              # 分组标题
-  - - name                                # 单列
-  - - field1                              # 两列并排
-    - field2
-  - - col:                                # 堆叠列
-      - field3
-      - field4
-    size: 8
-```
-
----
-
-## 高级功能
-
-### 全局默认 defaults.yaml
-
-```yaml
-popups:
-  nb_xxx_orders: templates/popup/order_view.yaml      # 任何 order 关联字段自动弹这个
-  nb_xxx_customers: templates/popup/customer_view.yaml
-forms:
-  nb_xxx_orders: templates/block/form_orders.yaml      # 所有 order 新建表单用这个模板
-```
-
-### 联动规则（推荐 — 字段显隐/必填/赋值）
-
-**优先使用联动规则**处理表单交互逻辑。联动规则可以：
-- 根据条件显示/隐藏字段
-- 根据条件设置字段必填/非必填
-- 根据条件给字段赋值
-- 条件组合（$and / $or）
-
-在 NocoBase UI 中配置联动规则，导出时自动保存在 YAML 中，部署时自动还原。
-
-```yaml
-# 导出后会出现在 block spec 里（不需要手写，UI 配置后导出即可）
-fieldLinkageRules:
-  - title: Hide approval fields when draft
-    condition:
-      logic: $and
-      items:
-        - path: status
-          operator: $eq
-          value: draft
-    actions:
-      - name: linkageSetFieldProps
-        params:
-          value:
-            fields: [approved_by, approved_at]
-            state: hidden
-```
-
-### 事件流（最后手段 — 复杂计算逻辑）
-
-**只有当联动规则无法满足需求时**才使用事件流。典型场景：
-- 多行子表单合计（遍历子表格计算总金额）
-- 调用 API 查询数据（价格阶梯匹配、汇率换算）
-- 复杂的级联计算（小计 → 折扣 → 税额 → 总额）
-
-> 事件流是 JS 代码，普通用户难以维护。能用联动规则解决的，不要用事件流。
-
-```yaml
-event_flows:
-  - event:
-      eventName: formValuesChange
-    file: ./events/calc_total.js
-```
-
-```javascript
-// events/calc_total.js — 报价单金额自动计算（联动规则做不到的场景）
-(async () => {
-  const values = ctx.form?.values || {};
-  const items = values.items || [];
-
-  // 遍历子表格计算小计
-  const subtotal = items.reduce((sum, item) => {
-    return sum + (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0);
-  }, 0);
-
-  // 级联计算
-  const discount = subtotal * (parseFloat(values.discount_rate) || 0);
-  const tax = (subtotal - discount) * (parseFloat(values.tax_rate) || 0);
-  const total = subtotal - discount + tax;
-
-  ctx.form.setFieldState('subtotal', s => { s.value = subtotal; });
-  ctx.form.setFieldState('discount_amount', s => { s.value = discount; });
-  ctx.form.setFieldState('total_amount', s => { s.value = total; });
-})();
-```
-
-### Popup 模板
-
-在 `templates/popup/` 目录定义可复用弹窗：
-
-```yaml
-# templates/popup/order_view.yaml
-name: Order View
-type: popup
-collectionName: nb_xxx_orders
-content:
-  tabs:
-    - title: Details
-      blocks:
-        - key: details
-          type: details
-          coll: nb_xxx_orders
-          fields: [order_no, customer, total_amount, status]
-      layout:
-        - - details
-    - title: Items
-      blocks:
-        - key: items
-          type: table
-          coll: nb_xxx_order_items
-          resource_binding:
-            associationName: nb_xxx_orders.items
-            sourceId: '{{ctx.view.inputArgs.filterByTk}}'
-```
-
-### Block 模板（表单模板）
-
-```yaml
-# templates/block/form_orders.yaml
+# templates/block/form_add_new_nb_myapp_orders.yaml
 name: 'Form (Add new): Orders'
 type: block
-collectionName: nb_xxx_orders
+collectionName: nb_myapp_orders
 content:
   key: createForm
   type: createForm
-  coll: nb_xxx_orders
-  fields: [order_no, customer, total_amount, status]
+  coll: nb_myapp_orders
+  fields: [name, status, customer, total, due_date, description]
   field_layout:
-    - '--- Order Info ---'
-    - - order_no
-      - customer
-    - - total_amount
-      - status
+    - '--- Basic Info ---'
+    - [name, status]
+    - [customer, due_date]
+    - '--- Financial ---'
+    - [total]
+    - [description]
   actions:
     - submit
 ```
 
----
+> edit + detail templates use the **same field_layout**. Edit all 3 together.
 
-## 搭建步骤（推荐顺序）
+## Page Layout Template
 
-1. **定义数据表** → `collections/` 目录
-2. **定义菜单** → `routes.yaml`
-3. **写页面** → `pages/` 每个页面一个 `layout.yaml`
-4. **写弹窗** → `popups/` 目录（addNew、详情、编辑）
-5. **部署** → `deploy-project` 命令
-6. **在 UI 微调** → 联动规则、权限等
-7. **导出** → `export-project` 保存为 DSL 快照
-8. **复制改名** → 创建新模块
+```yaml
+# pages/myapp/orders/layout.yaml
+blocks:
+  - key: filterForm
+    type: filterForm
+    coll: nb_myapp_orders
+    fields:
+      - field: name
+        label: Search
+        filterPaths: [name, description]
+      - status
+    js_items:
+      - desc: Stats Filter Block
+        file: ./js/stats_filter.js
+    field_layout:
+      - ['[JS:Stats Filter Block]']
+      - [name, status]
+  - key: table
+    type: table
+    coll: nb_myapp_orders
+    fields:
+      - field: name
+        popup: templates/popup/detail_nb_myapp_orders.yaml
+      - customer
+      - status
+      - total
+      - due_date
+      - createdAt
+    actions: [filter, refresh, addNew]
+    recordActions:
+      - edit
+      - updateRecord:
+          key: mark_done
+          icon: checkoutlined
+          tooltip: Done
+          assign: { status: done }
+          hiddenWhen: { status: done }
+layout:
+  - [filterForm]
+  - [table]
+```
 
-## 常用命令
+## Key Rules
+
+1. **Design first** — never build without user confirmation
+2. **Scaffold first** — always start with `scaffold`, then edit generated files
+3. **filterForm** — max 2-3 fields + must have js_items stats block on first row
+4. **No manual actions on filterForm** — NocoBase auto-creates submit/reset
+5. **No `view` in recordActions** — name field clickToOpen already provides detail view
+6. **Edit 3 block templates together** — addNew, edit, detail share same field_layout baseline
+7. **m2o fields auto-popup** — defaults.yaml binds popup templates, no manual config needed
+8. **Incremental** — always `--force` update, never destroy + recreate
+9. **Layout required** — >2 blocks need `layout:`, >2 form fields need `field_layout:`
+
+## Field Types
+
+| interface | Use for | Example |
+|-----------|---------|---------|
+| `input` | Short text | name, code, title |
+| `textarea` | Long text | description, notes |
+| `select` | Dropdown | status, priority, role |
+| `number` | Numbers | amount, quantity, rate |
+| `percent` | Percentage | progress, discount |
+| `dateOnly` | Date | start_date, due_date |
+| `date` | Date+time | created_at |
+| `m2o` | Relation (many-to-one) | project, assignee, customer |
+| `email` | Email | email |
+| `checkbox` | Boolean | is_active |
+
+## Commands
 
 ```bash
-# 部署
-npx tsx src/cli/cli.ts deploy-project /path/to/project --group "Group Name" --blueprint
+cd /path/to/nocobase-reconciler
 
-# 导出
-npx tsx src/cli/cli.ts export-project /path/to/project --group "Group Name"
+# Scaffold
+npx tsx src/cli/cli.ts scaffold /tmp/app AppName \
+  --pages Page1,Page2 --collections nb_app_coll1,nb_app_coll2
 
-# 工作流校验
-npx tsx src/cli/cli.ts validate-workflows /path/to/project
+# Deploy (first time)
+cd src && NB_USER=admin@nocobase.com NB_PASSWORD=admin123 \
+  npx tsx cli/cli.ts deploy-project /tmp/app --group "App Name" --blueprint
+
+# Redeploy (after edits)
+npx tsx cli/cli.ts deploy-project /tmp/app --group "App Name" --force
+
+# Export
+npx tsx cli/cli.ts export-project "App Name" /tmp/export
 ```

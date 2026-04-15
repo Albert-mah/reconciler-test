@@ -1,15 +1,11 @@
 /**
  * Fill a compose-created block with content: JS, charts, actions, dividers, event flows.
  *
- * Compose creates empty shells. This fills them with actual content.
+ * Compose creates empty shells (blocks + default actions). This fills them with actual content.
  * Each concern is delegated to a focused filler module in ./fillers/.
  *
- * ⚠️ PITFALLS:
- * - clickToOpen popup deployment priority: inline popup > popup file > template > default
- * - If field already has ChildPage with enough blocks, skip compose (let popup-deployer handle)
- * - filterManager must be set on PAGE-LEVEL BlockGridModel (not filterForm's own grid)
- * - JS items must be ordered before field items (syncGridItemsOrder at end)
- * - See src/PITFALLS.md for complete list.
+ * Action design (aligned with Python deployer):
+ *   compose creates → state tracks → deployActions only adds what's missing → never deletes.
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -18,12 +14,12 @@ import type { BlockSpec } from '../types/spec';
 import type { BlockState } from '../types/state';
 import { fixDisplayModels } from './display-model-fixer';
 import { ensureJsHeader, replaceJsUids } from '../utils/js-utils';
-import { FILLABLE_ACTION_TYPE_TO_MODEL } from '../utils/block-types';
+import { generateUid } from '../utils/uid';
 import {
   deployClickToOpen,
   configureFilter,
   deployChart,
-  deployNonComposeActions,
+  deployActions,
   deployJsItems,
   deployJsColumns,
   deployDividers,
@@ -31,6 +27,11 @@ import {
   applyFieldLayout,
   syncGridItemsOrder,
 } from './fillers';
+
+const RECORD_ACTION_BLOCKS = new Set(['details', 'list', 'gridCard']);
+const GRID_BLOCK_TYPES = new Set(['createForm', 'editForm', 'filterForm', 'details']);
+const FORM_BLOCK_TYPES = new Set(['createForm', 'editForm']);
+const LINKAGE_BLOCK_TYPES = new Set(['createForm', 'editForm', 'details']);
 
 
 export async function fillBlock(
@@ -51,9 +52,8 @@ export async function fillBlock(
   const coll = bs.coll || defaultColl;
   const mod = path.resolve(modDir);
 
-  // ── Ensure gridUid is populated for form/details blocks ──
-  // Blueprint/compose may not return gridUid — read it from live tree if missing.
-  if (!gridUid && ['createForm', 'editForm', 'filterForm', 'details'].includes(btype)) {
+  // ── Ensure gridUid for form/details blocks ──
+  if ((!gridUid || btype === 'filterForm') && GRID_BLOCK_TYPES.has(btype)) {
     try {
       const blockData = await nb.get({ uid: blockUid });
       const innerGrid = blockData.tree.subModels?.grid;
@@ -72,41 +72,31 @@ export async function fillBlock(
   // ── Block title ──
   if (bs.title) {
     try {
-      await nb.updateModel(blockUid, {
-        cardSettings: { titleDescription: { title: bs.title } },
-      });
-    } catch (e) {
-      log(`      ! title: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
-    }
+      await nb.updateModel(blockUid, { cardSettings: { titleDescription: { title: bs.title } } });
+    } catch (e) { log(`      ! title: ${e instanceof Error ? e.message.slice(0, 60) : e}`); }
   }
 
   // ── Template reference ──
-  // Two patterns in NocoBase:
-  // 1. ReferenceBlockModel — compose created entire block as reference (no grid conversion needed)
-  // 2. CreateFormModel/EditFormModel + ReferenceFormGridModel — grid proxies fields from template
   const templateRef = bs.templateRef;
-  if (templateRef?.targetUid && ['createForm', 'editForm'].includes(btype)) {
+  if (templateRef?.targetUid && FORM_BLOCK_TYPES.has(btype)) {
     try {
       const formData = await nb.get({ uid: blockUid });
       const blockUse = (formData.tree as { use?: string }).use || '';
       if (blockUse === 'ReferenceBlockModel') {
         log(`      = templateRef: ${templateRef.templateName || templateRef.templateUid} (reference block)`);
       } else {
-        // Convert grid to ReferenceFormGridModel via flowModels:save
         const formGrid = formData.tree.subModels?.grid;
         if (formGrid && !Array.isArray(formGrid)) {
           const gridUid2 = (formGrid as { uid: string }).uid;
           const gridUse = (formGrid as { use?: string }).use || '';
           if (gridUse !== 'ReferenceFormGridModel') {
-            // Clear local grid items first (they conflict with reference proxy)
             const gridItems = (formGrid as { subModels?: Record<string, unknown> }).subModels?.items;
             const itemArr = (Array.isArray(gridItems) ? gridItems : []) as { uid: string }[];
             for (const item of itemArr) {
-              try { await nb.surfaces.removeNode(item.uid); } catch (e) { log(`      ! templateRef removeNode: ${e instanceof Error ? e.message.slice(0, 60) : e}`); }
+              try { await nb.surfaces.removeNode(item.uid); } catch { /* skip */ }
             }
             if (itemArr.length) log(`      ~ templateRef: cleared ${itemArr.length} local items`);
           }
-          // Get raw model and convert
           const rawGrid = await nb.http.get(`${nb.baseUrl}/api/flowModels:get`, { params: { filterByTk: gridUid2 } });
           const gd = rawGrid.data.data;
           if (gd) {
@@ -129,12 +119,10 @@ export async function fillBlock(
           }
         }
       }
-    } catch (e) {
-      log(`      ! templateRef: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
-    }
+    } catch (e) { log(`      ! templateRef: ${e instanceof Error ? e.message.slice(0, 60) : e}`); }
   }
 
-  // ── Table settings: dataScope + pageSize ──
+  // ── Table settings: dataScope + pageSize + sort ──
   const tableUpdates: Record<string, unknown> = {};
   if (bs.dataScope) tableUpdates.dataScope = { filter: bs.dataScope };
   if (bs.pageSize) tableUpdates.pageSize = { pageSize: bs.pageSize };
@@ -142,55 +130,26 @@ export async function fillBlock(
   if (Object.keys(tableUpdates).length) {
     try {
       await nb.updateModel(blockUid, { tableSettings: tableUpdates });
-    } catch (e) {
-      log(`      ! tableSettings: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
-    }
+    } catch (e) { log(`      ! tableSettings: ${e instanceof Error ? e.message.slice(0, 60) : e}`); }
   }
 
-  // ── Clean compose auto-created actions for table ──
-  // compose always creates actCol + default edit/view/delete; only keep what spec declares
+  // ── Table: read actColUid + handle explicit empty recordActions ──
+  let actColUid = '';
   if (btype === 'table') {
     try {
       const tableData = await nb.get({ uid: blockUid });
       const cols = tableData.tree.subModels?.columns;
-      const colArr = (Array.isArray(cols) ? cols : []) as { uid: string; use?: string; subModels?: Record<string, unknown> }[];
-      const actCol = colArr.find(c => c.use?.includes('TableActionsColumn'));
+      const actCol = (Array.isArray(cols) ? cols : [])
+        .find((c: any) => c.use?.includes('TableActionsColumn'));
+      if (actCol) actColUid = (actCol as { uid: string }).uid;
 
-      if (!(bs.recordActions?.length)) {
-        // No recordActions in spec → remove entire actCol
-        if (actCol) {
-          await nb.surfaces.removeNode(actCol.uid);
-          log(`      - action column removed (spec has none)`);
-        }
-      } else if (actCol) {
-        // Has recordActions → remove ALL existing actCol buttons first.
-        // deployNonComposeActions will re-create spec-declared ones with correct config.
-        const actColActs = actCol.subModels?.actions;
-        const actColArr = (Array.isArray(actColActs) ? actColActs : []) as { uid: string; use?: string }[];
-        if (actColArr.length) {
-          for (const a of actColArr) {
-            await nb.surfaces.removeNode(a.uid);
-          }
-          log(`      - cleared ${actColArr.length} auto-created actCol buttons`);
-        }
+      // recordActions: [] (explicitly empty) → remove actCol
+      if (Array.isArray(bs.recordActions) && bs.recordActions.length === 0 && actColUid) {
+        await nb.surfaces.removeNode(actColUid);
+        actColUid = '';
+        log(`      - action column removed (spec declares empty recordActions)`);
       }
-
-      // Also clean block-level recordActions auto-created by compose
-      const blockRecActs = tableData.tree.subModels?.recordActions;
-      const blockRecArr = (Array.isArray(blockRecActs) ? blockRecActs : []) as { uid: string; use?: string }[];
-      const specRecTypes = new Set(
-        (bs.recordActions || []).map(a => typeof a === 'string' ? a : (a as Record<string, unknown>).type as string),
-      );
-      for (const a of blockRecArr) {
-        const use = a.use || '';
-        const isDefault = ['EditActionModel', 'ViewActionModel', 'DeleteActionModel'].includes(use);
-        const atype = use.replace('ActionModel', '').replace('Action', '').toLowerCase();
-        if (isDefault && !specRecTypes.has(atype) && !specRecTypes.has('edit') && !specRecTypes.has('view') && !specRecTypes.has('delete')) {
-          await nb.surfaces.removeNode(a.uid);
-          log(`      - removed auto-created block ${atype}`);
-        }
-      }
-    } catch (e) { log(`      ! action cleanup: ${e instanceof Error ? e.message.slice(0, 60) : e}`); }
+    } catch { /* skip */ }
   }
 
   // ── Fix display models ──
@@ -203,9 +162,15 @@ export async function fillBlock(
   // ── clickToOpen on table fields ──
   await deployClickToOpen(nb, bs, coll, fieldStates, mod, allBlocksState, popupContext, log, popupTargetFields);
 
-  // ── FilterForm custom fields (FilterFormCustomFieldModel) ──
+  // ── Auto-bind m2o clickToOpen (all block types) ──
+  // TODO: bind popup templates once the popup template creation mechanism is fixed.
+  // For now, just enable clickToOpen on m2o fields → default details popup.
+  if (coll) {
+    await enableM2oClickToOpen(nb, blockUid, coll, modDir, log);
+  }
+
+  // ── FilterForm custom fields ──
   if (btype === 'filterForm' && gridUid) {
-    // Check which custom fields actually exist in live tree (not just state)
     const liveCustomNames = new Set<string>();
     try {
       const gridData = await nb.get({ uid: gridUid });
@@ -222,41 +187,27 @@ export async function fillBlock(
       if (typeof f !== 'object' || (f as unknown as Record<string, unknown>).type !== 'custom') continue;
       const custom = f as unknown as Record<string, unknown>;
       const customName = (custom.name as string) || '';
-      if (!customName) continue;
-      // Check if actually exists in live tree
-      if (liveCustomNames.has(customName)) continue;
+      if (!customName || liveCustomNames.has(customName)) continue;
       try {
-        const newUid = (await import('../utils/uid')).generateUid();
+        const newUid = generateUid();
         await nb.models.save({
-          uid: newUid,
-          use: 'FilterFormCustomFieldModel',
-          parentId: gridUid,
-          subKey: 'items',
-          subType: 'array',
-          sortIndex: 0,
-          stepParams: {
-            formItemSettings: {
-              fieldSettings: {
-                name: customName,
-                title: custom.title || customName,
-                fieldModel: custom.fieldModel || 'InputFilterFieldModel',
-                fieldModelProps: custom.fieldModelProps || {},
-                source: custom.source || [],
-              },
-            },
-          },
+          uid: newUid, use: 'FilterFormCustomFieldModel',
+          parentId: gridUid, subKey: 'items', subType: 'array', sortIndex: 0,
+          stepParams: { formItemSettings: { fieldSettings: {
+            name: customName, title: custom.title || customName,
+            fieldModel: custom.fieldModel || 'InputFilterFieldModel',
+            fieldModelProps: custom.fieldModelProps || {}, source: custom.source || [],
+          } } },
           flowRegistry: {},
         });
         if (!blockState.fields) blockState.fields = {};
         blockState.fields[customName] = { wrapper: newUid, field: '' };
         log(`      + custom filter: ${custom.title || customName}`);
-      } catch (e) {
-        log(`      ! custom filter ${customName}: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
-      }
+      } catch (e) { log(`      ! custom filter ${customName}: ${e instanceof Error ? e.message.slice(0, 60) : e}`); }
     }
   }
 
-  // ── FilterForm configuration (connect filter to table) ──
+  // ── FilterForm configuration ──
   if (btype === 'filterForm' && pageGridUid) {
     await configureFilter(nb, bs, blockUid, blockState, coll, allBlocksState, pageGridUid, log);
   }
@@ -268,9 +219,7 @@ export async function fillBlock(
       let code = fs.readFileSync(jsPath, 'utf8');
       code = ensureJsHeader(code, { desc: bs.desc, jsType: 'JSBlockModel', coll });
       code = replaceJsUids(code, allBlocksState);
-      await nb.updateModel(blockUid, {
-        jsSettings: { runJs: { code, version: 'v1' } },
-      });
+      await nb.updateModel(blockUid, { jsSettings: { runJs: { code, version: 'v1' } } });
       log(`      ~ JS: ${(bs.desc || bs.file).slice(0, 40)}`);
     }
   }
@@ -278,77 +227,17 @@ export async function fillBlock(
   // ── Chart config ──
   await deployChart(nb, blockUid, bs, mod, log);
 
-  // ── Ensure compose-type actions exist ──
-  // DetailsBlockModel is a "record action container" → must use addRecordAction, not addAction.
-  // Form blocks (createForm/editForm/filterForm) use addAction normally.
-  const RECORD_ACTION_BLOCKS = new Set(['details', 'list', 'gridCard']);
-  const isRecordActionBlock = RECORD_ACTION_BLOCKS.has(btype);
+  // ── Actions (single pass — compose tracks → state skips → only creates missing) ──
+  await deployActions(nb, blockUid, bs, blockState, mod, log, actColUid, RECORD_ACTION_BLOCKS.has(btype));
 
-  for (const aspec of bs.actions || []) {
-    const atype = typeof aspec === 'string' ? aspec : (aspec as Record<string, unknown>).type as string;
-    if (!(atype in FILLABLE_ACTION_TYPE_TO_MODEL)) continue;
-    if (blockState.actions?.[atype]) continue;  // already tracked
-    let uid = '';
-    try {
-      // Use addRecordAction for record-action containers (details/list/gridCard)
-      const result = isRecordActionBlock
-        ? await nb.surfaces.addRecordAction(blockUid, atype) as Record<string, unknown>
-        : await nb.surfaces.addAction(blockUid, atype) as Record<string, unknown>;
-      uid = (result?.uid as string) || '';
-    } catch (e) {
-      // Fallback: save_model
-      log(`      . action ${atype} compose failed, trying save_model: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
-      try {
-        const { generateUid } = await import('../utils/uid');
-        uid = generateUid();
-        await nb.models.save({
-          uid, use: FILLABLE_ACTION_TYPE_TO_MODEL[atype],
-          parentId: blockUid,
-          subKey: isRecordActionBlock ? 'recordActions' : 'actions',
-          subType: 'array',
-          sortIndex: 0, stepParams: {}, flowRegistry: {},
-        });
-      } catch (e2) { log(`      ! action ${atype} save_model fallback: ${e2 instanceof Error ? e2.message.slice(0, 60) : e2}`); uid = ''; }
-    }
-    if (uid) {
-      if (!blockState.actions) blockState.actions = {};
-      blockState.actions[atype] = { uid };
-    }
-  }
-
-  // ── Fillable recordActions for table blocks (view/edit in actCol) ──
-  if (btype === 'table') {
-    for (const aspec of bs.recordActions || []) {
-      const atype = typeof aspec === 'string' ? aspec : (aspec as Record<string, unknown>).type as string;
-      if (!(atype in FILLABLE_ACTION_TYPE_TO_MODEL)) continue;
-      if (!blockState.record_actions) blockState.record_actions = {};
-      if (blockState.record_actions[atype]) continue;
-      let uid = '';
-      try {
-        const result = await nb.surfaces.addRecordAction(blockUid, atype) as Record<string, unknown>;
-        uid = (result?.uid as string) || '';
-      } catch (e) {
-        log(`      . recordAction ${atype} failed: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
-      }
-      if (uid) {
-        blockState.record_actions[atype] = { uid };
-        log(`      + recordAction: ${atype}`);
-      }
-    }
-  }
-
-  // ── Auto-fill view/edit popup content (if they have no spec, use defaults from template) ──
+  // ── Auto-fill view/edit popup content (skip actions that have popup YAML files) ──
   if (btype === 'table' && coll) {
-    await autoFillRecordActionPopups(nb, blockUid, coll, blockState, log);
+    await autoFillRecordActionPopups(nb, coll, blockState, log, popupTargetFields);
   }
 
-  // ── Non-compose actions (legacy save_model) ──
-  await deployNonComposeActions(nb, blockUid, bs, blockState, mod, log);
-
-  // ── JS Items (inside detail/form grid, or list.item.grid) ──
+  // ── JS Items ──
   let itemGridUid = gridUid;
   if (['list', 'gridCard'].includes(btype) && !gridUid) {
-    // List/GridCard: items live in block.subModels.item.subModels.grid
     try {
       const blockData = await nb.get({ uid: blockUid });
       const listItem = blockData.tree.subModels?.item;
@@ -365,146 +254,305 @@ export async function fillBlock(
   // ── JS Columns (table) ──
   await deployJsColumns(nb, blockUid, bs, coll, mod, blockState, allBlocksState, log);
 
-  // ── Dividers (in field_layout) ──
+  // ── Dividers ──
   await deployDividers(nb, gridUid, bs, blockState, log);
 
   // ── Event flows ──
   await deployEventFlows(nb, blockUid, bs, mod, log);
 
-  // ── Field layout (apply after all content created) ──
+  // ── Field layout ──
   if ((bs.field_layout || []).length) {
-    // Explicit layout → set gridSettings.rows
     await applyFieldLayout(nb, gridUid, bs.field_layout!, log, bs);
-  } else if (gridUid && ['filterForm', 'createForm', 'editForm', 'details'].includes(btype)) {
-    // No field_layout → reorder items via moveNode to match spec declaration
+  } else if (gridUid && GRID_BLOCK_TYPES.has(btype)) {
     await syncGridItemsOrder(nb, gridUid, bs, log);
   }
 
   // ── Linkage / reaction rules ──
-  // blockLinkageRules: conditional visibility on the block itself
   if (bs.blockLinkageRules?.length) {
     try {
       await nb.surfaces.setBlockLinkageRules(blockUid, bs.blockLinkageRules);
       log(`      ~ blockLinkageRules: ${bs.blockLinkageRules.length} rules`);
-    } catch (e) {
-      log(`      ! blockLinkageRules: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
-    }
+    } catch (e) { log(`      ! blockLinkageRules: ${e instanceof Error ? e.message.slice(0, 60) : e}`); }
   }
-
-  // fieldValueRules: apply on form blocks only (target = block UID)
-  if (['createForm', 'editForm'].includes(btype) && bs.fieldValueRules?.length) {
+  if (FORM_BLOCK_TYPES.has(btype) && bs.fieldValueRules?.length) {
     try {
       await nb.surfaces.setFieldValueRules(blockUid, bs.fieldValueRules);
       log(`      ~ fieldValueRules: ${bs.fieldValueRules.length} rules`);
-    } catch (e) {
-      log(`      ! fieldValueRules: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
-    }
+    } catch (e) { log(`      ! fieldValueRules: ${e instanceof Error ? e.message.slice(0, 60) : e}`); }
   }
-
-  // fieldLinkageRules: apply on form + details blocks (target = block UID)
-  if (['createForm', 'editForm', 'details'].includes(btype) && bs.fieldLinkageRules?.length) {
+  if (LINKAGE_BLOCK_TYPES.has(btype) && bs.fieldLinkageRules?.length) {
     try {
       await nb.surfaces.setFieldLinkageRules(blockUid, bs.fieldLinkageRules);
       log(`      ~ fieldLinkageRules: ${bs.fieldLinkageRules.length} rules`);
-    } catch (e) {
-      log(`      ! fieldLinkageRules: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
-    }
+    } catch (e) { log(`      ! fieldLinkageRules: ${e instanceof Error ? e.message.slice(0, 60) : e}`); }
   }
 }
 
 /**
  * Auto-fill view/edit record action popups with reasonable defaults.
- * 
- * When a table has view/edit recordActions but no explicit popup specs:
- * - view → details block with all fields from the collection (+ field_layout matching addNew template)
- * - edit → editForm with all fields (+ field_layout matching addNew template)
- *
- * This ensures view/edit popups have proper grid layout without AI needing to write popup files.
+ * Compose creates action stubs; this fills empty popups with details/editForm + 2-column layout.
  */
 async function autoFillRecordActionPopups(
   nb: NocoBaseClient,
-  blockUid: string,
   coll: string,
   blockState: BlockState,
   log: (msg: string) => void,
+  popupTargetFields?: Set<string>,
 ): Promise<void> {
+  const recActs = blockState.record_actions;
+  if (!recActs) return;
+
+  let defaultFields: { fieldPath: string }[] = [];
   try {
-    const blockData = await nb.get({ uid: blockUid });
-    const cols = blockData.tree.subModels?.columns;
-    const actCol = (Array.isArray(cols) ? cols : []).find((c: any) => c.use?.includes('ActionsColumn'));
-    if (!actCol) return;
+    const meta = await nb.collections.fieldMeta(coll);
+    defaultFields = Object.keys(meta)
+      .filter(k => !['id', 'createdById', 'updatedById', 'createdAt', 'updatedAt'].includes(k))
+      .map(k => ({ fieldPath: k }));
+  } catch { return; }
+  if (!defaultFields.length) return;
 
-    const acts = actCol.subModels?.actions;
-    for (const act of (Array.isArray(acts) ? acts : []) as Record<string, unknown>[]) {
-      const use = act.use as string || '';
-      const isView = use === 'ViewActionModel';
-      const isEdit = use === 'EditActionModel';
-      if (!isView && !isEdit) continue;
+  for (const [atype, astate] of Object.entries(recActs)) {
+    if (!['view', 'edit'].includes(atype)) continue;
+    // Skip if a popup YAML file handles this action
+    if (popupTargetFields?.has(`recordAction:${atype}`)) continue;
+    const actionUid = astate.uid;
+    if (!actionUid) continue;
 
-      // Check if popup already has proper content (gridSettings = has layout)
-      const popup = (act as any).subModels?.page;
-      if (!popup) continue;
-      const tabs = popup.subModels?.tabs;
-      const t0 = (Array.isArray(tabs) ? tabs : tabs ? [tabs] : [])[0];
-      const grid = t0?.subModels?.grid;
-      const gridUid2 = grid?.uid;
-      const items = grid?.subModels?.items;
-      const itemCount = Array.isArray(items) ? items.length : 0;
-      const hasGridSettings = !!grid?.stepParams?.gridSettings?.grid;
+    try {
+      let popupGridUid = '';
+      let needsCompose = true;
 
-      // Skip if already has layout (previously deployed)
-      if (hasGridSettings && itemCount > 0) continue;
-
-      // Find a matching form template for field_layout reference
-      let templateFieldLayout: unknown[] | undefined;
       try {
-        const tmplResp = await nb.http.get(`${nb.baseUrl}/api/flowModelTemplates:list`, {
-          params: { pageSize: 50, 'filter[collectionName]': coll, 'filter[type]': 'block' },
-        });
-        const addNewTmpl = (tmplResp.data.data || []).find((t: any) => t.name?.includes('Add new') || t.name?.includes('add_new'));
-        if (addNewTmpl?.targetUid) {
-          const tmplTarget = await nb.get({ uid: addNewTmpl.targetUid });
-          const tmplGrid = tmplTarget.tree.subModels?.grid;
-          const tmplGs = (tmplGrid as any)?.stepParams?.gridSettings?.grid;
-          if (tmplGs?.rows) {
-            // Template has layout — try to replicate for view/edit
-            // We'll use deployDividers + applyFieldLayout with the same field_layout
-            // For now, just ensure dividers exist on the popup block
-          }
+        const actionData = await nb.get({ uid: actionUid });
+        const page = (actionData.tree as any).subModels?.page;
+        if (page) {
+          const tabs = page.subModels?.tabs;
+          const t0 = (Array.isArray(tabs) ? tabs : tabs ? [tabs] : [])[0];
+          const grid = t0?.subModels?.grid;
+          popupGridUid = grid?.uid || '';
+          const items = grid?.subModels?.items;
+          const itemCount = Array.isArray(items) ? items.length : 0;
+          if (!!grid?.stepParams?.gridSettings?.grid && itemCount > 0) continue;
+          if (itemCount > 0) needsCompose = false;
         }
-      } catch { /* skip */ }
+      } catch { /* try composing anyway */ }
 
-      // Apply field_layout to popup block if gridUid exists and has items
-      if (gridUid2 && itemCount > 0) {
+      if (needsCompose) {
+        const blockType = atype === 'view' ? 'details' : 'editForm';
+        await nb.surfaces.compose(actionUid, [{
+          key: blockType, type: blockType,
+          resource: { collectionName: coll, dataSourceKey: 'main', binding: 'currentRecord' },
+          fields: defaultFields,
+          ...(atype === 'edit' ? { actions: ['submit'] } : {}),
+        }], 'replace');
+        log(`      + auto-compose ${atype} popup: ${blockType} with ${defaultFields.length} fields`);
+
         try {
-          // Simple auto-layout: group fields into rows of 2-3
-          const fieldItems = (Array.isArray(items) ? items : []).filter((i: any) => {
-            const u = i.use as string || '';
-            return u.includes('FormItem') || u.includes('DetailsItem');
-          });
-
-          if (fieldItems.length > 2) {
-            const rows: Record<string, string[][]> = {};
-            const sizes: Record<string, number[]> = {};
-            let ri = 0;
-            for (let i = 0; i < fieldItems.length; i += 2) {
-              const rk = `r${ri}`;
-              if (i + 1 < fieldItems.length) {
-                rows[rk] = [[fieldItems[i].uid], [fieldItems[i + 1].uid]];
-                sizes[rk] = [12, 12];
-              } else {
-                rows[rk] = [[fieldItems[i].uid]];
-                sizes[rk] = [24];
-              }
-              ri++;
-            }
-            await nb.surfaces.setLayout(gridUid2, rows, sizes);
-            log(`      ~ auto-layout ${isView ? 'view' : 'edit'} popup: ${fieldItems.length} fields → ${ri} rows`);
+          const refreshed = await nb.get({ uid: actionUid });
+          const page2 = (refreshed.tree as any).subModels?.page;
+          if (page2) {
+            const tabs2 = page2.subModels?.tabs;
+            const t02 = (Array.isArray(tabs2) ? tabs2 : tabs2 ? [tabs2] : [])[0];
+            popupGridUid = t02?.subModels?.grid?.uid || '';
           }
-        } catch (e) {
-          log(`      . auto-layout ${isView ? 'view' : 'edit'}: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
+        } catch { /* skip layout */ }
+      }
+
+      if (!popupGridUid) continue;
+      const gridData = await nb.get({ uid: popupGridUid });
+      const items = ((gridData.tree as any).subModels?.items || []) as { uid: string; use?: string }[];
+      const fieldItems = (Array.isArray(items) ? items : []).filter((i: any) =>
+        ((i.use as string) || '').includes('FormItem') || ((i.use as string) || '').includes('DetailsItem'));
+
+      if (fieldItems.length > 2) {
+        const rows: Record<string, string[][]> = {};
+        const sizes: Record<string, number[]> = {};
+        let ri = 0;
+        for (let i = 0; i < fieldItems.length; i += 2) {
+          const rk = `r${ri}`;
+          if (i + 1 < fieldItems.length) {
+            rows[rk] = [[fieldItems[i].uid], [fieldItems[i + 1].uid]];
+            sizes[rk] = [12, 12];
+          } else {
+            rows[rk] = [[fieldItems[i].uid]];
+            sizes[rk] = [24];
+          }
+          ri++;
         }
+        await nb.surfaces.setLayout(popupGridUid, rows, sizes);
+        log(`      ~ auto-layout ${atype} popup: ${fieldItems.length} fields → ${ri} rows`);
+      }
+    } catch (e) {
+      log(`      . auto-fill ${atype}: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
+    }
+  }
+}
+
+/**
+ * Auto-bind m2o fields to default popup templates — ALL block types.
+ *
+ * Recursively scans the block tree for any field model whose fieldPath is m2o.
+ * Checks defaults.yaml for a matching popup template and binds it.
+ * Works for table columns, detail items, form items, list items, etc.
+ */
+async function enableM2oClickToOpen(
+  nb: NocoBaseClient,
+  blockUid: string,
+  coll: string,
+  modDir: string,
+  log: (msg: string) => void,
+): Promise<void> {
+  // Load defaults.yaml (walk up to project root)
+  let popupDefaults: Record<string, string> = {};
+  try {
+    const { loadYaml } = await import('../utils/yaml');
+    for (let dir = modDir; dir !== path.dirname(dir); dir = path.dirname(dir)) {
+      const f = path.join(dir, 'defaults.yaml');
+      if (fs.existsSync(f)) {
+        popupDefaults = (loadYaml<{ popups?: Record<string, string> }>(f))?.popups || {};
+        break;
       }
     }
-  } catch { /* skip — auto-fill is best effort */ }
+  } catch { /* skip */ }
+  if (!Object.keys(popupDefaults).length) return;
+
+  // Get collection field metadata — m2o fields and their targets
+  const m2oTargets = new Map<string, string>(); // fieldPath → targetCollection
+  try {
+    const resp = await nb.http.get(`${nb.baseUrl}/api/collections/${coll}/fields:list`, { params: { paginate: false } });
+    for (const f of (resp.data.data || []) as Record<string, unknown>[]) {
+      if (f.interface === 'm2o' && f.target) m2oTargets.set(f.name as string, f.target as string);
+    }
+  } catch { return; }
+  if (!m2oTargets.size) return;
+
+  // Resolve popup template names → live UIDs
+  const { loadYaml } = await import('../utils/yaml');
+  const templateNameToUid = new Map<string, { templateUid: string; targetUid: string }>();
+  let liveTemplates: Record<string, unknown>[] = [];
+  try {
+    const resp = await nb.http.get(`${nb.baseUrl}/api/flowModelTemplates:list`, { params: { paginate: false } });
+    liveTemplates = resp.data.data || [];
+  } catch { return; }
+
+  // Resolve templates for: m2o targets + own collection (for name field clickToOpen)
+  const neededColls = new Set(m2oTargets.values());
+  neededColls.add(coll);
+  for (const [targetColl, popupPath] of Object.entries(popupDefaults)) {
+    if (!neededColls.has(targetColl)) continue;
+    let tplName = '';
+    for (let dir = modDir; dir !== path.dirname(dir); dir = path.dirname(dir)) {
+      const absPath = path.join(dir, popupPath);
+      if (fs.existsSync(absPath)) {
+        try { tplName = (loadYaml<Record<string, unknown>>(absPath)?.name as string) || ''; } catch {}
+        break;
+      }
+    }
+    if (!tplName) continue;
+    const live = liveTemplates.find(t => t.name === tplName);
+    if (live) templateNameToUid.set(targetColl, { templateUid: live.uid as string, targetUid: (live.targetUid as string) || '' });
+  }
+  if (!templateNameToUid.size) return;
+
+  // Scan block tree — collect field models with m2o fieldPath (deduplicated by UID)
+  let blockData: any;
+  try { blockData = await nb.get({ uid: blockUid }); } catch { return; }
+
+  const fieldModels = new Map<string, { uid: string; fieldPath: string; stepParams: any }>();
+  const visited = new Set<string>();
+  function scanTree(node: any) {
+    if (!node || typeof node !== 'object') return;
+    if (node.uid && visited.has(node.uid)) return;
+    if (node.uid) visited.add(node.uid);
+    // Collect only actual field models (not column wrappers) that have a fieldPath
+    const fp = node.stepParams?.fieldSettings?.init?.fieldPath;
+    const use = (node.use as string) || '';
+    const isFieldModel = use.includes('FieldModel') || use.includes('FormItem') || use.includes('DetailsItem');
+    if (fp && node.uid && isFieldModel && !fieldModels.has(node.uid)) {
+      fieldModels.set(node.uid, { uid: node.uid, fieldPath: fp, stepParams: node.stepParams });
+    }
+    // Recurse into all subModels
+    const subs = node.subModels;
+    if (subs && typeof subs === 'object') {
+      for (const v of Object.values(subs)) {
+        if (Array.isArray(v)) { for (const item of v) scanTree(item); }
+        else if (v && typeof v === 'object') scanTree(v);
+      }
+    }
+  }
+  scanTree(blockData.tree);
+
+  // Bind popup templates to fields that have clickToOpen but no popupTemplateUid:
+  // - m2o fields → target collection's popup template
+  // - other fields with clickToOpen → own collection's popup template
+  for (const fm of fieldModels.values()) {
+    // Validate existing bindings — report mismatches
+    const existingTplUid = fm.stepParams?.popupSettings?.openView?.popupTemplateUid;
+    if (existingTplUid) {
+      const expectedColl = m2oTargets.get(fm.fieldPath) || coll;
+      try {
+        const tplResp = await nb.http.get(`${nb.baseUrl}/api/flowModelTemplates:get`, { params: { filterByTk: existingTplUid } });
+        const tplColl = tplResp.data.data?.collectionName;
+        if (tplColl && tplColl !== expectedColl) {
+          log(`      ✗ ERROR: ${fm.fieldPath} popup template "${existingTplUid.slice(0, 8)}" is for "${tplColl}" but field expects "${expectedColl}"`);
+        }
+      } catch { /* skip */ }
+      continue;
+    }
+
+    // Also report: m2o field has NO popup template and defaults has one available
+    const targetColl0 = m2oTargets.get(fm.fieldPath);
+    if (targetColl0 && !existingTplUid && templateNameToUid.has(targetColl0)) {
+      // Will be bound below — not an error, just needs binding
+    }
+
+    // Determine which collection's popup template to use
+    const targetColl = m2oTargets.get(fm.fieldPath);  // m2o → target collection
+    const popupColl = targetColl || coll;              // non-m2o → own collection
+    const tplInfo = templateNameToUid.get(popupColl);
+    if (!tplInfo) continue;
+
+    // For non-m2o: only bind if field already has clickToOpen enabled
+    if (!targetColl) {
+      const hasClickToOpen = fm.stepParams?.displayFieldSettings?.clickToOpen?.clickToOpen;
+      if (!hasClickToOpen) continue;
+    }
+
+    // ── Validation: verify template's collectionName matches expected ──
+    try {
+      const tplResp = await nb.http.get(`${nb.baseUrl}/api/flowModelTemplates:get`, { params: { filterByTk: tplInfo.templateUid } });
+      const tplColl = tplResp.data.data?.collectionName;
+      if (tplColl && tplColl !== popupColl) {
+        log(`      ✗ popup template mismatch: ${fm.fieldPath} expects "${popupColl}" but template "${tplInfo.templateUid.slice(0, 8)}" is for "${tplColl}" — skipped`);
+        continue;
+      }
+    } catch { /* skip validation if API fails */ }
+
+    try {
+      const fdResp = await nb.http.get(`${nb.baseUrl}/api/flowModels:get`, { params: { filterByTk: fm.uid } });
+      const fd = fdResp.data.data;
+      if (!fd) continue;
+      const sp = fd.stepParams || {};
+      sp.displayFieldSettings = { clickToOpen: { clickToOpen: true } };
+      sp.popupSettings = {
+        openView: {
+          collectionName: popupColl, dataSourceKey: 'main',
+          mode: 'drawer', size: 'large',
+          popupTemplateUid: tplInfo.templateUid,
+          ...(tplInfo.targetUid ? { uid: tplInfo.targetUid } : {}),
+          popupTemplateHasFilterByTk: false,
+          popupTemplateHasSourceId: false,
+        },
+      };
+      await nb.http.post(`${nb.baseUrl}/api/flowModels:save`, {
+        uid: fm.uid, use: fd.use, parentId: fd.parentId,
+        subKey: fd.subKey, subType: fd.subType,
+        stepParams: sp, sortIndex: fd.sortIndex || 0, flowRegistry: fd.flowRegistry || {},
+      });
+      const label = targetColl ? `m2o: ${fm.fieldPath} → ${popupColl}` : `field: ${fm.fieldPath}`;
+      log(`      ~ popup bind ${label} (template: ${tplInfo.templateUid.slice(0, 8)})`);
+    } catch (e) {
+      log(`      . popup bind ${fm.fieldPath}: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
+    }
+  }
 }

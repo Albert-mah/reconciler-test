@@ -1,9 +1,9 @@
 /**
- * Deploy non-compose actions via legacy save_model.
+ * Deploy ALL actions — unified single-pass, matching Python deployer pattern.
  *
- * These action types are NOT supported by compose API and must be
- * created individually: duplicate, export, import, link, workflowTrigger,
- * ai, expandCollapse, popup, updateRecord.
+ * Flow: check state → check live → create if missing. Never delete.
+ * Compose creates standard actions → state tracks them → this loop skips.
+ * Only creates actions that compose missed (save_model path, non-compose types).
  */
 import type { NocoBaseClient } from '../../client';
 import type { BlockSpec } from '../../types/spec';
@@ -12,29 +12,29 @@ import type { LogFn } from './types';
 import { generateUid } from '../../utils/uid';
 import { buildAiButton } from './ai-button';
 import { actionKey as genActionKey, deduplicateKey } from '../../utils/action-key';
-import { NON_COMPOSE_ACTION_TYPE_TO_MODEL as NON_COMPOSE_ACTION_MAP } from '../../utils/block-types';
+import {
+  FILLABLE_ACTION_TYPE_TO_MODEL,
+  NON_COMPOSE_ACTION_TYPE_TO_MODEL as NON_COMPOSE_ACTION_MAP,
+  MODEL_TO_ACTION_TYPE,
+} from '../../utils/block-types';
 
-export async function deployNonComposeActions(
+// All action types we can create (fillable + non-compose)
+const ALL_ACTION_MAP: Record<string, string> = {
+  ...FILLABLE_ACTION_TYPE_TO_MODEL,
+  ...NON_COMPOSE_ACTION_MAP,
+};
+
+export async function deployActions(
   nb: NocoBaseClient,
   blockUid: string,
   bs: BlockSpec,
   blockState: BlockState,
   modDir: string,
   log: LogFn,
+  actColUid = '',
+  isRecordActionBlock = false,
 ): Promise<void> {
-  // For table recordActions, find the actCol UID (buttons go under TableActionsColumn, not block root)
-  let actColUid = '';
-  if (bs.type === 'table' && bs.recordActions?.length) {
-    try {
-      const tableData = await nb.get({ uid: blockUid });
-      const cols = tableData.tree.subModels?.columns;
-      const colArr = (Array.isArray(cols) ? cols : []) as { uid: string; use?: string }[];
-      const actCol = colArr.find(c => c.use?.includes('TableActionsColumn'));
-      if (actCol) actColUid = actCol.uid;
-    } catch { /* skip */ }
-  }
-
-  // Read live actions to detect existing ones (created by compose/blueprint)
+  // Read live actions once for dedup (compose/blueprint may have created some)
   const liveActionsByUse = new Map<string, string>(); // use → uid
   try {
     const blockData = await nb.get({ uid: blockUid });
@@ -45,6 +45,18 @@ export async function deployNonComposeActions(
         if (a.use && a.uid) liveActionsByUse.set(a.use, a.uid);
       }
     }
+    // Also check actCol actions (table row-level)
+    if (actColUid) {
+      const cols = blockData.tree.subModels?.columns;
+      const colArr = (Array.isArray(cols) ? cols : []) as { uid: string; use?: string; subModels?: Record<string, unknown> }[];
+      const actCol = colArr.find(c => c.uid === actColUid);
+      if (actCol) {
+        const actColActs = actCol.subModels?.actions;
+        for (const a of (Array.isArray(actColActs) ? actColActs : []) as { uid: string; use: string }[]) {
+          if (a.use && a.uid) liveActionsByUse.set(a.use, a.uid);
+        }
+      }
+    }
   } catch { /* skip */ }
 
   const allActions = [...(bs.actions || []), ...(bs.recordActions || [])];
@@ -52,13 +64,13 @@ export async function deployNonComposeActions(
 
   for (const aspec of allActions) {
     const atype = typeof aspec === 'string' ? aspec : (aspec as Record<string, unknown>).type as string;
-    const amodel = NON_COMPOSE_ACTION_MAP[atype];
+    const amodel = ALL_ACTION_MAP[atype];
     if (!amodel) continue;
 
     let actionSp = typeof aspec === 'object' ? (aspec as Record<string, unknown>).stepParams as Record<string, unknown> || {} : {};
     let actionProps = typeof aspec === 'object' ? (aspec as Record<string, unknown>).props as Record<string, unknown> || {} : {};
 
-    // AI button shorthand: { type: ai, employee: viz, tasks_file: ./ai/tasks.yaml }
+    // AI button shorthand
     if (atype === 'ai' && typeof aspec === 'object') {
       const spec = aspec as Record<string, unknown>;
       if (spec.employee && !Object.keys(actionSp).length) {
@@ -73,11 +85,10 @@ export async function deployNonComposeActions(
     if (!blockState[stateKey]) blockState[stateKey] = {};
     const existingGroup = blockState[stateKey]!;
 
-    // Use semantic key from spec (if present), otherwise generate from type + config
     const specKey = typeof aspec === 'object' ? (aspec as Record<string, unknown>).key as string : undefined;
     const stateActionKey = deduplicateKey(specKey || genActionKey(aspec), usedStateKeys);
 
-    // If already exists in state → update in-place, don't create new
+    // ① Already in state → update config if needed, skip creation
     if (existingGroup[stateActionKey]?.uid) {
       const existingUid = existingGroup[stateActionKey].uid;
       if (Object.keys(actionSp).length || Object.keys(actionProps).length) {
@@ -89,32 +100,54 @@ export async function deployNonComposeActions(
       continue;
     }
 
-    // Check live tree for existing action with same model type (dedup compose/blueprint)
+    // ② Found in live tree → track + update config
     const existingLiveUid = liveActionsByUse.get(amodel);
     if (existingLiveUid) {
-      // Update existing action with spec config, clear stale props from blueprint defaults
-      const update: Record<string, unknown> = { uid: existingLiveUid };
-      if (Object.keys(actionSp).length) update.stepParams = actionSp;
-      // Always set props — clear blueprint defaults (e.g. {type:"link",title:"Link"}) when spec has none
-      update.props = Object.keys(actionProps).length ? actionProps : {};
-      await nb.models.save(update);
+      if (Object.keys(actionSp).length || Object.keys(actionProps).length) {
+        const update: Record<string, unknown> = { uid: existingLiveUid };
+        if (Object.keys(actionSp).length) update.stepParams = actionSp;
+        update.props = Object.keys(actionProps).length ? actionProps : {};
+        await nb.models.save(update);
+      }
       existingGroup[stateActionKey] = { uid: existingLiveUid };
-      liveActionsByUse.delete(amodel); // consumed — don't reuse for next same-type action
+      liveActionsByUse.delete(amodel);
       continue;
     }
 
-    // Determine parentId
-    // Table recordActions go under actCol (TableActionsColumnModel), not block root
-    const parentId = (isRecordAction && actColUid) ? actColUid : blockUid;
-    const desiredSubKey = (isRecordAction && actColUid) ? 'actions' : (isRecordAction ? 'recordActions' : 'actions');
+    // ③ Create new — fillable types try addAction first, others use save_model
+    const isFillable = atype in FILLABLE_ACTION_TYPE_TO_MODEL;
+    let uid = '';
 
-    // Create
-    const newUid = generateUid();
-    await nb.models.save({
-      uid: newUid, use: amodel,
-      parentId, subKey: desiredSubKey, subType: 'array',
-      sortIndex: 0, stepParams: actionSp, props: actionProps, flowRegistry: {},
-    });
-    existingGroup[stateActionKey] = { uid: newUid };
+    if (isFillable) {
+      try {
+        const result = (isRecordAction || isRecordActionBlock)
+          ? await nb.surfaces.addRecordAction(blockUid, atype) as Record<string, unknown>
+          : await nb.surfaces.addAction(blockUid, atype) as Record<string, unknown>;
+        uid = (result?.uid as string) || '';
+      } catch {
+        // Fallback to save_model below
+      }
+    }
+
+    if (!uid) {
+      // save_model creation
+      const parentId = (isRecordAction && actColUid) ? actColUid : blockUid;
+      const desiredSubKey = (isRecordAction && actColUid) ? 'actions' : (isRecordAction ? 'recordActions' : 'actions');
+      uid = generateUid();
+      try {
+        await nb.models.save({
+          uid, use: amodel,
+          parentId, subKey: desiredSubKey, subType: 'array',
+          sortIndex: 0, stepParams: actionSp, props: actionProps, flowRegistry: {},
+        });
+      } catch (e) {
+        log(`      ! action ${atype}: ${e instanceof Error ? e.message.slice(0, 60) : e}`);
+        uid = '';
+      }
+    }
+
+    if (uid) {
+      existingGroup[stateActionKey] = { uid };
+    }
   }
 }
