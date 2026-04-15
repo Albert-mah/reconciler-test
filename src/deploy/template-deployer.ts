@@ -631,10 +631,53 @@ async function convertPopupBlocksToTemplates(
     walkTree(tree, null);
     if (!blocks.length) return;
 
+    // Fetch existing block templates for dedup (name + collectionName)
+    const allTpls = await nb.http.get(`${nb.baseUrl}/api/flowModelTemplates:list`, { params: { paginate: false } });
+    const existingByKey = new Map<string, { uid: string; targetUid: string }>();
+    for (const t of (allTpls.data?.data || []) as Record<string, unknown>[]) {
+      if (t.type === 'block' && t.collectionName === collName) {
+        existingByKey.set(`${t.name}|${t.collectionName}`, { uid: t.uid as string, targetUid: t.targetUid as string });
+      }
+    }
+
     for (const block of blocks) {
-      const tplName = `${BLOCK_NAMES[block.use] || block.use}: ${collName.replace('nb_erp_', '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}`;
+      const collTitle = collName.replace(/^nb_\w+_/, '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      const tplName = `${BLOCK_NAMES[block.use] || block.use}: ${collTitle}`;
+      const dedupeKey = `${tplName}|${collName}`;
+
       try {
-        // Step 1: detachParent → block becomes template content
+        const existing = existingByKey.get(dedupeKey);
+        if (existing) {
+          // Template exists — reuse: just replace block with ReferenceBlockModel pointing to existing
+          const refUid = generateUid();
+          await nb.http.post(`${nb.baseUrl}/api/flowModels:save`, {
+            uid: refUid,
+            use: 'ReferenceBlockModel',
+            parentId: block.parentId,
+            subKey: 'items',
+            subType: 'array',
+            stepParams: {
+              referenceSettings: {
+                target: { targetUid: existing.targetUid, mode: 'reference' },
+                useTemplate: {
+                  templateUid: existing.uid,
+                  templateName: tplName,
+                  templateDescription: '',
+                  targetUid: existing.targetUid,
+                  mode: 'reference',
+                },
+              },
+            },
+            sortIndex: block.sortIndex,
+            flowRegistry: {},
+          });
+          // Delete the original block (it's been replaced)
+          await nb.http.post(`${nb.baseUrl}/api/flowModels:destroy`, {}, { params: { filterByTk: block.uid } }).catch(() => {});
+          log(`      = block template: ${tplName} (reused ${existing.uid.slice(0, 8)})`);
+          continue;
+        }
+
+        // Template doesn't exist — create via detachParent
         const tplResp = await nb.http.post(`${nb.baseUrl}/api/flowModelTemplates:create`, {
           name: tplName,
           description: '',
@@ -650,7 +693,7 @@ async function convertPopupBlocksToTemplates(
         const blockTplUid = tplResp.data?.data?.uid;
         if (!blockTplUid) continue;
 
-        // Step 2: ReferenceBlockModel replaces the block in the grid
+        // ReferenceBlockModel replaces the block in the grid
         const refUid = generateUid();
         await nb.http.post(`${nb.baseUrl}/api/flowModels:save`, {
           uid: refUid,
@@ -673,6 +716,7 @@ async function convertPopupBlocksToTemplates(
           sortIndex: block.sortIndex,
           flowRegistry: {},
         });
+        existingByKey.set(dedupeKey, { uid: blockTplUid, targetUid: block.uid });
         log(`      + block template: ${tplName} (${blockTplUid.slice(0, 8)})`);
       } catch (e: any) {
         log(`      . block template ${block.use}: ${e?.response?.data?.errors?.[0]?.message?.slice(0, 60) || e?.message?.slice(0, 60) || ''}`);
