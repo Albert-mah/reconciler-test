@@ -1,0 +1,60 @@
+blocks:
+  - key: active_projects
+    type: table
+    coll: nb_pm_projects
+    title: 进行中的项目
+    fields:
+      - name
+      - owner
+      - client_name
+      - end_date
+      - progress
+      - status
+    actions:
+      - refresh
+    dataScope:
+      status: active
+    pageSize: 8
+  - key: my_tasks
+    type: table
+    coll: nb_pm_tasks
+    title: 待跟进任务
+    fields:
+      - title
+      - project
+      - assignee
+      - due_date
+      - priority
+      - status
+    actions:
+      - refresh
+    dataScope:
+      status:
+        $in:
+          - todo
+          - in_progress
+          - blocked
+    pageSize: 8
+  - key: upcoming_milestones
+    type: table
+    coll: nb_pm_milestones
+    title: 近期里程碑
+    fields:
+      - name
+      - project
+      - owner
+      - planned_date
+      - status
+    actions:
+      - refresh
+    dataScope:
+      status:
+        $in:
+          - pending
+          - in_progress
+          - delayed
+    pageSize: 8
+layout:
+  - - active_projects
+  - - my_tasks: 14
+    - upcoming_milestones: 10

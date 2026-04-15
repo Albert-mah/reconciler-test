@@ -1,0 +1,34 @@
+target: $members.table.actions.addNew
+auto:
+  - edit
+  - detail
+view_field: name
+coll: nb_pm_members
+blocks:
+  - key: form
+    type: createForm
+    coll: nb_pm_members
+    fields:
+      - employee_no
+      - name
+      - role_name
+      - department
+      - email
+      - phone
+      - status
+      - joined_at
+      - notes
+    actions:
+      - submit
+    field_layout:
+      - '--- 成员资料 ---'
+      - - employee_no
+        - name
+      - - role_name
+        - department
+      - - email
+        - phone
+      - - status
+        - joined_at
+      - '--- 备注 ---'
+      - - notes
