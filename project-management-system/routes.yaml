@@ -10,3 +10,5 @@
       icon: flagoutlined
     - title: Members
       icon: teamoutlined
+    - title: Time Entries
+      icon: clockcircleoutlined

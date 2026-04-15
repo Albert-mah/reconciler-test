@@ -438,4 +438,116 @@ pages:
             actions:
               submit:
                 uid: 1yqqnrnndnv
+  time_entries:
+    route_id: 0
+    page_uid: bv53bjz7stw
+    tab_uid: vkh3cglyt57
+    blocks:
+      filter:
+        uid: ki0aptglz25
+        type: filterForm
+        grid_uid: 12bb49nin1z
+        fields:
+          entry_no:
+            wrapper: z73oie1v5lq
+            field: ''
+          status:
+            wrapper: v8nst9h8lyl
+            field: ''
+          project:
+            wrapper: 3s9n8amck7z
+            field: ''
+          billable:
+            wrapper: jrjaxtco0mb
+            field: ''
+        actions:
+          filterFormSubmit:
+            uid: t9vl35ja5x8
+          filterFormReset:
+            uid: yd8hxgzewny
+          submit:
+            uid: owodldnj8ys
+          reset:
+            uid: x0djozjfsht
+      table:
+        uid: 2wo6xgnzyox
+        type: table
+        grid_uid: ''
+        fields:
+          entry_no:
+            wrapper: 4sk1276sdbd
+            field: ''
+          project:
+            wrapper: lfj123swbuw
+            field: ''
+          task:
+            wrapper: xhpmcxy63qw
+            field: ''
+          member_name:
+            wrapper: i5zdo6teenj
+            field: ''
+          work_date:
+            wrapper: a36y9n1itj1
+            field: ''
+          hours:
+            wrapper: fzjpzejqm0z
+            field: ''
+          billable:
+            wrapper: linczkxpck8
+            field: ''
+          status:
+            wrapper: ake2f0j3c5p
+            field: ''
+        actions:
+          filter:
+            uid: ei5f0nz9pq8
+          refresh:
+            uid: qbfidb8gafq
+          addNew:
+            uid: w255qqdounc
+          export:
+            uid: c54n2ybhr8r
+        record_actions:
+          edit:
+            uid: exwgr3100gz
+          view:
+            uid: a61q0em843d
+          delete:
+            uid: i776jn2iel7
+    popups:
+      table.actions.addNew:
+        target_uid: w255qqdounc
+        blocks:
+          form:
+            uid: n0wdlsjzdfi
+            type: createForm
+            grid_uid: lsw22hhsszb
+            fields:
+              entry_no:
+                wrapper: 4anq1ctebl9
+                field: ''
+              member_name:
+                wrapper: uyylr6m5zdj
+                field: ''
+              hours:
+                wrapper: ljhcjeeok5d
+                field: ''
+              billable:
+                wrapper: ghtlj9r37a4
+                field: ''
+              status:
+                wrapper: 2yrk8fex7az
+                field: ''
+              summary:
+                wrapper: tj60jacnzkf
+                field: ''
+              project:
+                wrapper: ss7qfeyyne8
+                field: ''
+              task:
+                wrapper: le7sdxoxuf5
+                field: ''
+            actions:
+              submit:
+                uid: 7e7bcjokhmo
 group_id: 359119394373632
