@@ -68,8 +68,12 @@ js:
 | `detail` | 详情展示 | 弹窗 |
 | `list` | 列表 | 主页面或弹窗 |
 | `gridCard` | 卡片网格 | 主页面 |
-| `chart` | 图表 | 主页面 |
+| `chart` | 图表（SQL 驱动，无 collection 数据源） | 主页面 |
 | `markdown` | Markdown | 主页面 |
+
+> **⚠️ chart / jsBlock / markdown 不支持 actions！**
+> 这些区块没有 collection 数据源，不能加 `filter`、`refresh`、`addNew` 等操作按钮。
+> 给 chart 加 `actions: [filter]` 会导致 "Invalid filter: filter must have logic and items properties" 报错。
 
 ## 操作按钮 (actions / recordActions)
 

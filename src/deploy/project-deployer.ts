@@ -281,7 +281,7 @@ export async function deployProject(
       for (const [pageKey, ps] of Object.entries(state.pages)) {
         // Match by collection — derive from pageInfo
         const pageColl = pageCollMap.get(pageKey) || '';
-        if (pp.collName && pageColl && pageColl !== pp.collName) continue;
+        if (!pageColl || (pp.collName && pageColl !== pp.collName)) continue;
 
         const pageState = ps as Record<string, unknown>;
         const popups = (pageState.popups || {}) as Record<string, Record<string, unknown>>;

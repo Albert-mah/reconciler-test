@@ -176,6 +176,15 @@ function validateBlock(bs: BlockSpec, pageTitle: string, popups: PopupSpec[], is
     }
   }
 
+  // ── Rule: chart/jsBlock/markdown must NOT have actions ──
+  if (['chart', 'jsBlock', 'markdown'].includes(bs.type)) {
+    const actions = bs.actions || [];
+    if (actions.length) {
+      const actionTypes = actions.map(a => typeof a === 'string' ? a : (a as Record<string, unknown>).type as string);
+      issues.push({ level: 'error', page: pageTitle, block: key, message: `${bs.type} does NOT support actions (has: ${actionTypes.join(', ')}). Chart/jsBlock/markdown have no collection data source — adding "filter" causes "Invalid filter" crash.` });
+    }
+  }
+
   // ── Rule 4: createForm/editForm MUST have field_layout with sections ──
   if (['createForm', 'editForm'].includes(bs.type)) {
     if (!bs.field_layout || !bs.field_layout.length) {

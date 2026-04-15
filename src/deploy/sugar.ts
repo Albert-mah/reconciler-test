@@ -285,6 +285,15 @@ function expandSingleBlock(
     if (!(result.actions as unknown[]).length) delete result.actions;
   }
 
+  // ── chart / jsBlock / markdown: strip all actions ──
+  // These block types don't support toolbar actions (filter, refresh, addNew etc.)
+  // Chart uses SQL queries (no collection data source), so FilterCollapse would crash
+  // with "Invalid filter: filter must have logic and items properties" at transformFilter.
+  if (['chart', 'jsBlock', 'markdown'].includes(result.type as string)) {
+    delete result.actions;
+    delete result.recordActions;
+  }
+
   // Expand filter sugar
   if (result.filter && !result.dataScope) {
     result.dataScope = expandFilterSugar(result.filter as Record<string, unknown>);
