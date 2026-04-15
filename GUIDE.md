@@ -1,5 +1,7 @@
 # NocoBase Application Builder
 
+> DSL 参考项目：`templates/crm/` — 完整的 CRM 系统（structure.yaml + enhance.yaml + JS + charts）
+
 ## How to Respond
 
 | User says | Do this |
