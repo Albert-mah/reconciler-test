@@ -33,11 +33,13 @@ function toApplyField(fd: FieldDef): Record<string, unknown> {
   // Default value
   if (fd.default !== undefined) field.defaultValue = fd.default;
 
-  // Select/enum options
+  // Select/enum options (support both fd.options and fd.uiSchema.enum)
   if (fd.options) {
     field.enum = fd.options.map(o =>
       typeof o === 'string' ? { value: o, label: o } : o,
     );
+  } else if (fd.uiSchema?.enum?.length) {
+    field.uiSchema = { ...(field.uiSchema || {}), enum: fd.uiSchema.enum };
   }
 
   // Description
@@ -112,7 +114,22 @@ async function ensureCollectionLegacy(
   for (const fd of def.fields) {
     try {
       const meta = await nb.collections.fieldMeta(name);
-      if (fd.name in meta) continue;
+      if (fd.name in meta) {
+        // Update select enum if DSL defines it but live is empty
+        if (fd.interface === 'select' && fd.uiSchema?.enum?.length) {
+          try {
+            const liveField = await nb.http.get(`${nb.baseUrl}/api/collections/${name}/fields:get`, { params: { filterByTk: fd.name } });
+            const liveEnum = liveField.data?.data?.uiSchema?.enum || [];
+            if (!liveEnum.length) {
+              await nb.http.post(`${nb.baseUrl}/api/collections/${name}/fields:update`, {
+                uiSchema: { ...liveField.data.data.uiSchema, enum: fd.uiSchema.enum },
+              }, { params: { filterByTk: fd.name } });
+              log(`    ~ ${name}.${fd.name} enum updated`);
+            }
+          } catch { /* skip */ }
+        }
+        continue;
+      }
       await nb.collections.createField(name, fd);
       log(`    + ${name}.${fd.name}`);
     } catch (e) {

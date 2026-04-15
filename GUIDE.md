@@ -60,22 +60,14 @@ curl -X POST "$NB_URL/api/nb_myapp_products:create" \
 
 ### 第三轮：JS 区块 + 事件流
 
-填充业务逻辑：
+**JS 区块** — 从 `templates/crm/js/` 复制模板并修改 CONFIG 参数：
+- KPI：`analytics_jsBlock_6~9.js`
+- Stats Filter：`customers_filterForm_1_*.js`
+- 表格列/详情组件：`leads_table_0_col_*.js` / `customers_popup_name_tab0_details_*.js`
 
-**JS 区块** — 从 `templates/js/` 复制组件模板，修改 CONFIG 参数：
+> SQL 必须用 `ctx.sql.save() + runById()` 两步，不能直接 `ctx.sql()`。
 
-| 模板 | 类型 | 用途 |
-|------|------|------|
-| `stats-filter.js` | JSItemModel | 状态分布筛选按钮（ctx.sql 动态查询） |
-| `kpi-card.js` | JSBlockModel | KPI 指标卡片 |
-| `status-tag.js` | JSColumnModel | 彩色状态标签 |
-| `progress-bar.js` | JSColumnModel | 进度条列 |
-| `currency.js` | JSColumnModel | 货币格式化列 |
-
-**事件流（Workflow）** — 业务自动化：
-- 状态变更触发通知
-- 库存不足自动创建采购单
-- 审批流程
+**事件流（Workflow）** — 业务自动化
 
 ## What Scaffold Generates
 
@@ -95,7 +87,7 @@ curl -X POST "$NB_URL/api/nb_myapp_products:create" \
 │       └── detail_xxx.yaml
 ├── pages/<mod>/<page>/
 │   ├── layout.yaml          # Page layout (filterForm + table)
-│   ├── js/stats_filter.js   # Stats button group stub
+│   ├── js/stats_filter.js   # Stats filter stub (AI fills in round 3)
 │   └── popups/              # Popup refs (don't edit)
 └── state.yaml               # Deploy state (auto-managed)
 ```
@@ -189,9 +181,13 @@ blocks:
       - total
       - due_date
       - createdAt
-    actions: [filter, refresh, addNew]
+    # actions/recordActions auto-filled if not declared:
+    #   table → actions: [filter, refresh, addNew] + recordActions: [edit, delete]
+    #   details → recordActions: [edit]
+    #   createForm/editForm → actions: [submit]
     recordActions:
       - edit
+      - delete
       - updateRecord:
           key: mark_done
           icon: checkoutlined
@@ -207,9 +203,9 @@ layout:
 
 1. **Design first** — never build without user confirmation
 2. **Scaffold first** — always start with `scaffold`, then edit generated files
-3. **filterForm** — max 2-3 fields + must have js_items stats block on first row
+3. **filterForm** — 必须有搜索框（filterPaths 连接多字段）+ status 筛选 + js_items stats block
 4. **No manual actions on filterForm** — NocoBase auto-creates submit/reset
-5. **No `view` in recordActions** — name field clickToOpen already provides detail view
+5. **Default actions auto-added** — table gets [filter,refresh,addNew] + [edit,delete]; details gets [edit]; forms get [submit]
 6. **Edit 3 block templates together** — addNew, edit, detail share same field_layout baseline
 7. **m2o fields auto-popup** — defaults.yaml binds popup templates, no manual config needed
 8. **Incremental** — always `--force` update, never destroy + recreate

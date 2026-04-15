@@ -100,7 +100,12 @@ export class CollectionsApi {
       };
     }
 
-    // Select options
+    // Merge uiSchema from DSL (enum, component overrides, etc.)
+    if (def.uiSchema && typeof def.uiSchema === 'object') {
+      body.uiSchema = { ...(body.uiSchema as Record<string, unknown>), ...def.uiSchema };
+    }
+
+    // Legacy: select options via def.options
     if (def.options) {
       const enumVal = def.options.map(o =>
         typeof o === 'string' ? { value: o, label: o } : o,
