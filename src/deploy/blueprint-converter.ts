@@ -225,7 +225,10 @@ function blockSpecToBlueprint(bs: BlockSpec, pageDir: string, tabKey = 'main'): 
 
   // Fields — filter out custom/unsupported fields
   if (bs.fields?.length) {
-    const converted = bs.fields.map(convertField).filter(Boolean) as (string | Record<string, unknown>)[];
+    const blockKey = bs.key || bs.type || 'block';
+    const converted = bs.fields
+      .map((fieldSpec) => convertField(fieldSpec, blockKey))
+      .filter(Boolean) as (string | Record<string, unknown>)[];
     if (converted.length) block.fields = converted;
   }
 
@@ -287,16 +290,22 @@ function blockSpecToBlueprint(bs: BlockSpec, pageDir: string, tabKey = 'main'): 
     block.chart = `${tabKey}.${bs.key || bs.type}`;
   }
 
-  // DataScope → settings (direct FilterGroup format: {logic, items})
+  // Table settings must use the same nested structure as configure/updateSettings.
+  const tableSettings: Record<string, unknown> = {
+    ...((bs.tableSettings as Record<string, unknown> | undefined) || {}),
+  };
   if (bs.dataScope) {
-    if (!block.settings) block.settings = {};
-    block.settings.dataScope = bs.dataScope;
+    tableSettings.dataScope = { filter: bs.dataScope };
   }
-
-  // PageSize → settings (flat number)
   if (bs.pageSize) {
+    tableSettings.pageSize = { pageSize: bs.pageSize };
+  }
+  if (bs.sort) {
+    tableSettings.sort = bs.sort;
+  }
+  if (Object.keys(tableSettings).length) {
     if (!block.settings) block.settings = {};
-    block.settings.pageSize = bs.pageSize;
+    block.settings.tableSettings = tableSettings;
   }
 
   // Resource binding
@@ -319,10 +328,14 @@ function blockSpecToBlueprint(bs: BlockSpec, pageDir: string, tabKey = 'main'): 
  */
 const BLUEPRINT_FIELD_KEYS = new Set(['key', 'field', 'associationPathName', 'renderer', 'type', 'label', 'target', 'settings', 'popup', 'script', 'chart']);
 
-function convertField(f: FieldSpec): string | Record<string, unknown> | null {
-  if (typeof f === 'string') return f;
+function convertField(f: FieldSpec, blockKey: string): string | Record<string, unknown> | null {
+  const makeFieldKey = (fieldPath: string) => `${slugify(blockKey)}_${slugify(fieldPath)}`;
+
+  if (typeof f === 'string') {
+    return { field: f, key: makeFieldKey(f) };
+  }
   if (f.field) {
-    const result: Record<string, unknown> = { field: f.field };
+    const result: Record<string, unknown> = { field: f.field, key: makeFieldKey(f.field) };
     if (f.label) result.label = f.label;
     if (f.clickToOpen) result.popup = {};
     return result;

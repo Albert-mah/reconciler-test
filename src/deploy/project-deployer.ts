@@ -34,7 +34,8 @@ import { verifySqlFromPages } from './sql-verifier';
 import { discoverPages, type RouteEntry, type PageInfo } from './page-discovery';
 import { RefResolver } from '../refs';
 import { pageToBlueprint } from './blueprint-converter';
-import { BLOCK_TYPE_TO_MODEL } from '../utils/block-types';
+import { BLOCK_TYPE_TO_MODEL, MODEL_TO_ACTION_TYPE } from '../utils/block-types';
+import { loadPageLayout, loadTsApp } from '../dsl/loader';
 
 export async function deployProject(
   projectDir: string,
@@ -44,9 +45,18 @@ export async function deployProject(
   const root = path.resolve(projectDir);
 
   // ── 1. Read project structure ──
+  const appFile = path.join(root, 'app.ts');
   const routesFile = path.join(root, 'routes.yaml');
-  if (!fs.existsSync(routesFile)) throw new Error(`routes.yaml not found in ${root}`);
-  const routes = loadYaml<RouteEntry[]>(routesFile);
+  const hasTsApp = fs.existsSync(appFile);
+  let routes: RouteEntry[];
+
+  if (hasTsApp) {
+    const tsApp = await loadTsApp(appFile);
+    routes = tsApp.routes;
+  } else {
+    if (!fs.existsSync(routesFile)) throw new Error(`routes.yaml not found in ${root}`);
+    routes = loadYaml<RouteEntry[]>(routesFile);
+  }
 
   // Normalize: default type = flowPage (group if has children)
   const normalizeRoutes = (entries: RouteEntry[]) => {
@@ -56,6 +66,9 @@ export async function deployProject(
     }
   };
   normalizeRoutes(routes);
+  if (hasTsApp) {
+    log('  TS app: routes loaded from app.ts');
+  }
 
   // Read collections
   const collDefs: Record<string, CollectionDef> = {};
@@ -86,6 +99,27 @@ export async function deployProject(
       process.exit(1);
     }
     log(`  Deploying single page: ${pages[0].title}`);
+  }
+
+  // layout.ts takes precedence over layout.yaml when present.
+  let tsLayoutCount = 0;
+  pages = await Promise.all(
+    pages.map(async (pageInfo) => {
+      const tsLayoutFile = path.join(pageInfo.dir, 'layout.ts');
+      if (!fs.existsSync(tsLayoutFile)) return pageInfo;
+
+      const tsLayout = await loadPageLayout(pageInfo.dir, pageInfo.title, pageInfo.icon);
+      if (!tsLayout) return pageInfo;
+
+      tsLayoutCount += 1;
+      return {
+        ...pageInfo,
+        layout: tsLayout,
+      };
+    }),
+  );
+  if (tsLayoutCount > 0) {
+    log(`  TS layouts: ${tsLayoutCount} page${tsLayoutCount === 1 ? '' : 's'} override YAML snapshots`);
   }
 
   // ── 2. Plan ──
@@ -449,9 +483,8 @@ function extractBlockState(
         for (const a of actArr) {
           const aUid = a.uid as string || '';
           const aUse = a.use as string || '';
-          const aType = aUse.replace('ActionModel', '').replace('Action', '');
-          const aKey = aType.charAt(0).toLowerCase() + aType.slice(1);
-          if (aUid) (entry as any)[stateKey][aKey] = { uid: aUid };
+          const aKey = MODEL_TO_ACTION_TYPE[aUse];
+          if (aUid && aKey) (entry as any)[stateKey][aKey] = { uid: aUid };
         }
       }
     }
@@ -563,21 +596,53 @@ async function deployGroup(
   log: (msg: string) => void,
   useBlueprint = false,
 ): Promise<void> {
+  const ensureGroupRoute = async (
+    currentId: number | undefined,
+    title: string,
+    icon: string,
+    parentId?: number,
+  ): Promise<{ id: number; status: 'reused' | 'found' | 'created' }> => {
+    const liveRoutes = await nb.http.get(`${nb.baseUrl}/api/desktopRoutes:list`, {
+      params: { paginate: 'false', tree: 'true' },
+    });
+    const groups = (liveRoutes.data.data || []) as any[];
+
+    const findGroup = (routes: any[]): any | null => {
+      for (const route of routes) {
+        if (route.type !== 'group') continue;
+        if (currentId && route.id === currentId) return route;
+        if (route.title === title && (!parentId || route.parentId === parentId)) return route;
+        const nested = Array.isArray(route.children) ? findGroup(route.children) : null;
+        if (nested) return nested;
+      }
+      return null;
+    };
+
+    const existingGroup = findGroup(groups);
+    if (existingGroup) {
+      return {
+        id: existingGroup.id,
+        status: currentId && existingGroup.id === currentId ? 'reused' : 'found',
+      };
+    }
+
+    const result = await nb.createGroup(title, icon, parentId);
+    nb.routes.clearCache();
+    return { id: result.routeId, status: 'created' };
+  };
+
   // Blueprint mode: let applyBlueprint create navigation + pages in one call
   if (useBlueprint) {
-    // Ensure group exists — find existing by title first, create only if not found
-    if (!state.group_id) {
-      const liveRoutes = await nb.http.get(`${nb.baseUrl}/api/desktopRoutes:list`, { params: { paginate: 'false', tree: 'true' } });
-      const existingGroup = (liveRoutes.data.data || []).find((r: any) => r.type === 'group' && r.title === routeEntry.title);
-      if (existingGroup) {
-        state.group_id = existingGroup.id;
-        log(`  = group: ${routeEntry.title} (found existing)`);
-      } else {
-        const result = await nb.createGroup(routeEntry.title, routeEntry.icon || 'appstoreoutlined');
-        state.group_id = result.routeId;
-        log(`  + group: ${routeEntry.title}`);
-      }
-      nb.routes.clearCache();
+    const groupResult = await ensureGroupRoute(
+      state.group_id,
+      routeEntry.title,
+      routeEntry.icon || 'appstoreoutlined',
+    );
+    state.group_id = groupResult.id;
+    if (groupResult.status === 'created') {
+      log(`  + group: ${routeEntry.title}`);
+    } else if (groupResult.status === 'found') {
+      log(`  = group: ${routeEntry.title} (found existing)`);
     } else {
       log(`  = group: ${routeEntry.title}`);
     }
@@ -600,12 +665,18 @@ async function deployGroup(
         }
       } else if (child.type === 'group') {
         const subGroupKey = `_subgroup_${slugify(child.title)}`;
-        let subGroupId = (state as unknown as Record<string, unknown>)[subGroupKey] as number | undefined;
-        if (!subGroupId) {
-          const result = await nb.createGroup(child.title, child.icon || 'folderoutlined', state.group_id!);
-          subGroupId = result.routeId;
-          (state as unknown as Record<string, unknown>)[subGroupKey] = subGroupId;
+        const subGroupResult = await ensureGroupRoute(
+          (state as unknown as Record<string, unknown>)[subGroupKey] as number | undefined,
+          child.title,
+          child.icon || 'folderoutlined',
+          state.group_id!,
+        );
+        const subGroupId = subGroupResult.id;
+        (state as unknown as Record<string, unknown>)[subGroupKey] = subGroupId;
+        if (subGroupResult.status === 'created') {
           log(`  + sub-group: ${child.title}`);
+        } else if (subGroupResult.status === 'found') {
+          log(`  = sub-group: ${child.title} (found existing)`);
         } else {
           log(`  = sub-group: ${child.title}`);
         }
@@ -632,18 +703,16 @@ async function deployGroup(
   }
 
   // Legacy mode: multi-step deploy — find existing group first
-  if (!state.group_id) {
-    const liveRoutes = await nb.http.get(`${nb.baseUrl}/api/desktopRoutes:list`, { params: { paginate: 'false', tree: 'true' } });
-    const existingGroup = (liveRoutes.data.data || []).find((r: any) => r.type === 'group' && r.title === routeEntry.title);
-    if (existingGroup) {
-      state.group_id = existingGroup.id;
-      log(`  = group: ${routeEntry.title} (found existing)`);
-    } else {
-      const result = await nb.createGroup(routeEntry.title, routeEntry.icon || 'appstoreoutlined');
-      state.group_id = result.routeId;
-      log(`  + group: ${routeEntry.title}`);
-    }
-    nb.routes.clearCache();
+  const groupResult = await ensureGroupRoute(
+    state.group_id,
+    routeEntry.title,
+    routeEntry.icon || 'appstoreoutlined',
+  );
+  state.group_id = groupResult.id;
+  if (groupResult.status === 'created') {
+    log(`  + group: ${routeEntry.title}`);
+  } else if (groupResult.status === 'found') {
+    log(`  = group: ${routeEntry.title} (found existing)`);
   } else {
     log(`  = group: ${routeEntry.title}`);
   }
@@ -666,12 +735,18 @@ async function deployGroup(
       }
     } else if (child.type === 'group') {
       const subGroupKey = `_subgroup_${slugify(child.title)}`;
-      let subGroupId = (state as unknown as Record<string, unknown>)[subGroupKey] as number | undefined;
-      if (!subGroupId) {
-        const result = await nb.createGroup(child.title, child.icon || 'folderoutlined', state.group_id!);
-        subGroupId = result.routeId;
-        (state as unknown as Record<string, unknown>)[subGroupKey] = subGroupId;
+      const subGroupResult = await ensureGroupRoute(
+        (state as unknown as Record<string, unknown>)[subGroupKey] as number | undefined,
+        child.title,
+        child.icon || 'folderoutlined',
+        state.group_id!,
+      );
+      const subGroupId = subGroupResult.id;
+      (state as unknown as Record<string, unknown>)[subGroupKey] = subGroupId;
+      if (subGroupResult.status === 'created') {
         log(`  + sub-group: ${child.title}`);
+      } else if (subGroupResult.status === 'found') {
+        log(`  = sub-group: ${child.title} (found existing)`);
       } else {
         log(`  = sub-group: ${child.title}`);
       }
@@ -1123,9 +1198,8 @@ async function deployPagePopups(
             for (const a of actArr) {
               const aUid = a.uid as string || '';
               const aUse = a.use as string || '';
-              const aType = aUse.replace('ActionModel', '').replace('Action', '');
-              const aKey = aType.charAt(0).toLowerCase() + aType.slice(1);
-              if (aUid) (bv as any)[stateKey][aKey] = { uid: aUid };
+              const aKey = MODEL_TO_ACTION_TYPE[aUse];
+              if (aUid && aKey) (bv as any)[stateKey][aKey] = { uid: aUid };
             }
           }
         }

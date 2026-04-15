@@ -35,14 +35,17 @@ export async function deployActions(
   isRecordActionBlock = false,
 ): Promise<void> {
   // Read live actions once for dedup (compose/blueprint may have created some)
-  const liveActionsByUse = new Map<string, string>(); // use → uid
+  const liveActionsByType = new Map<string, string>(); // canonical action type → uid
   try {
     const blockData = await nb.get({ uid: blockUid });
     for (const subKey of ['actions', 'recordActions'] as const) {
       const raw = blockData.tree.subModels?.[subKey];
       const arr = (Array.isArray(raw) ? raw : []) as { uid: string; use: string }[];
       for (const a of arr) {
-        if (a.use && a.uid) liveActionsByUse.set(a.use, a.uid);
+        const canonicalType = MODEL_TO_ACTION_TYPE[a.use];
+        if (canonicalType && a.uid && !liveActionsByType.has(canonicalType)) {
+          liveActionsByType.set(canonicalType, a.uid);
+        }
       }
     }
     // Also check actCol actions (table row-level)
@@ -53,7 +56,10 @@ export async function deployActions(
       if (actCol) {
         const actColActs = actCol.subModels?.actions;
         for (const a of (Array.isArray(actColActs) ? actColActs : []) as { uid: string; use: string }[]) {
-          if (a.use && a.uid) liveActionsByUse.set(a.use, a.uid);
+          const canonicalType = MODEL_TO_ACTION_TYPE[a.use];
+          if (canonicalType && a.uid && !liveActionsByType.has(canonicalType)) {
+            liveActionsByType.set(canonicalType, a.uid);
+          }
         }
       }
     }
@@ -101,7 +107,7 @@ export async function deployActions(
     }
 
     // ② Found in live tree → track + update config
-    const existingLiveUid = liveActionsByUse.get(amodel);
+    const existingLiveUid = liveActionsByType.get(atype);
     if (existingLiveUid) {
       if (Object.keys(actionSp).length || Object.keys(actionProps).length) {
         const update: Record<string, unknown> = { uid: existingLiveUid };
@@ -110,7 +116,7 @@ export async function deployActions(
         await nb.models.save(update);
       }
       existingGroup[stateActionKey] = { uid: existingLiveUid };
-      liveActionsByUse.delete(amodel);
+      liveActionsByType.delete(atype);
       continue;
     }
 
