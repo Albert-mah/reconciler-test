@@ -503,11 +503,13 @@ export async function convertPopupToTemplate(
         const existingTargetUid = existingTpl.data?.data?.targetUid || '';
         log(`    = popup template: ${name} (already converted: ${existingTplUid.slice(0, 8)})`);
 
-        // Fix openView.uid → point to template's targetUid (not host itself)
-        const currentOvUid = hostResp.data?.data?.stepParams?.popupSettings?.openView?.uid;
-        if (existingTargetUid && currentOvUid !== existingTargetUid) {
+        // Fix openView: uid → template targetUid, collectionName → not empty
+        const ov = hostResp.data?.data?.stepParams?.popupSettings?.openView;
+        const needsFix = (existingTargetUid && ov?.uid !== existingTargetUid) || !ov?.collectionName;
+        if (needsFix) {
           const sp = hostResp.data.data.stepParams;
-          sp.popupSettings.openView.uid = existingTargetUid;
+          if (existingTargetUid) sp.popupSettings.openView.uid = existingTargetUid;
+          if (!sp.popupSettings.openView.collectionName) sp.popupSettings.openView.collectionName = collName;
           await nb.http.post(`${nb.baseUrl}/api/flowModels:save`, {
             uid: hostUid, use: hostResp.data.data.use, parentId: hostResp.data.data.parentId,
             subKey: hostResp.data.data.subKey, subType: hostResp.data.data.subType,
