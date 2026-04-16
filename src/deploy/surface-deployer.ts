@@ -161,7 +161,12 @@ export async function deploySurface(
     const missing = specFields.filter(f => !liveFields.has(f));
     if (missing.length) {
       const key = bs.key || bs.type;
-      throw new Error(`Block "${key}" references fields not in ${blockColl}: ${missing.join(', ')}`);
+      log(`    ✗ Block "${key}" references fields not in ${blockColl}: ${missing.join(', ')} — removing invalid fields`);
+      // Auto-remove invalid fields instead of crashing
+      bs.fields = (bs.fields || []).filter(f => {
+        const fp = typeof f === 'string' ? f : (f.field || f.fieldPath || '');
+        return !fp || liveFields.has(fp);
+      });
     }
   }
 
