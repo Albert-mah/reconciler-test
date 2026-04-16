@@ -72,7 +72,8 @@ export class CollectionsApi {
 
     let body: Record<string, unknown>;
 
-    if (def.interface === 'm2o' && def.target) {
+    if (def.interface === 'm2o') {
+      if (!def.target) throw new Error(`m2o field "${def.name}" requires target collection`);
       body = {
         name: def.name, type: 'belongsTo', interface: 'm2o',
         target: def.target, foreignKey: def.foreignKey || `${def.name}_id`,
@@ -83,7 +84,8 @@ export class CollectionsApi {
           'x-component-props': { multiple: false },
         },
       };
-    } else if (def.interface === 'o2m' && def.target) {
+    } else if (def.interface === 'o2m') {
+      if (!def.target) throw new Error(`o2m field "${def.name}" requires target collection`);
       body = {
         name: def.name, type: 'hasMany', interface: 'o2m',
         target: def.target, foreignKey: def.foreignKey || `${coll.split('.').pop()}_id`,

@@ -1468,11 +1468,12 @@ async function ensurePopupBindings(
         const d = fm.data?.data;
         if (!d) continue;
         const res = d.stepParams?.resourceSettings?.init || {};
-        if (res.filterByTk === '{{ctx.view.inputArgs.filterByTk}}') continue;
+        if (res.filterByTk === '{{ctx.view.inputArgs.filterByTk}}' && res.binding === 'currentRecord') continue;
         const sp = d.stepParams || {};
         if (!sp.resourceSettings) sp.resourceSettings = {};
         if (!sp.resourceSettings.init) sp.resourceSettings.init = {};
         sp.resourceSettings.init.filterByTk = '{{ctx.view.inputArgs.filterByTk}}';
+        sp.resourceSettings.init.binding = 'currentRecord';
         if (!sp.resourceSettings.init.dataSourceKey) sp.resourceSettings.init.dataSourceKey = 'main';
         if (!sp.resourceSettings.init.collectionName) sp.resourceSettings.init.collectionName = t.collectionName;
         await nb.http.post(`${nb.baseUrl}/api/flowModels:save`, {

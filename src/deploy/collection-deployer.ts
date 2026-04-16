@@ -22,7 +22,10 @@ function toApplyField(fd: FieldDef): Record<string, unknown> {
     title: fd.title,
   };
 
-  // Relation fields
+  // Relation fields — target is required for m2o/o2m
+  if ((fd.interface === 'm2o' || fd.interface === 'o2m') && !fd.target) {
+    throw new Error(`${fd.interface} field "${fd.name}" requires target collection`);
+  }
   if (fd.target) field.target = fd.target;
   if (fd.foreignKey) field.foreignKey = fd.foreignKey;
   if (fd.targetField) field.targetKey = fd.targetField;
