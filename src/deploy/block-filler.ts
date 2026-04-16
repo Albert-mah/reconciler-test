@@ -447,22 +447,22 @@ async function enableM2oClickToOpen(
     liveTemplates = resp.data.data || [];
   } catch { return; }
 
-  // Resolve templates for: m2o targets + own collection (for name field clickToOpen)
+  // Resolve popup templates by collectionName (more reliable than name matching)
   const neededColls = new Set(m2oTargets.values());
   neededColls.add(coll);
-  for (const [targetColl, popupPath] of Object.entries(popupDefaults)) {
-    if (!neededColls.has(targetColl)) continue;
-    let tplName = '';
-    for (let dir = modDir; dir !== path.dirname(dir); dir = path.dirname(dir)) {
-      const absPath = path.join(dir, popupPath);
-      if (fs.existsSync(absPath)) {
-        try { tplName = (loadYaml<Record<string, unknown>>(absPath)?.name as string) || ''; } catch {}
-        break;
-      }
+  for (const targetColl of neededColls) {
+    if (!popupDefaults[targetColl]) continue;
+    // Find live popup template by collectionName + type=popup (or type=block with Detail)
+    const live = liveTemplates.find(t =>
+      (t as Record<string, unknown>).collectionName === targetColl &&
+      ((t as Record<string, unknown>).type === 'popup' && (t as Record<string, unknown>).name?.toString().includes('Detail'))
+    ) || liveTemplates.find(t =>
+      (t as Record<string, unknown>).collectionName === targetColl &&
+      (t as Record<string, unknown>).type === 'popup'
+    );
+    if (live) {
+      templateNameToUid.set(targetColl, { templateUid: (live as Record<string, unknown>).uid as string, targetUid: ((live as Record<string, unknown>).targetUid as string) || '' });
     }
-    if (!tplName) continue;
-    const live = liveTemplates.find(t => t.name === tplName);
-    if (live) templateNameToUid.set(targetColl, { templateUid: live.uid as string, targetUid: (live.targetUid as string) || '' });
   }
   if (!templateNameToUid.size) return;
 
