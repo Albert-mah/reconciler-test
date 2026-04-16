@@ -395,7 +395,14 @@ function expandRefSugar(
     // so compose creates a proper block with binding:'currentRecord', not ReferenceBlockModel.
     // The block will later be detached as a template by convertPopupToTemplate.
     if (isPopupContext && template.content && typeof template.content === 'object') {
-      return { ...(template.content as Record<string, unknown>) };
+      const expanded = { ...(template.content as Record<string, unknown>) };
+      const btype = expanded.type as string;
+      if (['details', 'editForm', 'list', 'gridCard'].includes(btype)) {
+        (expanded as Record<string, unknown>).resource_binding = {
+          filterByTk: '{{ctx.view.inputArgs.filterByTk}}',
+        };
+      }
+      return expanded;
     }
 
     // Page context: use ReferenceBlockModel (normal template reference)
