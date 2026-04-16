@@ -30,22 +30,22 @@ export async function configureFilter(
   }
   const defaultTarget = targetUids[0] || '';
 
-  // 1. Set label + defaultTargetUid on each FilterFormItem
+  // 1. Set defaultTargetUid on ALL FilterFormItems (not just search fields)
   const fieldStates = blockState.fields || {};
   for (const f of bs.fields || []) {
-    if (typeof f !== 'object') continue;
-    const fp = f.field || f.fieldPath || '';
-    const label = f.label || '';
+    const fp = typeof f === 'string' ? f : (f.field || f.fieldPath || '');
+    const label = typeof f === 'object' ? (f.label || '') : '';
     if (!fp) continue;
 
     const wrapperUid = fieldStates[fp]?.wrapper;
     if (!wrapperUid) continue;
 
     const settings: Record<string, unknown> = {};
-    if (defaultTarget) {
+    // Connect to ALL target tables (not just the first one)
+    if (targetUids.length) {
       settings.init = {
-        filterField: { name: fp, title: label || fp, interface: 'input', type: 'string' },
-        defaultTargetUid: defaultTarget,
+        filterField: { name: fp, title: label || fp },
+        defaultTargetUid: targetUids[0],
       };
     }
     if (label) {

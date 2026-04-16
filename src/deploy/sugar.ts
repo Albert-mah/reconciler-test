@@ -270,7 +270,7 @@ function expandSingleBlock(
   if (!result.actions && !['chart', 'jsBlock', 'markdown', 'iframe'].includes(btype)) {
     const defaults: Record<string, string[]> = {
       table: ['filter', 'refresh', 'addNew'],
-      filterForm: [],  // compose creates submit/reset automatically
+      filterForm: ['submit', 'reset'],
       createForm: ['submit'],
       editForm: ['submit'],
     };
