@@ -475,15 +475,7 @@ function generateCrudPage(
           },
           'status',
         ],
-        js_items: [
-          {
-            key: 'stats_filter',
-            desc: 'Stats Filter Block',
-            file: `./js/stats_filter.js`,
-          },
-        ],
         field_layout: [
-          ['[JS:Stats Filter Block]'],
           ['name', 'status'],
         ],
       },
@@ -508,9 +500,7 @@ function generateCrudPage(
 
   fs.writeFileSync(path.join(pageDir, 'layout.yaml'), dumpYaml(layout));
 
-  // js/stats_filter.js — stub (AI fills in round 3, referencing CRM export examples)
-  fs.writeFileSync(path.join(pageDir, 'js', 'stats_filter.js'),
-    `// TODO: Stats Filter Block for ${coll}\n// Reference: exports/crm-v2/js/ for SQL and component patterns\nctx.render(null);\n`);
+  // js/ directory created but empty — AI adds JS in round 3
 
   // popups — reference popup templates
   fs.writeFileSync(
