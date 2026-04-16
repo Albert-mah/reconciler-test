@@ -1,247 +1,118 @@
 # NocoBase Application Builder
 
-> DSL 参考项目：`templates/crm/` — 完整的 CRM 系统（structure.yaml + enhance.yaml + JS + charts）
+> 参考项目：`templates/crm/` — CRM 系统完整示例（JS/charts/structure）
 
-## How to Respond
+## 响应方式
 
-| User says | Do this |
-|-----------|---------|
-| "Build me a XXX system" | **Build Mode** → design → confirm → scaffold → edit → deploy |
-| "Modify / add a field" | Edit collections/*.yaml + templates/block/*.yaml → redeploy `--force` |
-| "Export pages" | `npx tsx src/cli/cli.ts export-project "Group" outdir/` |
+| 用户说 | 做什么 |
+|--------|--------|
+| "搭建 XXX 系统" | 先设计确认 → 再分轮搭建 |
+| "修改字段/布局" | 改 YAML → `deploy --force` |
+| "导出" | `npx tsx cli/cli.ts export-project "Group" outdir/` |
 
-## Build Mode — 分层搭建
+## 搭建流程
 
-分三轮，每轮部署确认后再继续。
+### 第零轮：需求设计（先确认再动手）
 
-### 第一轮：页面布局
+列出数据表、字段、关系，让用户确认：
+```
+模块：项目管理
+数据表：
+  nb_pm_projects: name, code, status(select:planning/active/completed), start_date, end_date, budget(number)
+  nb_pm_tasks: name, status(select:todo/in_progress/done), project(m2o→projects), assignee(m2o→members), due_date
+  nb_pm_members: name, email, role(select:manager/developer/designer)
+页面：Dashboard + Projects, Tasks, Members
+确认后开始搭建？
+```
 
-所有页面的基本布局，包括 CRUD 列表页和仪表盘。
-
-1. **设计** — 列出数据表、字段、关系，确认后开始
-2. **Scaffold** — 生成骨架（Dashboard + CRUD 页面）
-3. **编辑** — `collections/*.yaml` 加业务字段，`templates/block/*.yaml` 更新布局，Dashboard 加 KPI/图表区块
-4. **部署** — deploy-project，确认所有页面布局正确
+### 第一轮：数据表 + 页面布局
 
 ```bash
-# Scaffold（--collections 自动推导页面名 + Dashboard）
-npx tsx src/cli/cli.ts scaffold /tmp/my-app MyApp \
-  --collections nb_myapp_orders,nb_myapp_customers,nb_myapp_products
+# 1. Scaffold
+cd src && npx tsx cli/cli.ts scaffold /tmp/app AppName \
+  --collections nb_app_coll1,nb_app_coll2,nb_app_coll3
 
-# Deploy
-cd src && NB_USER=admin@nocobase.com NB_PASSWORD=admin123 \
-  npx tsx cli/cli.ts deploy-project /tmp/my-app --group "My App" --force
+# 2. 编辑 collections/*.yaml — 加业务字段（select 必须有 uiSchema.enum）
+# 3. 编辑 templates/block/*.yaml — 更新 field_layout（必须有 --- 分组 ---）
+# 4. 编辑 pages/*/layout.yaml — filterForm 必须有搜索框 + table 字段
+
+# 5. Deploy
+NB_USER=admin@nocobase.com NB_PASSWORD=admin123 \
+  npx tsx cli/cli.ts deploy-project /tmp/app --group "App" --force
+
+# 6. 插入测试数据（每表 5-8 条）
 ```
 
-Scaffold 生成内容：
-- Dashboard：KPI 卡片（JS 区块）+ 图表（chart 区块）
-- 每个数据表：filterForm（含 stats 筛选按钮）+ table + addNew/edit 弹窗
+### 第二轮：详情页 + 弹窗
 
-**部署成功后立即插入测试数据**（每个表 5-8 条），否则 stats filter 和 KPI 没有数据显示。
-用 NocoBase REST API 插入：
-```bash
-# 示例：插入产品数据
-curl -X POST "$NB_URL/api/nb_myapp_products:create" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Product A","status":"active","price":99.9}'
-```
+- 加 o2m 反向关系到 collections
+- 编辑 popup 模板加 tabs + 关联表格
+- deploy --force
 
-### 第二轮：详情页
+### 第三轮：JS 区块 + 图表
 
-点击记录名打开的弹窗 = 详情页面。默认只有一个 details 区块，需要按业务需求丰富：
+**必须从 `templates/crm/js/` 复制再改，不要自己写：**
+- KPI：复制 `analytics_jsBlock_6~9.js`，改 CONFIG 的 SQL
+- Stats Filter：复制 `customers_filterForm_1_*.js`
+- SQL 规范：`ctx.sql.save({uid,sql}) + ctx.sql.runById(uid)`
 
-- **详情区块**：主要字段 + 分组布局（field_layout）
-- **关联列表**：o2m/m2m 关联数据表格（如订单→明细、客户→联系人）
-- **Tabs 分页**：内容多时用 tabs 分隔不同类别
-- **操作按钮**：详情页内的业务操作（审批、状态变更等）
+### 第四轮：ACL 权限
 
-编辑 `templates/popup/detail_xxx.yaml` 和弹窗模板中的 blocks 内容。
+定义角色 → 配置数据范围 → 配置菜单可见性 → deploy-acl
 
-### 第三轮：JS 区块 + 事件流
+## 关键规则
 
-**JS 区块** — 从 `templates/crm/js/` 复制模板并修改 CONFIG 参数：
-- KPI：`analytics_jsBlock_6~9.js`
-- Stats Filter：`customers_filterForm_1_*.js`
-- 表格列/详情组件：`leads_table_0_col_*.js` / `customers_popup_name_tab0_details_*.js`
+1. **先设计后动手** — 必须用户确认数据表和字段
+2. **select 必须有 enum** — `uiSchema: { enum: [{label,value}] }`
+3. **filterForm 必须有搜索框** — `field: name, label: Search, filterPaths: [name,description]`
+4. **field_layout 必须有分组** — `--- Section Name ---`
+5. **默认 actions 自动加** — table: [filter,refresh,addNew]+[edit,delete]; details: [edit]; form: [submit]
+6. **JS 不能直接 ctx.sql()** — 必须 save+runById 两步
 
-> SQL 必须用 `ctx.sql.save() + runById()` 两步，不能直接 `ctx.sql()`。
-
-**事件流（Workflow）** — 业务自动化
-
-## What Scaffold Generates
+## 文件结构
 
 ```
-/tmp/my-app/
-├── routes.yaml              # Menu structure
-├── defaults.yaml            # Auto-binds popup templates to m2o fields
-├── collections/*.yaml       # Table definitions (edit these: add fields)
-├── templates/
-│   ├── block/               # Form/detail content (edit these: field_layout)
-│   │   ├── form_add_new_xxx.yaml
-│   │   ├── form_edit_xxx.yaml
-│   │   └── detail_xxx.yaml
-│   └── popup/               # Whole-drawer templates (don't edit)
-│       ├── add_new_xxx.yaml
-│       ├── edit_xxx.yaml
-│       └── detail_xxx.yaml
+/tmp/app/
+├── collections/*.yaml     # 数据表（编辑字段）
+├── templates/block/*.yaml  # 表单/详情模板（编辑 field_layout）
+├── templates/popup/*.yaml  # 弹窗模板（ref: 引用 block 模板）
 ├── pages/<mod>/<page>/
-│   ├── layout.yaml          # Page layout (filterForm + table)
-│   ├── js/stats_filter.js   # Stats filter stub (AI fills in round 3)
-│   └── popups/              # Popup refs (don't edit)
-└── state.yaml               # Deploy state (auto-managed)
+│   ├── layout.yaml         # 页面布局
+│   ├── js/*.js             # JS 区块
+│   └── popups/*.yaml       # 弹窗引用
+├── routes.yaml             # 菜单
+├── defaults.yaml           # m2o 自动弹窗绑定
+└── state.yaml              # 部署状态（自动管理）
 ```
 
-> **Only edit**: `collections/*.yaml` (fields) + `templates/block/*.yaml` (form layout)
-> Everything else is auto-generated and auto-wired.
+## 字段类型
 
-## Collection Template
+| interface | 用途 | 示例 |
+|-----------|------|------|
+| input | 短文本 | name, code |
+| textarea | 长文本 | description |
+| select | 下拉 | status, priority（必须有 enum） |
+| number | 数字 | amount, budget |
+| integer | 整数 | quantity |
+| dateOnly | 日期 | start_date |
+| m2o | 多对一关系 | project, assignee（需要 target） |
+| o2m | 一对多关系 | tasks, members（需要 target） |
+| email | 邮箱 | email |
+| phone | 电话 | phone |
 
-```yaml
-name: nb_myapp_orders
-title: Orders
-fields:
-  - name: name
-    interface: input
-    title: Name
-  - name: status
-    interface: select
-    title: Status
-    uiSchema:
-      enum:
-        - { label: Draft, value: draft }
-        - { label: Active, value: active }
-        - { label: Done, value: done }
-  - name: customer
-    interface: m2o
-    title: Customer
-    target: nb_myapp_customers
-  - name: total
-    interface: number
-    title: Total Amount
-  - name: due_date
-    interface: dateOnly
-    title: Due Date
-```
-
-> titleField auto-set to `name` or `title`. FK fields auto-created for m2o.
-
-## Block Template (form/detail layout)
-
-```yaml
-# templates/block/form_add_new_nb_myapp_orders.yaml
-name: 'Form (Add new): Orders'
-type: block
-collectionName: nb_myapp_orders
-content:
-  key: createForm
-  type: createForm
-  coll: nb_myapp_orders
-  fields: [name, status, customer, total, due_date, description]
-  field_layout:
-    - '--- Basic Info ---'
-    - [name, status]
-    - [customer, due_date]
-    - '--- Financial ---'
-    - [total]
-    - [description]
-  actions:
-    - submit
-```
-
-> edit + detail templates use the **same field_layout**. Edit all 3 together.
-
-## Page Layout Template
-
-```yaml
-# pages/myapp/orders/layout.yaml
-blocks:
-  - key: filterForm
-    type: filterForm
-    coll: nb_myapp_orders
-    fields:
-      - field: name
-        label: Search
-        filterPaths: [name, description]
-      - status
-    js_items:
-      - desc: Stats Filter Block
-        file: ./js/stats_filter.js
-    field_layout:
-      - ['[JS:Stats Filter Block]']
-      - [name, status]
-  - key: table
-    type: table
-    coll: nb_myapp_orders
-    fields:
-      - field: name
-        popup: templates/popup/detail_nb_myapp_orders.yaml
-      - customer
-      - status
-      - total
-      - due_date
-      - createdAt
-    # actions/recordActions auto-filled if not declared:
-    #   table → actions: [filter, refresh, addNew] + recordActions: [edit, delete]
-    #   details → recordActions: [edit]
-    #   createForm/editForm → actions: [submit]
-    recordActions:
-      - edit
-      - delete
-      - updateRecord:
-          key: mark_done
-          icon: checkoutlined
-          tooltip: Done
-          assign: { status: done }
-          hiddenWhen: { status: done }
-layout:
-  - [filterForm]
-  - [table]
-```
-
-## Key Rules
-
-1. **Design first** — never build without user confirmation
-2. **Scaffold first** — always start with `scaffold`, then edit generated files
-3. **filterForm** — 必须有搜索框（filterPaths 连接多字段）+ status 筛选 + js_items stats block
-4. **No manual actions on filterForm** — NocoBase auto-creates submit/reset
-5. **Default actions auto-added** — table gets [filter,refresh,addNew] + [edit,delete]; details gets [edit]; forms get [submit]
-6. **Edit 3 block templates together** — addNew, edit, detail share same field_layout baseline
-7. **m2o fields auto-popup** — defaults.yaml binds popup templates, no manual config needed
-8. **Incremental** — always `--force` update, never destroy + recreate
-9. **Layout required** — >2 blocks need `layout:`, >2 form fields need `field_layout:`
-
-## Field Types
-
-| interface | Use for | Example |
-|-----------|---------|---------|
-| `input` | Short text | name, code, title |
-| `textarea` | Long text | description, notes |
-| `select` | Dropdown | status, priority, role |
-| `number` | Numbers | amount, quantity, rate |
-| `percent` | Percentage | progress, discount |
-| `dateOnly` | Date | start_date, due_date |
-| `date` | Date+time | created_at |
-| `m2o` | Relation (many-to-one) | project, assignee, customer |
-| `email` | Email | email |
-| `checkbox` | Boolean | is_active |
-
-## Commands
+## 命令
 
 ```bash
 cd /path/to/nocobase-reconciler
 
 # Scaffold
 npx tsx src/cli/cli.ts scaffold /tmp/app AppName \
-  --pages Page1,Page2 --collections nb_app_coll1,nb_app_coll2
+  --collections nb_app_coll1,nb_app_coll2
 
-# Deploy (first time)
+# Deploy
 cd src && NB_USER=admin@nocobase.com NB_PASSWORD=admin123 \
-  npx tsx cli/cli.ts deploy-project /tmp/app --group "App Name" --blueprint
-
-# Redeploy (after edits)
-npx tsx cli/cli.ts deploy-project /tmp/app --group "App Name" --force
+  npx tsx cli/cli.ts deploy-project /tmp/app --group "App" --force
 
 # Export
-npx tsx cli/cli.ts export-project "App Name" /tmp/export
+npx tsx src/cli/cli.ts export-project "App" /tmp/export
 ```
