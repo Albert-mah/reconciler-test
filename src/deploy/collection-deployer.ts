@@ -22,10 +22,11 @@ function toApplyField(fd: FieldDef): Record<string, unknown> {
     title: fd.title,
   };
 
-  // Relation fields — target is required for m2o/o2m
-  if ((fd.interface === 'm2o' || fd.interface === 'o2m') && !fd.target) {
-    throw new Error(`${fd.interface} field "${fd.name}" requires target collection`);
+  // Relation fields — target is required for m2o, optional for o2m (auto-created by NocoBase)
+  if (fd.interface === 'm2o' && !fd.target) {
+    throw new Error(`m2o field "${fd.name}" requires target collection`);
   }
+  if ((fd.interface === 'o2m') && !fd.target) return field; // skip — NocoBase manages reverse relations
   if (fd.target) field.target = fd.target;
   if (fd.foreignKey) field.foreignKey = fd.foreignKey;
   if (fd.targetField) field.targetKey = fd.targetField;

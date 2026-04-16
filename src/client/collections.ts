@@ -85,7 +85,7 @@ export class CollectionsApi {
         },
       };
     } else if (def.interface === 'o2m') {
-      if (!def.target) throw new Error(`o2m field "${def.name}" requires target collection`);
+      if (!def.target) return null; // skip o2m without target (auto-created by NocoBase)
       body = {
         name: def.name, type: 'hasMany', interface: 'o2m',
         target: def.target, foreignKey: def.foreignKey || `${coll.split('.').pop()}_id`,
