@@ -306,6 +306,18 @@ export async function deployProject(
     if (!r.ok) log(`  ✗ ${r.label}: ${r.error}`);
   }
 
+  // Check test data — every collection should have at least 1 record
+  const emptyColls: string[] = [];
+  for (const cd of collDefs) {
+    try {
+      const r = await nb.http.get(`${nb.baseUrl}/api/${cd.name}:list`, { params: { pageSize: 1 } });
+      if (!r.data?.data?.length) emptyColls.push(cd.name);
+    } catch { /* skip */ }
+  }
+  if (emptyColls.length) {
+    log(`\n  ✗ 以下数据表没有测试数据，请插入（每表 5-8 条）：${emptyColls.join(', ')}`);
+  }
+
   // Set menu sortIndex to match routes.yaml declaration order
   await syncMenuOrder(nb, state, routes, log);
 
