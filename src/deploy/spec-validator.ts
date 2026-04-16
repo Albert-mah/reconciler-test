@@ -208,6 +208,22 @@ function validateBlock(bs: BlockSpec, pageTitle: string, popups: PopupSpec[], is
     }
   }
 
+  // ── Rule: chart SQL must not be demo/TODO data ──
+  if (bs.type === 'chart' && (bs as Record<string, unknown>).chart_config) {
+    const chartConfig = (bs as Record<string, unknown>).chart_config as string;
+    if (chartConfig) {
+      try {
+        const sqlFile = path.resolve(projectDir, path.dirname(chartConfig), loadYaml<Record<string, unknown>>(path.resolve(projectDir, chartConfig))?.sql_file as string || '');
+        if (fs.existsSync(sqlFile)) {
+          const sql = fs.readFileSync(sqlFile, 'utf8');
+          if (sql.includes('TODO:') || sql.includes('Category A') || sql.includes('UNION ALL SELECT')) {
+            issues.push({ level: 'error', page: pageTitle, block: key, message: `chart SQL "${sqlFile}" 是 demo 数据，需要替换为真实查询` });
+          }
+        }
+      } catch { /* skip */ }
+    }
+  }
+
   // ── Rule 4: createForm/editForm MUST have field_layout with sections ──
   if (['createForm', 'editForm'].includes(bs.type)) {
     if (!bs.field_layout || !bs.field_layout.length) {

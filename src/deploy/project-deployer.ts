@@ -57,6 +57,18 @@ export async function deployProject(
   };
   normalizeRoutes(routes);
 
+  // Check menu icons — default icons are bad UX
+  const DEFAULT_ICONS = new Set(['fileoutlined', 'appstoreoutlined', '']);
+  function checkIcons(entries: RouteEntry[]) {
+    for (const r of entries) {
+      if (!r.icon || DEFAULT_ICONS.has(r.icon.toLowerCase())) {
+        log(`  ⚠ 菜单 "${r.title}" 使用默认图标，建议设置有意义的 icon`);
+      }
+      if (r.children) checkIcons(r.children);
+    }
+  }
+  checkIcons(routes);
+
   // Read collections
   const collDefs: Record<string, CollectionDef> = {};
   const collDir = path.join(root, 'collections');
