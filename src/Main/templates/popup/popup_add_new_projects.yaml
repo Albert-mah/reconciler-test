@@ -1,0 +1,13 @@
+uid: j6wcp7ey1mi
+name: 'Popup (Add new): Projects'
+type: popup
+collectionName: nb_pm_projects
+dataSourceKey: main
+targetUid: gt5vuqhn0q3
+description: 'Popup (Add new): Projects'
+content:
+  blocks:
+    - key: reference
+      type: reference
+  layout:
+    - - pfo7cje0

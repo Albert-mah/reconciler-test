@@ -1,0 +1,21 @@
+name: nb_pm_projects
+title: Projects
+fields:
+  - name: end_date
+    interface: dateOnly
+  - name: milestones
+    interface: o2m
+  - name: name
+    interface: input
+  - name: description
+    interface: textarea
+  - name: budget
+    interface: number
+  - name: tasks
+    interface: o2m
+  - name: code
+    interface: input
+  - name: status
+    interface: select
+  - name: start_date
+    interface: dateOnly

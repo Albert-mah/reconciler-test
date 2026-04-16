@@ -1,0 +1,21 @@
+name: nb_pm_members
+title: Members
+fields:
+  - name: createdAt
+    interface: createdAt
+  - name: email
+    interface: email
+  - name: updatedBy
+    interface: updatedBy
+  - name: name
+    interface: input
+  - name: role
+    interface: select
+  - name: id
+    interface: snowflakeId
+  - name: phone
+    interface: phone
+  - name: updatedAt
+    interface: updatedAt
+  - name: createdBy
+    interface: createdBy

@@ -1,0 +1,13 @@
+uid: pbtedi2nlpi
+name: 'Popup (Edit): Projects'
+type: popup
+collectionName: nb_pm_projects
+dataSourceKey: main
+targetUid: opkoloba75s
+description: 'Popup (Edit): Projects'
+content:
+  blocks:
+    - key: reference
+      type: reference
+  layout:
+    - - kyfw9q2n

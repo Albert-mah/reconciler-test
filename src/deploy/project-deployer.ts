@@ -38,7 +38,7 @@ import { BLOCK_TYPE_TO_MODEL } from '../utils/block-types';
 
 export async function deployProject(
   projectDir: string,
-  opts: { force?: boolean; planOnly?: boolean; group?: string; page?: string; blueprint?: boolean } = {},
+  opts: { force?: boolean; planOnly?: boolean; group?: string; page?: string; blueprint?: boolean; skipValidation?: boolean } = {},
   log: (msg: string) => void = console.log,
 ): Promise<void> {
   const root = path.resolve(projectDir);
@@ -170,19 +170,21 @@ export async function deployProject(
     : { pages: {} };
 
   // ── Pre-deploy validation ──
-  const { validatePageSpecs } = await import('./spec-validator');
-  const specIssues = validatePageSpecs(pages, root);
-  const specErrors = specIssues.filter(i => i.level === 'error');
-  const specWarnings = specIssues.filter(i => i.level === 'warn');
-  if (specErrors.length) {
-    log('\n  ── Spec Validation ERRORS (blocking deployment) ──');
-    for (const e of specErrors) log(`  ✗ [${e.page}${e.block ? '/' + e.block : ''}] ${e.message}`);
-    if (specWarnings.length) {
-      log('\n  ── Spec Warnings ──');
-      for (const w of specWarnings) log(`  ⚠ [${w.page}${w.block ? '/' + w.block : ''}] ${w.message}`);
+  if (!opts.skipValidation) {
+    const { validatePageSpecs } = await import('./spec-validator');
+    const specIssues = validatePageSpecs(pages, root);
+    const specErrors = specIssues.filter(i => i.level === 'error');
+    const specWarnings = specIssues.filter(i => i.level === 'warn');
+    if (specErrors.length) {
+      log('\n  ── Spec Validation ERRORS (blocking deployment) ──');
+      for (const e of specErrors) log(`  ✗ [${e.page}${e.block ? '/' + e.block : ''}] ${e.message}`);
+      if (specWarnings.length) {
+        log('\n  ── Spec Warnings ──');
+        for (const w of specWarnings) log(`  ⚠ [${w.page}${w.block ? '/' + w.block : ''}] ${w.message}`);
+      }
+      log(`\n  ${specErrors.length} errors, ${specWarnings.length} warnings. Fix errors before deploying.`);
+      process.exit(1);
     }
-    log(`\n  ${specErrors.length} errors, ${specWarnings.length} warnings. Fix errors before deploying.`);
-    process.exit(1);
   }
   if (specWarnings.length) {
     log('\n  ── Spec Warnings ──');

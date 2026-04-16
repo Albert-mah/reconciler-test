@@ -1,0 +1,13 @@
+uid: gue1lmnb6dc
+name: 'Popup (Add new): Members'
+type: popup
+collectionName: nb_pm_members
+dataSourceKey: main
+targetUid: ji0r295dxdq
+description: 'Popup (Add new): Members'
+content:
+  blocks:
+    - key: reference
+      type: reference
+  layout:
+    - - m7o90uoj

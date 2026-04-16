@@ -1,0 +1,13 @@
+uid: 1lhnxnw13uq
+name: 'Popup (Edit): Members'
+type: popup
+collectionName: nb_pm_members
+dataSourceKey: main
+targetUid: kjfq36ws3gb
+description: 'Popup (Edit): Members'
+content:
+  blocks:
+    - key: reference
+      type: reference
+  layout:
+    - - 0j41epei

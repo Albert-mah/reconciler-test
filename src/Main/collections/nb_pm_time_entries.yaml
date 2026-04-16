@@ -1,0 +1,29 @@
+name: nb_pm_time_entries
+title: Time Entries
+fields:
+  - name: hours
+    interface: number
+  - name: member
+    interface: m2o
+  - name: createdBy
+    interface: createdBy
+  - name: name
+    interface: input
+  - name: date
+    interface: dateOnly
+  - name: task
+    interface: m2o
+  - name: taskId
+    interface: integer
+  - name: createdAt
+    interface: createdAt
+  - name: id
+    interface: snowflakeId
+  - name: updatedAt
+    interface: updatedAt
+  - name: memberId
+    interface: integer
+  - name: updatedBy
+    interface: updatedBy
+  - name: description
+    interface: textarea

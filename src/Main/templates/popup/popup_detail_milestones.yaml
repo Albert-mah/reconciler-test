@@ -1,0 +1,13 @@
+uid: spncb27xyh1
+name: 'Popup (Detail): Milestones'
+type: popup
+collectionName: nb_pm_milestones
+dataSourceKey: main
+targetUid: q0hfq3xpgkg
+description: 'Popup (Detail): Milestones'
+content:
+  blocks:
+    - key: reference
+      type: reference
+  layout:
+    - - bjxsejfx

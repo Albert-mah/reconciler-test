@@ -1,0 +1,80 @@
+blocks:
+  - key: filterForm
+    type: filterForm
+    coll: nb_pm_tasks
+    fields:
+      - field: name
+        label: Search
+        filterPaths:
+          - name
+          - description
+      - status
+      - priority
+    field_layout:
+      - - name
+        - status
+        - priority
+    actions:
+      - submit
+      - reset
+  - key: table
+    type: table
+    coll: nb_pm_tasks
+    fields:
+      - field: name
+        popup: templates/popup/popup_detail_tasks.yaml
+      - field: project
+        popup: templates/popup/popup_detail_projects.yaml
+      - field: assignee
+        popup: templates/popup/popup_detail_members.yaml
+      - status
+      - priority
+      - due_date
+    recordActions:
+      - type: delete
+        stepParams:
+          buttonSettings:
+            general:
+              title: Delete
+              icon: null
+              type: link
+          deleteSettings:
+            confirm:
+              enable: true
+              title: Delete record
+              content: Are you sure you want to delete it?
+        props:
+          type: link
+          title: Delete
+          icon: null
+        key: delete_delete
+      - type: edit
+        stepParams:
+          buttonSettings:
+            general:
+              title: Edit
+              icon: null
+              type: link
+          popupSettings:
+            openView:
+              mode: drawer
+              size: large
+              pageModelClass: ChildPageModel
+              dataSourceKey: main
+              collectionName: nb_pm_tasks
+              filterByTk: '{{ctx.view.inputArgs.filterByTk}}'
+          displayFieldSettings:
+            clickToOpen:
+              clickToOpen: true
+        props:
+          title: Edit
+          icon: null
+          type: link
+        key: edit_edit
+    actions:
+      - filter
+      - refresh
+      - addNew
+layout:
+  - - filterForm
+  - - table

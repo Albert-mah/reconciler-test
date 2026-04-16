@@ -1,0 +1,13 @@
+uid: 3tom9uwel06
+name: 'Popup (Detail): Projects'
+type: popup
+collectionName: nb_pm_projects
+dataSourceKey: main
+targetUid: 0mow4hfqqrh
+description: 'Popup (Detail): Projects'
+content:
+  blocks:
+    - key: reference
+      type: reference
+  layout:
+    - - irdimkcm

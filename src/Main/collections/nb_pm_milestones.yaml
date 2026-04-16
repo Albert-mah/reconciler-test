@@ -1,0 +1,27 @@
+name: nb_pm_milestones
+title: Milestones
+fields:
+  - name: name
+    interface: input
+  - name: updatedAt
+    interface: updatedAt
+  - name: nb_pm_projects_id
+    interface: integer
+  - name: createdAt
+    interface: createdAt
+  - name: due_date
+    interface: dateOnly
+  - name: updatedBy
+    interface: updatedBy
+  - name: projectId
+    interface: integer
+  - name: createdBy
+    interface: createdBy
+  - name: id
+    interface: snowflakeId
+  - name: description
+    interface: textarea
+  - name: status
+    interface: select
+  - name: project
+    interface: m2o

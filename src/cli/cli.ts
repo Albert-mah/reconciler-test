@@ -280,11 +280,12 @@ async function cmdExport(args: string[]) {
 
 async function cmdDeployProject(args: string[]) {
   const dir = args[0];
-  if (!dir) { console.error('Usage: cli.ts deploy-project <dir> [--force] [--plan] [--group X] [--page X] [--blueprint] [--no-sync]'); process.exit(1); }
+  if (!dir) { console.error('Usage: cli.ts deploy-project <dir> [--force] [--plan] [--group X] [--page X] [--blueprint] [--no-sync] [--skip-validation]'); process.exit(1); }
   const force = args.includes('--force');
   const planOnly = args.includes('--plan');
   const blueprint = args.includes('--blueprint');
   const skipSync = args.includes('--no-sync');
+  const skipValidation = args.includes('--skip-validation');
   const groupIdx = args.indexOf('--group');
   const group = groupIdx >= 0 ? args[groupIdx + 1] : undefined;
   const pageIdx = args.indexOf('--page');
@@ -309,7 +310,7 @@ async function cmdDeployProject(args: string[]) {
   }
 
   // ── Deploy ──
-  await deployProject(absDir, { force, planOnly, group, page, blueprint });
+  await deployProject(absDir, { force, planOnly, group, page, blueprint, skipValidation });
 
   // ── Post-deploy: export to worktree branch for safe comparison ──
   if (!planOnly && !skipSync && group && isGit) {
