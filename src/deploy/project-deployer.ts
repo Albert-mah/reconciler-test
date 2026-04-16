@@ -178,17 +178,13 @@ export async function deployProject(
     if (specErrors.length) {
       log('\n  ── Spec Validation ERRORS (blocking deployment) ──');
       for (const e of specErrors) log(`  ✗ [${e.page}${e.block ? '/' + e.block : ''}] ${e.message}`);
-      if (specWarnings.length) {
-        log('\n  ── Spec Warnings ──');
-        for (const w of specWarnings) log(`  ⚠ [${w.page}${w.block ? '/' + w.block : ''}] ${w.message}`);
-      }
       log(`\n  ${specErrors.length} errors, ${specWarnings.length} warnings. Fix errors before deploying.`);
       process.exit(1);
     }
-  }
-  if (specWarnings.length) {
-    log('\n  ── Spec Warnings ──');
-    for (const w of specWarnings) log(`  ⚠ [${w.page}${w.block ? '/' + w.block : ''}] ${w.message}`);
+    if (specWarnings.length) {
+      log('\n  ── Spec Warnings ──');
+      for (const w of specWarnings) log(`  ⚠ [${w.page}${w.block ? '/' + w.block : ''}] ${w.message}`);
+    }
   }
 
   // Collections (skip if deploying single page — safety)
