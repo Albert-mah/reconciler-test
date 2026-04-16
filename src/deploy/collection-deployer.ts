@@ -75,6 +75,9 @@ export async function ensureCollection(
       fields,
       ...(titleField ? { titleField } : {}),
     });
+    if (!titleField) {
+      log(`  ✗ collection ${name}: 没有 titleField（需要 name/title 字段，或显式设置 titleField）`);
+    }
     log(`  = collection: ${name}${titleField ? ` (titleField: ${titleField})` : ''}`);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -111,7 +114,10 @@ async function ensureCollectionLegacy(
   if (tf) {
     try {
       await nb.http.post(`${nb.baseUrl}/api/collections:update?filterByTk=${name}`, { titleField: tf });
+      log(`  = collection: ${name} (titleField: ${tf})`);
     } catch { /* best effort */ }
+  } else {
+    log(`  ✗ collection ${name}: 没有 titleField（需要 name 或 title 字段，或在 YAML 中显式设置 titleField）`);
   }
 
   for (const fd of def.fields) {

@@ -151,11 +151,34 @@ function validateBlock(bs: BlockSpec, pageTitle: string, popups: PopupSpec[], is
       }
     }
 
-    // ── Rule 2: filterForm JS stats button group (recommended on first row, 独占一行) ──
+    // ── Rule: filterForm max 3 fields ──
+    const filterFields = (bs.fields || []).filter(f => typeof f === 'string' || (typeof f === 'object' && (f as Record<string, unknown>).field));
+    if (filterFields.length > 3) {
+      issues.push({ level: 'error', page: pageTitle, block: key, message: `filterForm 最多 3 个筛选字段（当前 ${filterFields.length} 个），多了影响布局` });
+    }
+
+    // ── Rule 2: filterForm MUST have JS stats button group ──
     const jsItems = (bs as Record<string, unknown>).js_items as unknown[];
     if (!Array.isArray(jsItems) || !jsItems.length) {
-      issues.push({ level: 'warn', page: pageTitle, block: key, message: 'filterForm has no JS stats button group — consider adding js_items (长按钮组，放在第一行独占一行)' });
-    } else if (bs.field_layout?.length) {
+      issues.push({ level: 'error', page: pageTitle, block: key, message: 'filterForm 必须有 js_items 筛选按钮组，参考 templates/crm/js/customers_filterForm_1_*.js' });
+    } else {
+      // Check if JS files are just stubs
+      for (const ji of jsItems) {
+        const file = (ji as Record<string, unknown>).file as string;
+        if (file) {
+          try {
+            const fs = require('fs');
+            const path = require('path');
+            // Try to resolve from project root (passed via context or relative)
+            const content = fs.readFileSync(path.resolve(file), 'utf8').trim();
+            if (/ctx\.render\s*\(\s*null\s*\)/.test(content) || content.startsWith('// TODO')) {
+              issues.push({ level: 'error', page: pageTitle, block: key, message: `js_items "${file}" 是空占位符，参考 templates/crm/js/ 实现` });
+            }
+          } catch { /* file not found — will be caught at deploy time */ }
+        }
+      }
+    }
+    if (bs.field_layout?.length) {
       const firstRow = bs.field_layout[0];
       const firstRowHasJs = Array.isArray(firstRow)
         ? firstRow.some(item => typeof item === 'string' && item.startsWith('[JS:'))
