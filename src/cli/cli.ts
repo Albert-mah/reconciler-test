@@ -280,12 +280,12 @@ async function cmdExport(args: string[]) {
 
 async function cmdDeployProject(args: string[]) {
   const dir = args[0];
-  if (!dir) { console.error('Usage: cli.ts deploy-project <dir> [--force] [--plan] [--group X] [--page X] [--blueprint] [--no-sync] [--skip-validation]'); process.exit(1); }
+  if (!dir) { console.error('Usage: cli.ts deploy-project <dir> [--force] [--plan] [--group X] [--page X] [--blueprint] [--no-sync] [--copy]'); process.exit(1); }
   const force = args.includes('--force');
   const planOnly = args.includes('--plan');
   const blueprint = args.includes('--blueprint');
   const skipSync = args.includes('--no-sync');
-  const skipValidation = args.includes('--skip-validation');
+  const copyMode = args.includes('--copy');
   const groupIdx = args.indexOf('--group');
   const group = groupIdx >= 0 ? args[groupIdx + 1] : undefined;
   const pageIdx = args.indexOf('--page');
@@ -310,7 +310,7 @@ async function cmdDeployProject(args: string[]) {
   }
 
   // ── Deploy ──
-  await deployProject(absDir, { force, planOnly, group, page, blueprint, skipValidation });
+  await deployProject(absDir, { force, planOnly, group, page, blueprint, copyMode });
 
   // ── Post-deploy: export to worktree branch for safe comparison ──
   if (!planOnly && !skipSync && group && isGit) {
@@ -483,10 +483,10 @@ async function cmdExportWorkflows(args: string[]) {
 
 async function cmdDeployWorkflows(args: string[]) {
   const dir = args[0];
-  if (!dir) { console.error('Usage: cli.ts deploy-workflows <project-dir> [--skip-validation]'); process.exit(1); }
-  const skipValidation = args.includes('--skip-validation');
+  if (!dir) { console.error('Usage: cli.ts deploy-workflows <project-dir> [--copy]'); process.exit(1); }
+  const copyMode = args.includes('--copy');
   const nb = await NocoBaseClient.create();
-  await deployWorkflows(nb, dir, { skipValidation });
+  await deployWorkflows(nb, dir, { copyMode });
 }
 
 function cmdValidateWorkflows(args: string[]) {

@@ -38,7 +38,7 @@ import { BLOCK_TYPE_TO_MODEL } from '../utils/block-types';
 
 export async function deployProject(
   projectDir: string,
-  opts: { force?: boolean; planOnly?: boolean; group?: string; page?: string; blueprint?: boolean; skipValidation?: boolean } = {},
+  opts: { force?: boolean; planOnly?: boolean; group?: string; page?: string; blueprint?: boolean; copyMode?: boolean } = {},
   log: (msg: string) => void = console.log,
 ): Promise<void> {
   const root = path.resolve(projectDir);
@@ -170,7 +170,7 @@ export async function deployProject(
     : { pages: {} };
 
   // ── Pre-deploy validation ──
-  if (!opts.skipValidation) {
+  if (!opts.copyMode) {
     const { validatePageSpecs } = await import('./spec-validator');
     const specIssues = validatePageSpecs(pages, root);
     const specErrors = specIssues.filter(i => i.level === 'error');
