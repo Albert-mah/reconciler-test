@@ -221,6 +221,8 @@ export async function fillBlock(
       const unfilled = code.match(/\{\{(\w+)(?:\|\|[^}]*)?\}\}/g);
       if (unfilled?.length) {
         log(`      ✗ JS ${bs.file}: unfilled template params: ${unfilled.join(', ')}`);
+      } else if (/ctx\.render\s*\(\s*null\s*\)/.test(code)) {
+        log(`      ✗ JS ${bs.file}: ctx.render(null) 是空占位符，需要实现实际内容`);
       } else if (/ctx\.sql\s*\(/.test(code) && !/ctx\.sql\.(save|runById)/.test(code)) {
         log(`      ✗ JS ${bs.file}: ctx.sql() 直接调用不可用，请用 ctx.sql.save() + ctx.sql.runById() 流程`);
       } else {
