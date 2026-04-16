@@ -308,10 +308,10 @@ export async function deployProject(
 
   // Check test data — every collection should have at least 1 record
   const emptyColls: string[] = [];
-  for (const cd of collDefs) {
+  for (const [collName] of Object.entries(collDefs)) {
     try {
-      const r = await nb.http.get(`${nb.baseUrl}/api/${cd.name}:list`, { params: { pageSize: 1 } });
-      if (!r.data?.data?.length) emptyColls.push(cd.name);
+      const r = await nb.http.get(`${nb.baseUrl}/api/${collName}:list`, { params: { pageSize: 1 } });
+      if (!r.data?.data?.length) emptyColls.push(collName);
     } catch { /* skip */ }
   }
   if (emptyColls.length) {
